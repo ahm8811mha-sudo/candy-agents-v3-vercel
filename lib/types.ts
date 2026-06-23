@@ -1,0 +1,10 @@
+export type Role = "CEO" | "MANAGER" | "EMPLOYEE" | "ADMIN";
+export type Department = { id: string; name: string; description?: string; managerId?: string };
+export type Employee = { id: string; fullName: string; email: string; phone?: string; role: Role; departmentId: string; managerId?: string; jobTitle: string; status: "ACTIVE" | "INACTIVE"; joinedAt: string };
+export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE" | "BLOCKED";
+export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type Task = { id: string; title: string; description?: string; status: TaskStatus; priority: TaskPriority; assignedTo: string; createdBy: string; departmentId: string; dueDate?: string; createdAt: string };
+export type DailyLog = { id: string; employeeId: string; logDate: string; summary: string; blockers?: string; progressScore: number; status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED"; reviewedBy?: string };
+export type Approval = { id: string; entityType: "TASK" | "DAILY_LOG" | "REQUEST"; entityId: string; requestedBy: string; approverId: string; status: "PENDING" | "APPROVED" | "REJECTED"; notes?: string; createdAt: string };
+export type Notification = { id: string; employeeId: string; title: string; message: string; type: "INFO" | "TASK" | "APPROVAL" | "WARNING" | "SYSTEM"; readAt?: string; createdAt: string };
+export type ActivityLog = { id: string; actorId: string; action: string; entityType?: string; entityId?: string; metadata?: Record<string, unknown>; createdAt: string };
