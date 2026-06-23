@@ -1,19 +1,30 @@
 {
-  "name": "candy-agents-v3",
+  "name": "golden-star-enterprise-os",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "vite --host 0.0.0.0",
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "@supabase/supabase-js": "latest",
+    "framer-motion": "latest",
+    "googleapis": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "zod": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "typescript": "latest"
+  }
 }
