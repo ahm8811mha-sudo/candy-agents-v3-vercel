@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ActivityLog, Approval, DailyLog, Department, Employee, Notification, Task } from "@/lib/types";
 import { Activity, Bell, ClipboardList, FileCheck2, LineChart, ListChecks, Users } from "lucide-react";
+import ActionForms from "./ActionForms";
 
 type Props = {
   employees: Employee[];
@@ -39,13 +40,14 @@ export default function CompanyOS(props: Props) {
         </div>
       </aside>
       <main className="main">
-        <div className="topbar"><div><h2>نظام إدارة تشغيلي للشركة</h2><p>مهام، موظفون، موافقات، نشاط مباشر، وتقارير تنفيذية في مكان واحد.</p></div><span className="badge blue">Next.js + Supabase Ready</span></div>
+        <div className="topbar"><div><h2>نظام إدارة تشغيلي للشركة</h2><p>مهام، موظفون، موافقات، نشاط مباشر، وتقارير تنفيذية في مكان واحد.</p></div><span className="badge blue">Live API Connected</span></div>
         <section className="grid kpis">
           <Kpi title="الموظفون" value={props.employees.length} icon={<Users size={18} />} />
           <Kpi title="المهام المفتوحة" value={openTasks} icon={<ClipboardList size={18} />} />
           <Kpi title="المهام المتأخرة" value={overdue} icon={<Activity size={18} />} danger />
           <Kpi title="موافقات معلقة" value={pendingApprovals} icon={<FileCheck2 size={18} />} />
         </section>
+        <ActionForms employees={props.employees} departments={props.departments} />
         <section className="grid two" style={{ marginTop: 16 }}>
           <div className="card"><h3><LineChart size={16} /> الملخص التنفيذي</h3><div className="grid three"><div className="feed-item"><strong>متوسط التقدم</strong><span>{avgProgress}/10 حسب السجلات اليومية</span></div><div className="feed-item"><strong>حالة قاعدة البيانات</strong><span>يعمل مع Supabase عند ضبط المتغيرات، أو Demo fallback عند عدم وجودها.</span></div><div className="feed-item"><strong>Google Sheets</strong><span>مهيأ كتصدير آمن عبر API وليس كقاعدة بيانات رئيسية.</span></div></div></div>
           <div className="card"><h3>النشاط المباشر</h3><div className="feed">{props.activityLogs.map((item) => <div className="feed-item" key={item.id}><strong>{item.action}</strong><span>{employeeName(item.actorId)} · {new Date(item.createdAt).toLocaleString("ar-SA")}</span></div>)}</div></div>
