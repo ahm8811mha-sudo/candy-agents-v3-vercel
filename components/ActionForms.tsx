@@ -14,9 +14,7 @@ export default function ActionForms({ employees }: Props) {
   const [loading, setLoading] = useState(false);
 
   async function submitJson(url: string, payload: Record<string, unknown>, success: string) {
-    setLoading(true);
-    setNotice(null);
-    setResult("");
+    setLoading(true); setNotice(null); setResult("");
     try {
       const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -24,11 +22,8 @@ export default function ActionForms({ employees }: Props) {
       setNotice({ type: "ok", text: success });
       if (data.inbox?.resultContent) setResult(data.inbox.resultContent);
       router.refresh();
-    } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "حدث خطأ غير معروف" });
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "حدث خطأ غير معروف" }); }
+    finally { setLoading(false); }
   }
 
   async function onUnifiedRequest(event: FormEvent<HTMLFormElement>) {
@@ -41,7 +36,10 @@ export default function ActionForms({ employees }: Props) {
   async function onLog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await submitJson("/api/logs", { employeeId: form.get("employeeId"), summary: form.get("summary"), blockers: form.get("blockers"), progressScore: Number(form.get("progressScore") || 7) }, "تم إرسال التقرير اليومي وإرساله إلى المدير للمراجعة.");
+    const achievements = String(form.get("achievements") || "");
+    const blockers = String(form.get("blockers") || "");
+    const nextStep = String(form.get("nextStep") || "");
+    await submitJson("/api/logs", { employeeId: form.get("employeeId"), summary: `تقرير يومي منظم`, achievements, blockers, nextStep, progressScore: Number(form.get("progressScore") || 7) }, "تم إرسال التقرير المنظم إلى مدير مختلف للمراجعة.");
     event.currentTarget.reset();
   }
 
@@ -50,8 +48,8 @@ export default function ActionForms({ employees }: Props) {
       <h3>طلب موحد للإدارة</h3>
       <p style={{ color: "var(--muted)", marginTop: -4 }}>اكتب الطلب مرة واحدة. الموظف الذكي ينفذه ويرجع النتيجة في سجل الوارد.</p>
       <form className="form" onSubmit={onUnifiedRequest}>
-        <textarea className="textarea" name="command" required placeholder="مثال: أنشئ خطة تشغيل الشركة لثلاثة أشهر" />
-        <select className="input" name="priority" defaultValue="HIGH"><option value="MEDIUM">أولوية عادية</option><option value="HIGH">أولوية عالية</option><option value="URGENT">عاجل</option></select>
+        <textarea className="textarea" name="command" required placeholder="مثال: اضبط النظام الإداري والمالي للشركة" />
+        <select className="input" name="priority" defaultValue="HIGH"><option value="MEDIUM">أولوية عادية</option><option value="HIGH">أولوية عالية</option><option value="URGENT">عاجل — بحد أقصى 3 يوميًا</option></select>
         <button className="primary-btn" disabled={loading}>{loading ? "جاري التنفيذ..." : "إرسال الطلب"}</button>
       </form>
       {notice && <p className={`badge ${notice.type === "ok" ? "green" : "red"}`} style={{ marginTop: 10 }}>{notice.text}</p>}
@@ -59,12 +57,13 @@ export default function ActionForms({ employees }: Props) {
     </div>
 
     <div className="card" style={{ gridColumn: "1 / -1" }}>
-      <h3>تقرير موظف يومي</h3>
+      <h3>تقرير موظف يومي منظم</h3>
       <form className="form two" onSubmit={onLog}>
         <select className="input" name="employeeId">{employees.map((e) => <option key={e.id} value={e.id}>{e.fullName}</option>)}</select>
         <input className="input" name="progressScore" type="number" min="1" max="10" defaultValue="7" />
-        <textarea className="textarea" name="summary" required placeholder="ماذا أنجزت اليوم؟" />
-        <textarea className="textarea" name="blockers" placeholder="العوائق أو المطلوب من الإدارة" />
+        <textarea className="textarea" name="achievements" required placeholder="الإنجازات الفعلية اليوم" />
+        <textarea className="textarea" name="blockers" placeholder="العقبات أو المخاطر" />
+        <textarea className="textarea" name="nextStep" required placeholder="الخطوة التالية المطلوبة" />
         <button className="primary-btn" disabled={loading}>{loading ? "جاري إرسال التقرير..." : "إرسال التقرير"}</button>
       </form>
     </div>
