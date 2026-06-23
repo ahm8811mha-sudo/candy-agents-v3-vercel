@@ -37,11 +37,8 @@ export default function ActionForms({ employees }: Props) {
     const form = new FormData(event.currentTarget);
     await submitJson(
       "/api/commands",
-      {
-        command: form.get("command"),
-        priority: form.get("priority") || "HIGH",
-      },
-      "تم استلام الطلب، وتحويله إلى مهمة موجهة للمدير المختص."
+      { command: form.get("command"), priority: form.get("priority") || "HIGH" },
+      "تم إنشاء مهمة وتقرير متابعة أولي وإرسالهما للمراجعة."
     );
     event.currentTarget.reset();
   }
@@ -57,7 +54,7 @@ export default function ActionForms({ employees }: Props) {
         blockers: form.get("blockers"),
         progressScore: Number(form.get("progressScore") || 7),
       },
-      "تم إرسال التقرير اليومي، وإرساله إلى المدير للمراجعة."
+      "تم إرسال التقرير اليومي وإرساله إلى المدير للمراجعة."
     );
     event.currentTarget.reset();
   }
@@ -66,9 +63,7 @@ export default function ActionForms({ employees }: Props) {
     <section id="actions" className="grid two" style={{ marginTop: 16 }}>
       <div className="card" style={{ gridColumn: "1 / -1" }}>
         <h3>طلب موحد للإدارة</h3>
-        <p style={{ color: "var(--muted)", marginTop: -4 }}>
-          اكتب الطلب مرة واحدة فقط. النظام يصنفه تلقائيًا، يحوله إلى مهمة، ويوجهه إلى المدير المختص.
-        </p>
+        <p style={{ color: "var(--muted)", marginTop: -4 }}>اكتب الطلب مرة واحدة. النظام يحوله إلى مهمة وتقرير متابعة أولي.</p>
         <form className="form" onSubmit={onUnifiedRequest}>
           <textarea className="textarea" name="command" required placeholder="مثال: راجعوا مخزون المواد الخام وجهزوا تقرير الجودة" />
           <select className="input" name="priority" defaultValue="HIGH">
