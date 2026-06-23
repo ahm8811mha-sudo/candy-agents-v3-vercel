@@ -1,7 +1,17 @@
 import CompanyOS from "@/components/CompanyOS";
-import { activityLogs, approvals, dailyLogs, departments, employees, notifications, tasks } from "@/lib/mock-data";
+import { listActivity, listApprovals, listDailyLogs, listDepartments, listEmployees, listNotifications, listTasks } from "@/lib/repository";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const employees = await listEmployees();
+  const departments = await listDepartments();
+  const tasks = await listTasks();
+  const dailyLogs = await listDailyLogs();
+  const approvals = await listApprovals();
+  const notifications = await listNotifications();
+  const activityLogs = await listActivity();
+
   return (
     <CompanyOS
       employees={employees}
