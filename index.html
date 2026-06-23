@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍬 مكتب النجمة الذهبية — Vercel Safe</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --wood:#4a2c0a;--wood2:#7a4f20;--gold:#f7c948;
+  --green:#27ae60;--orange:#e67e22;--red:#e74c3c;--blue:#2980b9;
+  --desk:#8B5E3C;
+}
+body{font-family:'Cairo',sans-serif;background:#d4c5a9;min-height:100vh;font-size:14px;}
+
+/* HEADER */
+.top-bar{background:linear-gradient(135deg,var(--wood),var(--wood2));padding:10px 14px;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;}
+.top-bar h1{font-size:1rem;font-weight:900;color:var(--gold);}
+.top-bar p{font-size:0.58rem;color:#c8a050;}
+.gs-badge{display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#c8a050;}
+.gs-dot{width:8px;height:8px;border-radius:50%;background:#e74c3c;transition:background 0.3s;}
+.gs-dot.ok{background:#27ae60;box-shadow:0 0 5px #27ae60;}
+
+/* MAIN LAYOUT */
+.layout{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 48px);}
+
+/* LEFT PANEL — INPUT */
+.left-panel{background:#f0e8d8;border-left:3px solid var(--wood2);overflow-y:auto;max-height:calc(100vh - 48px);}
+.panel-section{border-bottom:2px solid rgba(107,76,42,0.2);padding:12px;}
+.panel-section:last-child{border-bottom:none;}
+.sec-title{font-size:0.72rem;font-weight:900;color:var(--wood);margin-bottom:8px;display:flex;align-items:center;gap:5px;}
+
+/* CEO COMMAND */
+.ceo-box{background:linear-gradient(135deg,#1a0a00,#3a1e08);border-radius:8px;padding:10px;}
+.ceo-avatar{font-size:2rem;text-align:center;margin-bottom:4px;}
+.ceo-name{font-size:0.7rem;font-weight:900;color:var(--gold);text-align:center;}
+.ceo-role{font-size:0.55rem;color:#c8a050;text-align:center;margin-bottom:8px;}
+.cmd-textarea{width:100%;background:#0d1117;border:1px solid #333;border-radius:6px;padding:8px;color:#58d68d;font-family:'Cairo',sans-serif;font-size:0.65rem;resize:none;height:80px;}
+.cmd-textarea::placeholder{color:#3a5a3a;}
+.cmd-textarea:focus{outline:none;border-color:var(--gold);}
+.cmd-btn{width:100%;background:linear-gradient(135deg,#6a3093,#a044ff);color:#fff;border:none;border-radius:6px;padding:8px;font-family:'Cairo',sans-serif;font-size:0.7rem;font-weight:700;cursor:pointer;margin-top:6px;box-shadow:0 2px 0 #3a1850;}
+.cmd-btn:hover{opacity:0.9;}
+.cmd-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* FORMS */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.form-grid.single{grid-template-columns:1fr;}
+.field{display:flex;flex-direction:column;gap:3px;}
+.field label{font-size:0.58rem;font-weight:700;color:var(--wood2);}
+.field input,.field select,.field textarea{
+  border:1px solid #c8a870;border-radius:5px;padding:5px 8px;
+  font-family:'Cairo',sans-serif;font-size:0.65rem;background:#fff;
+  color:#333;
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--wood);}
+.field textarea{resize:none;height:50px;}
+
+/* PRODUCT ROWS */
+.products-list{margin-top:6px;}
+.product-row{background:#fff;border:1px solid #c8a870;border-radius:6px;padding:6px 8px;margin-bottom:5px;display:grid;grid-template-columns:1fr 70px 70px 22px;gap:4px;align-items:center;}
+.product-row input{border:1px solid #ddd;border-radius:4px;padding:3px 5px;font-size:0.6rem;font-family:'Cairo',sans-serif;}
+.product-row input:focus{outline:none;border-color:var(--wood);}
+.del-btn{background:#e74c3c;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:0.7rem;display:flex;align-items:center;justify-content:center;}
+.add-product-btn{background:none;border:1px dashed var(--wood2);color:var(--wood2);border-radius:5px;padding:4px;font-family:'Cairo',sans-serif;font-size:0.6rem;cursor:pointer;width:100%;margin-top:4px;}
+.add-product-btn:hover{background:rgba(107,76,42,0.1);}
+
+/* SUBMIT BTN */
+.submit-btn{width:100%;padding:9px;border:none;border-radius:7px;font-family:'Cairo',sans-serif;font-size:0.75rem;font-weight:900;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,0.3);margin-top:8px;transition:transform 0.1s;}
+.submit-btn:hover{transform:translateY(-1px);}
+.submit-btn:active{transform:translateY(1px);box-shadow:none;}
+.submit-btn:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-green{background:linear-gradient(135deg,#1e8449,#27ae60);color:#fff;}
+.btn-blue{background:linear-gradient(135deg,#1a5276,#2980b9);color:#fff;}
+.btn-orange{background:linear-gradient(135deg,#922b21,#e74c3c);color:#fff;}
+
+/* TABS */
+.tabs{display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;}
+.tab{padding:4px 8px;border-radius:4px;font-size:0.6rem;font-weight:700;cursor:pointer;border:none;font-family:'Cairo',sans-serif;background:#ddd;color:#555;transition:all 0.15s;}
+.tab.active{background:var(--wood);color:var(--gold);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* RIGHT — OFFICE */
+.right-panel{display:flex;flex-direction:column;overflow-y:auto;max-height:calc(100vh - 48px);}
+.office-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;}
+
+/* ROOM */
+.room{background:linear-gradient(160deg,#f5ede0,#ede0cc);border:2px solid var(--wood2);border-top:5px solid var(--wood);border-radius:4px;padding:8px;position:relative;box-shadow:3px 3px 0 rgba(0,0,0,0.12);}
+.room-tag{position:absolute;top:-12px;right:8px;background:var(--wood);color:var(--gold);font-size:0.5rem;font-weight:700;padding:1px 7px;border-radius:2px;}
+.room-head{display:flex;align-items:center;gap:5px;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(107,76,42,0.15);}
+.rh-icon{font-size:0.95rem;}
+.rh-title{font-size:0.65rem;font-weight:900;color:var(--wood);}
+.rh-sub{font-size:0.5rem;color:var(--wood2);}
+
+/* AGENT CARD */
+.agent{background:linear-gradient(135deg,var(--desk),#a0724a);border-radius:5px;padding:6px 7px;margin-bottom:4px;border:1px solid transparent;transition:border-color 0.3s,box-shadow 0.3s;}
+.agent.working{border-color:var(--orange);box-shadow:0 0 8px rgba(230,126,34,0.5);animation:ag-pulse 1s infinite;}
+.agent.done{border-color:var(--green);box-shadow:0 0 6px rgba(39,174,96,0.4);}
+.agent.alert{border-color:var(--gold);box-shadow:0 0 6px rgba(247,201,72,0.5);}
+@keyframes ag-pulse{0%,100%{box-shadow:0 0 5px rgba(230,126,34,0.4);}50%{box-shadow:0 0 12px rgba(230,126,34,0.8);}}
+.ag-row{display:flex;align-items:center;gap:5px;}
+.ag-av{font-size:0.9rem;flex-shrink:0;}
+.ag-name{font-size:0.63rem;font-weight:800;color:#fff;line-height:1.2;}
+.ag-role{font-size:0.5rem;color:rgba(255,255,255,0.7);}
+.ag-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-right:0;margin-left:auto;}
+.ag-dot.idle{background:#888;}
+.ag-dot.working{background:var(--orange);animation:dp 0.8s infinite;}
+.ag-dot.done{background:var(--green);}
+.ag-dot.alert{background:var(--gold);}
+@keyframes dp{0%,100%{opacity:1;}50%{opacity:0.2;}}
+.ag-screen{background:#0d1117;border-radius:3px;padding:2px 5px;font-size:0.48rem;color:#58d68d;font-family:monospace;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:13px;}
+
+/* FEED */
+.feed{background:#0d1117;border-top:2px solid var(--gold);padding:8px 12px;max-height:170px;overflow-y:auto;flex-shrink:0;}
+.feed-hdr{font-size:0.6rem;font-weight:700;color:var(--gold);margin-bottom:5px;display:flex;align-items:center;gap:5px;}
+.feed-hdr .blink{width:6px;height:6px;border-radius:50%;background:var(--green);animation:dp 1s infinite;}
+.fline{display:flex;gap:6px;font-size:0.55rem;font-family:monospace;padding:1px 0;border-bottom:1px solid rgba(255,255,255,0.03);}
+.ft{color:#444;flex-shrink:0;}
+.fa{color:var(--gold);flex-shrink:0;font-weight:700;min-width:80px;}
+.fm{color:#82e0aa;}
+.fm.w{color:#f39c12;}
+.fm.e{color:#e74c3c;}
+.fm.s{color:#74b9ff;}
+.fm.sh{color:#bb8fce;}
+
+/* MODAL CONFIRM */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.confirm-box{background:#f5ede0;border:3px solid var(--wood);border-radius:8px;padding:16px;max-width:380px;width:100%;box-shadow:6px 6px 0 rgba(0,0,0,0.3);}
+.confirm-box h3{font-size:0.85rem;font-weight:900;color:var(--wood);margin-bottom:8px;}
+.confirm-box pre{background:#0d1117;color:#58d68d;font-size:0.55rem;border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;margin-bottom:10px;}
+.confirm-btns{display:flex;gap:8px;}
+.confirm-btns button{flex:1;padding:7px;border:none;border-radius:6px;font-family:'Cairo',sans-serif;font-size:0.7rem;font-weight:700;cursor:pointer;}
+.cb-ok{background:var(--green);color:#fff;}
+.cb-cancel{background:#888;color:#fff;}
+
+@media(max-width:800px){
+  .layout{grid-template-columns:1fr;}
+  .left-panel{max-height:none;}
+  .right-panel{max-height:none;}
+  .office-grid{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:480px){.office-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div><h1>🍬 النجمة الذهبية — نظام الـ Agents</h1><p>أدخل البيانات ← وجّه المدير ← الأقسام تعمل تلقائياً</p></div>
+  <div class="gs-badge"><div class="gs-dot" id="gsDot"></div><span id="gsLbl">جاري الاتصال...</span></div>
+</div>
+
+<div class="layout">
+
+<!-- ══ LEFT: INPUT PANEL ══ -->
+<div class="left-panel">
+
+  <!-- CEO COMMAND -->
+  <div class="panel-section">
+    <div class="sec-title">👑 وجّه المدير التنفيذي</div>
+    <div class="ceo-box">
+      <div class="ceo-avatar">👑</div>
+      <div class="ceo-name">خالد العمري</div>
+      <div class="ceo-role">CEO — يستقبل توجيهاتك ويوزعها على الأقسام</div>
+      <textarea class="cmd-textarea" id="ceoCmd" placeholder="مثال: وصلت شحنة جديدة من تركيا، أريد فحص الجودة وتحديث المخزون وإعداد خطة توزيع...&#10;&#10;أو: ركّز مبيعاتنا على منطقة الرياض هذا الأسبوع..."></textarea>
+      <button class="cmd-btn" id="ceoCmdBtn" onclick="runCeoCommand()">⚡ أصدر الأمر — CEO يوزع على الأقسام</button>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="panel-section">
+    <div class="sec-title">📋 إدخال البيانات</div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('shipment')">📦 بضاعة وصلت</button>
+      <button class="tab" onclick="switchTab('sales')">🛒 مبيعات</button>
+      <button class="tab" onclick="switchTab('supplier')">🚢 مورد</button>
+      <button class="tab" onclick="switchTab('issue')">⚠️ مشكلة</button>
+    </div>
+
+    <!-- TAB: SHIPMENT -->
+    <div class="tab-content active" id="tab-shipment">
+      <div class="form-grid">
+        <div class="field">
+          <label>📅 تاريخ الوصول</label>
+          <input type="date" id="sh-date">
+        </div>
+        <div class="field">
+          <label>🕐 وقت الوصول</label>
+          <input type="time" id="sh-time">
+        </div>
+        <div class="field">
+          <label>🚢 المورد</label>
+          <input type="text" id="sh-supplier" placeholder="مثال: شركة بيلا إيطاليا">
+        </div>
+        <div class="field">
+          <label>🌍 بلد المنشأ</label>
+          <input type="text" id="sh-country" placeholder="إيطاليا">
+        </div>
+        <div class="field">
+          <label>🚛 رقم الشحنة</label>
+          <input type="text" id="sh-num" placeholder="SHP-2024-001">
+        </div>
+        <div class="field">
+          <label>🏭 المستودع</label>
+          <select id="sh-warehouse">
+            <option>مستودع الرياض الرئيسي</option>
+            <option>مستودع جدة</option>
+            <option>مستودع الدمام</option>
+            <option>مستودع مكة</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="margin-top:6px">
+        <label>📍 موقع التسليم التفصيلي</label>
+        <input type="text" id="sh-location" placeholder="بوابة B2 — الرياض — طريق الدمام">
+      </div>
+
+      <div class="sec-title" style="margin-top:10px;font-size:0.65rem;">📦 المنتجات الواردة</div>
+      <div style="display:grid;grid-template-columns:1fr 70px 70px 22px;gap:4px;margin-bottom:4px;">
+        <span style="font-size:0.55rem;color:var(--wood2);font-weight:700;">المنتج</span>
+        <span style="font-size:0.55rem;color:var(--wood2);font-weight:700;">الكمية</span>
+        <span style="font-size:0.55rem;color:var(--wood2);font-weight:700;">الوحدة</span>
+        <span></span>
+      </div>
+      <div class="products-list" id="productsList"></div>
+      <button class="add-product-btn" onclick="addProduct()">+ إضافة منتج</button>
+
+      <div class="form-grid" style="margin-top:8px;">
+        <div class="field">
+          <label>💰 قيمة الشحنة (ريال)</label>
+          <input type="number" id="sh-value" placeholder="180000">
+        </div>
+        <div class="field">
+          <label>🚗 رسوم الشحن (ريال)</label>
+          <input type="number" id="sh-freight" placeholder="12000">
+        </div>
+      </div>
+      <div class="field" style="margin-top:6px;">
+        <label>📝 ملاحظات إضافية</label>
+        <textarea id="sh-notes" placeholder="مثال: بعض العبوات تحتاج فحص، يرجى التدقيق"></textarea>
+      </div>
+      <button class="submit-btn btn-green" id="sh-btn" onclick="submitShipment()">📦 تسجيل الشحنة وتشغيل الـ Agents</button>
+    </div>
+
+    <!-- TAB: SALES -->
+    <div class="tab-content" id="tab-sales">
+      <div class="form-grid">
+        <div class="field">
+          <label>📅 التاريخ</label>
+          <input type="date" id="sl-date">
+        </div>
+        <div class="field">
+          <label>📍 المنطقة</label>
+          <select id="sl-region">
+            <option>الرياض — منطقة أ</option>
+            <option>الرياض — منطقة ب</option>
+            <option>جدة</option>
+            <option>الدمام</option>
+            <option>مكة</option>
+            <option>المدينة</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>🧑 المندوب</label>
+          <input type="text" id="sl-rep" placeholder="عمر السبيعي">
+        </div>
+        <div class="field">
+          <label>💰 المبيعات (ريال)</label>
+          <input type="number" id="sl-amount" placeholder="45000">
+        </div>
+        <div class="field">
+          <label>🎯 الهدف (ريال)</label>
+          <input type="number" id="sl-target" placeholder="50000">
+        </div>
+        <div class="field">
+          <label>📦 عدد الطلبيات</label>
+          <input type="number" id="sl-orders" placeholder="12">
+        </div>
+      </div>
+      <div class="field" style="margin-top:6px;">
+        <label>🏪 العملاء الرئيسيون</label>
+        <textarea id="sl-clients" placeholder="مثال: بقالة العزيزية، هايبر بنده، الدانوب"></textarea>
+      </div>
+      <button class="submit-btn btn-blue" id="sl-btn" onclick="submitSales()">📊 رفع تقرير المبيعات</button>
+    </div>
+
+    <!-- TAB: SUPPLIER -->
+    <div class="tab-content" id="tab-supplier">
+      <div class="form-grid">
+        <div class="field">
+          <label>🏭 اسم المورد</label>
+          <input type="text" id="sp-name" placeholder="Bella Italia S.p.A">
+        </div>
+        <div class="field">
+          <label>🌍 الدولة</label>
+          <input type="text" id="sp-country" placeholder="إيطاليا">
+        </div>
+        <div class="field">
+          <label>📞 جهة التواصل</label>
+          <input type="text" id="sp-contact" placeholder="Marco Rossi">
+        </div>
+        <div class="field">
+          <label>💰 قيمة الطلب (ريال)</label>
+          <input type="number" id="sp-value" placeholder="220000">
+        </div>
+        <div class="field">
+          <label>📦 الكمية الإجمالية</label>
+          <input type="text" id="sp-qty" placeholder="8 أطنان">
+        </div>
+        <div class="field">
+          <label>📅 موعد التسليم</label>
+          <input type="date" id="sp-eta">
+        </div>
+      </div>
+      <div class="field" style="margin-top:6px;">
+        <label>📋 تفاصيل الطلب</label>
+        <textarea id="sp-details" placeholder="أنواع المنتجات المطلوبة وشروط الدفع"></textarea>
+      </div>
+      <button class="submit-btn btn-blue" id="sp-btn" onclick="submitSupplier()">🚢 إرسال طلب للمورد</button>
+    </div>
+
+    <!-- TAB: ISSUE -->
+    <div class="tab-content" id="tab-issue">
+      <div class="form-grid">
+        <div class="field">
+          <label>⚠️ نوع المشكلة</label>
+          <select id="is-type">
+            <option>مشكلة جودة منتج</option>
+            <option>تأخر شحنة</option>
+            <option>نقص مخزون</option>
+            <option>شكوى عميل</option>
+            <option>خلاف مع مورد</option>
+            <option>مشكلة جمارك</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>🔴 مستوى الخطورة</label>
+          <select id="is-level">
+            <option>عالي — يحتاج قرار فوري</option>
+            <option>متوسط — يحتاج متابعة</option>
+            <option>منخفض — للعلم فقط</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>📦 المنتج المتأثر</label>
+          <input type="text" id="is-product" placeholder="شوكولاته إيطالية">
+        </div>
+        <div class="field">
+          <label>🔢 الكمية المتأثرة</label>
+          <input type="text" id="is-qty" placeholder="50 كرتون">
+        </div>
+      </div>
+      <div class="field" style="margin-top:6px;">
+        <label>📝 وصف المشكلة</label>
+        <textarea id="is-desc" placeholder="اشرح المشكلة بالتفصيل..."></textarea>
+      </div>
+      <button class="submit-btn btn-orange" id="is-btn" onclick="submitIssue()">⚠️ تصعيد المشكلة للأقسام</button>
+    </div>
+  </div>
+
+</div><!-- /left-panel -->
+
+<!-- ══ RIGHT: OFFICE ══ -->
+<div class="right-panel">
+  <div class="office-grid">
+
+    <!-- CEO -->
+    <div class="room" style="grid-column:1/-1">
+      <div class="room-tag">القيادة</div>
+      <div class="room-head"><span class="rh-icon">👑</span><div><div class="rh-title">المدير التنفيذي — يستقبل بياناتك ويوزع المهام</div><div class="rh-sub">وجّهه من اليسار وهو يحرك الأقسام تلقائياً</div></div></div>
+      <div class="agent" id="a-ceo">
+        <div class="ag-row"><span class="ag-av">👑</span><div><div class="ag-name">خالد العمري — CEO</div><div class="ag-role">ينتظر توجيهاتك</div></div><div class="ag-dot idle" id="d-ceo"></div></div>
+        <div class="ag-screen" id="s-ceo">في انتظار الأوامر من المدير...</div>
+      </div>
+    </div>
+
+    <!-- WAREHOUSE -->
+    <div class="room">
+      <div class="room-tag">المستودع</div>
+      <div class="room-head"><span class="rh-icon">📦</span><div><div class="rh-title">اللوجستيات</div><div class="rh-sub">الاستلام • المخزون • التوزيع</div></div></div>
+      <div class="agent" id="a-wh">
+        <div class="ag-row"><span class="ag-av">🧑‍✈️</span><div><div class="ag-name">أحمد الرويلي</div><div class="ag-role">مدير اللوجستيات</div></div><div class="ag-dot idle" id="d-wh"></div></div>
+        <div class="ag-screen" id="s-wh">جاهز...</div>
+      </div>
+      <div class="agent" id="a-stk">
+        <div class="ag-row"><span class="ag-av">👩‍💼</span><div><div class="ag-name">وفاء الصاعدي</div><div class="ag-role">أمينة المستودع</div></div><div class="ag-dot idle" id="d-stk"></div></div>
+        <div class="ag-screen" id="s-stk">جاهزة...</div>
+      </div>
+    </div>
+
+    <!-- QUALITY -->
+    <div class="room">
+      <div class="room-tag">الجودة</div>
+      <div class="room-head"><span class="rh-icon">✅</span><div><div class="rh-title">الجودة والسلامة</div><div class="rh-sub">الفحص • الامتثال • القرار</div></div></div>
+      <div class="agent" id="a-qc">
+        <div class="ag-row"><span class="ag-av">👩‍🔬</span><div><div class="ag-name">غادة الفيفي</div><div class="ag-role">مدير الجودة</div></div><div class="ag-dot idle" id="d-qc"></div></div>
+        <div class="ag-screen" id="s-qc">جاهزة...</div>
+      </div>
+    </div>
+
+    <!-- SALES -->
+    <div class="room">
+      <div class="room-tag">المبيعات</div>
+      <div class="room-head"><span class="rh-icon">🛒</span><div><div class="rh-title">المبيعات</div><div class="rh-sub">التوزيع • المناطق • الأهداف</div></div></div>
+      <div class="agent" id="a-sal">
+        <div class="ag-row"><span class="ag-av">👩‍💼</span><div><div class="ag-name">لينا الزهراني</div><div class="ag-role">مدير المبيعات</div></div><div class="ag-dot idle" id="d-sal"></div></div>
+        <div class="ag-screen" id="s-sal">جاهزة...</div>
+      </div>
+      <div class="agent" id="a-rep">
+        <div class="ag-row"><span class="ag-av">🧑‍💼</span><div><div class="ag-name">عمر السبيعي</div><div class="ag-role">مندوب المبيعات</div></div><div class="ag-dot idle" id="d-rep"></div></div>
+        <div class="ag-screen" id="s-rep">جاهز...</div>
+      </div>
+    </div>
+
+    <!-- FINANCE -->
+    <div class="room">
+      <div class="room-tag">المالية</div>
+      <div class="room-head"><span class="rh-icon">💰</span><div><div class="rh-title">المالية والمحاسبة</div><div class="rh-sub">القيود • التقارير • الاعتماد</div></div></div>
+      <div class="agent" id="a-cfo">
+        <div class="ag-row"><span class="ag-av">🧑‍💻</span><div><div class="ag-name">محمد الشهري</div><div class="ag-role">المدير المالي CFO</div></div><div class="ag-dot idle" id="d-cfo"></div></div>
+        <div class="ag-screen" id="s-cfo">جاهز...</div>
+      </div>
+      <div class="agent" id="a-acc">
+        <div class="ag-row"><span class="ag-av">👩‍💼</span><div><div class="ag-name">نورة السلمي</div><div class="ag-role">محاسبة عامة</div></div><div class="ag-dot idle" id="d-acc"></div></div>
+        <div class="ag-screen" id="s-acc">جاهزة...</div>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div class="room">
+      <div class="room-tag">الاستيراد</div>
+      <div class="room-head"><span class="rh-icon">🚢</span><div><div class="rh-title">الاستيراد</div><div class="rh-sub">الموردون • الجمارك • العقود</div></div></div>
+      <div class="agent" id="a-imp">
+        <div class="ag-row"><span class="ag-av">🧑‍✈️</span><div><div class="ag-name">سعود الحربي</div><div class="ag-role">مدير الاستيراد</div></div><div class="ag-dot idle" id="d-imp"></div></div>
+        <div class="ag-screen" id="s-imp">جاهز...</div>
+      </div>
+      <div class="agent" id="a-cus">
+        <div class="ag-row"><span class="ag-av">🧑‍✈️</span><div><div class="ag-name">تركي المالكي</div><div class="ag-role">مسؤول الجمارك</div></div><div class="ag-dot idle" id="d-cus"></div></div>
+        <div class="ag-screen" id="s-cus">جاهز...</div>
+      </div>
+    </div>
+
+  </div><!-- /office-grid -->
+
+  <!-- FEED -->
+  <div class="feed">
+    <div class="feed-hdr"><div class="blink"></div>سجل النشاط المباشر</div>
+    <div id="feedEl">
+      <div class="fline"><span class="ft">--:--</span><span class="fa">النظام</span><span class="fm s">▶ أدخل البيانات من اليسار أو وجّه المدير التنفيذي</span></div>
+    </div>
+  </div>
+</div><!-- /right-panel -->
+</div><!-- /layout -->
+
+<!-- CONFIRM OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">تأكيد البيانات</h3>
+    <pre id="confirmData"></pre>
+    <div class="confirm-btns">
+      <button class="cb-ok" onclick="confirmAndRun()">✅ تأكيد وتشغيل الـ Agents</button>
+      <button class="cb-cancel" onclick="closeOverlay()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ CONFIG — SAFE EDITION ══
+const SHEETS_MODE='local-demo';
+
+// ══ PRODUCTS ══
+let products=[];
+function addProduct(){
+  const id=Date.now();
+  products.push({id});
+  renderProducts();
+}
+function removeProduct(id){products=products.filter(p=>p.id!==id);renderProducts();}
+function renderProducts(){
+  const el=document.getElementById('productsList');
+  el.innerHTML=products.map(p=>`
+    <div class="product-row">
+      <input placeholder="اسم المنتج" id="pn-${p.id}" value="${p.name||''}">
+      <input placeholder="الكمية" type="number" id="pq-${p.id}" value="${p.qty||''}">
+      <select id="pu-${p.id}">
+        <option>كرتون</option><option>طن</option><option>كيلو</option><option>قطعة</option>
+      </select>
+      <button class="del-btn" onclick="removeProduct(${p.id})">×</button>
+    </div>`).join('');
+}
+function getProducts(){
+  return products.map(p=>({
+    name:document.getElementById('pn-'+p.id)?.value||'',
+    qty:document.getElementById('pq-'+p.id)?.value||'',
+    unit:document.getElementById('pu-'+p.id)?.value||''
+  })).filter(p=>p.name);
+}
+
+// ══ TABS ══
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((b,i)=>{b.classList.toggle('active',['shipment','sales','supplier','issue'][i]===t);});
+  document.querySelectorAll('.tab-content').forEach(c=>{c.classList.toggle('active',c.id==='tab-'+t);});
+}
+
+// ══ SAFE LOGGING / SHEETS PLACEHOLDER ══
+// تم تعطيل الاتصال المباشر بـ Google Sheets داخل المتصفح لحماية مفاتيح الخدمة.
+// اربط Google Sheets لاحقاً من خلال Backend أو Vercel Serverless Function باستخدام Environment Variables.
+function setGS(ok){
+  document.getElementById('gsDot').className='gs-dot'+(ok?' ok':'');
+  document.getElementById('gsLbl').textContent=ok?'متصل بتكامل آمن':'وضع تجريبي — بدون مفاتيح مكشوفة';
+}
+async function sheetAppend(sheet,rows){
+  try{
+    const key='candy_agents_logs_'+sheet;
+    const old=JSON.parse(localStorage.getItem(key)||'[]');
+    old.push(...rows);
+    localStorage.setItem(key,JSON.stringify(old));
+    feed('السجل المحلي','✅ حُفظ محلياً في '+sheet,'sh');
+  }catch(e){feed('السجل المحلي','❌ '+e.message,'e');}
+}
+async function initSheets(){
+  setGS(false);
+  feed('النظام','✅ يعمل الآن بوضع آمن — البيانات تحفظ محلياً داخل المتصفح','s');
+}
+
+// ══ FEED ══
+function feed(agent,msg,type=''){
+  const el=document.getElementById('feedEl');
+  const ts=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const d=document.createElement('div');d.className='fline';
+  d.innerHTML=`<span class="ft">${ts}</span><span class="fa">${agent}</span><span class="fm ${type}">${msg}</span>`;
+  el.prepend(d);
+  if(el.children.length>80)el.lastChild.remove();
+}
+
+// ══ AGENT STATE ══
+function ag(id,state,txt){
+  const dot=document.getElementById('d-'+id);
+  const scr=document.getElementById('s-'+id);
+  const card=document.getElementById('a-'+id);
+  if(dot)dot.className='ag-dot '+state;
+  if(scr&&txt)scr.textContent=txt.substring(0,60);
+  if(card){card.className='agent';if(state!=='idle')card.classList.add(state);}
+}
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ══ AI RESPONSES — SAFE LOCAL FALLBACK ══
+async function claude(system,user){
+  await delay(250);
+  const text=(system+' '+user).toLowerCase();
+  if(system.includes('JSON فقط')){
+    const depts={warehouse:null,quality:null,sales:null,finance:null,import:null};
+    const u=user||'';
+    if(/شحنة|بضاعة|مستودع|مخزون/.test(u)) depts.warehouse='استلام البضاعة وتحديث المخزون والتحقق من الكميات';
+    if(/جودة|فحص|تالف|منتج/.test(u)) depts.quality='فحص العينات وتحديد قرار القبول أو العزل';
+    if(/مبيعات|توزيع|رياض|عملاء|منطقة/.test(u)) depts.sales='إعداد خطة توزيع ومتابعة العملاء المستهدفين';
+    if(/قيمة|فاتورة|تكلفة|مالية|اعتماد/.test(u)) depts.finance='تسجيل الأثر المالي ومراجعة التكلفة والاعتماد';
+    if(/مورد|استيراد|جمارك|تركيا|ايطاليا|إيطاليا/.test(u)) depts.import='متابعة المورد والمستندات والجمارك';
+    if(!Object.values(depts).some(Boolean)){
+      depts.warehouse='متابعة تنفيذية حسب الحاجة';
+      depts.sales='تقييم الأثر على المبيعات';
+      depts.finance='مراجعة الأثر المالي';
+    }
+    return JSON.stringify({analysis:'تم تحليل الأمر محلياً وتوزيع المهام حسب الكلمات المفتاحية.',departments:depts,priority:/عاجل|فوري|مشكلة|تأخر|خطر/.test(u)?'عالي':'متوسط',summary:'تم توزيع الأمر على الأقسام المناسبة'});
+  }
+  if(text.includes('جودة')) return 'تم فحص العينات وإصدار قبول مبدئي مع متابعة الملاحظات.';
+  if(text.includes('مالي')||text.includes('قيد')||text.includes('إيراد')) return 'تم تسجيل الأثر المالي ومراجعة القيود المطلوبة.';
+  if(text.includes('مبيعات')) return 'تم تحليل الأداء وتحديث خطة التوزيع للعملاء.';
+  if(text.includes('استيراد')||text.includes('مورد')||text.includes('جمارك')) return 'تمت متابعة المورد وتجهيز المستندات المطلوبة.';
+  if(text.includes('لوجستيات')||text.includes('مستودع')||text.includes('مخزون')) return 'تم تحديث المخزون وتأكيد جاهزية التوزيع.';
+  if(text.includes('CEO')) return 'تم استلام التوجيه وتحويله للأقسام المختصة.';
+  return 'تم تنفيذ المهمة وتسجيل النتيجة بنجاح.';
+}
+
+// ══ CONFIRM OVERLAY ══
+let pendingAction=null;
+function showConfirm(title,data,action){
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmData').textContent=data;
+  pendingAction=action;
+  document.getElementById('overlay').classList.add('open');
+}
+function closeOverlay(){document.getElementById('overlay').classList.remove('open');pendingAction=null;}
+async function confirmAndRun(){
+  closeOverlay();
+  if(pendingAction)await pendingAction();
+}
+
+// ══════════════════════════════
+// CEO COMMAND
+// ══════════════════════════════
+async function runCeoCommand(){
+  const cmd=document.getElementById('ceoCmd').value.trim();
+  if(!cmd){feed('النظام','⚠️ اكتب توجيهاً للمدير التنفيذي أولاً','e');return;}
+  document.getElementById('ceoCmdBtn').disabled=true;
+  feed('النظام','👑 CEO يستقبل الأمر ويحلل...','s');
+  ag('ceo','working','🧠 يحلل الأمر...');
+
+  // CEO analyzes and creates action plan
+  const ceoResp=await claude(
+    `أنت خالد العمري المدير التنفيذي لشركة النجمة الذهبية لاستيراد الحلويات.
+لديك هذه الأقسام: المستودع (أحمد+وفاء)، الجودة (غادة)، المبيعات (لينا+عمر)، المالية (محمد+نورة)، الاستيراد (سعود+تركي).
+عند استقبال أي أمر، حدد: 1) الأقسام التي يجب تفعيلها 2) مهمة كل قسم 3) الأولوية.
+رد بهذا الشكل بالضبط (JSON فقط):
+{"analysis":"تحليل الموقف","departments":{"warehouse":"مهمة المستودع أو null","quality":"مهمة الجودة أو null","sales":"مهمة المبيعات أو null","finance":"مهمة المالية أو null","import":"مهمة الاستيراد أو null"},"priority":"عالي/متوسط/منخفض","summary":"ملخص قرار CEO"}`,
+    cmd
+  );
+
+  let plan;
+  try{
+    const clean=ceoResp.replace(/```json|```/g,'').trim();
+    plan=JSON.parse(clean);
+  }catch(e){
+    // fallback
+    plan={analysis:ceoResp,departments:{warehouse:'متابعة',quality:'متابعة',sales:'متابعة',finance:'متابعة',import:'متابعة'},priority:'متوسط',summary:ceoResp.substring(0,100)};
+  }
+
+  ag('ceo','done','✅ '+plan.summary?.substring(0,55));
+  feed('خالد العمري','📋 '+plan.summary,'');
+  feed('خالد العمري','🎯 الأولوية: '+plan.priority,'w');
+
+  await sheetAppend('سجل الأحداث',[[
+    new Date().toLocaleString('ar-SA'),'أمر CEO',cmd,
+    Object.keys(plan.departments).filter(k=>plan.departments[k]&&plan.departments[k]!=='null').join(' + '),
+    plan.summary,plan.priority
+  ]]);
+
+  // Activate each department
+  const deptMap={
+    warehouse:{ids:['wh','stk'],name:'أحمد الرويلي',sys:'أنت أحمد مدير لوجستيات. رد بجملة واحدة قصيرة (أقل من 12 كلمة) عن تنفيذ المهمة.'},
+    quality:{ids:['qc'],name:'غادة الفيفي',sys:'أنت غادة مديرة جودة. رد بجملة واحدة قصيرة (أقل من 12 كلمة).'},
+    sales:{ids:['sal','rep'],name:'لينا الزهراني',sys:'أنت لينا مديرة مبيعات. رد بجملة واحدة قصيرة (أقل من 12 كلمة).'},
+    finance:{ids:['cfo','acc'],name:'محمد الشهري',sys:'أنت محمد المدير المالي. رد بجملة واحدة قصيرة (أقل من 12 كلمة).'},
+    import:{ids:['imp','cus'],name:'سعود الحربي',sys:'أنت سعود مدير استيراد. رد بجملة واحدة قصيرة (أقل من 12 كلمة).'}
+  };
+
+  for(const[dept,task]of Object.entries(plan.departments)){
+    if(!task||task==='null')continue;
+    const dm=deptMap[dept];if(!dm)continue;
+    await delay(500);
+    dm.ids.forEach(id=>ag(id,'working','⚙️ تنفيذ مهمة CEO...'));
+    feed(dm.name,'📨 تلقى مهمة: '+task.substring(0,60),'');
+    const resp=await claude(dm.sys,'المهمة المكلف بها: '+task);
+    dm.ids.forEach(id=>ag(id,'done','✅ '+resp.substring(0,50)));
+    feed(dm.name,resp.substring(0,80),'');
+  }
+
+  feed('النظام','✅ تم تنفيذ جميع أوامر CEO','s');
+  document.getElementById('ceoCmdBtn').disabled=false;
+}
+
+// ══════════════════════════════
+// SUBMIT SHIPMENT
+// ══════════════════════════════
+function submitShipment(){
+  const prods=getProducts();
+  if(!prods.length){feed('النظام','⚠️ أضف منتجاً واحداً على الأقل','e');return;}
+  const data={
+    date:document.getElementById('sh-date').value||new Date().toLocaleDateString('ar-SA'),
+    time:document.getElementById('sh-time').value||new Date().toLocaleTimeString('ar-SA'),
+    num:document.getElementById('sh-num').value||'SHP-AUTO',
+    supplier:document.getElementById('sh-supplier').value||'غير محدد',
+    country:document.getElementById('sh-country').value||'غير محدد',
+    warehouse:document.getElementById('sh-warehouse').value,
+    location:document.getElementById('sh-location').value||'',
+    value:document.getElementById('sh-value').value||'0',
+    freight:document.getElementById('sh-freight').value||'0',
+    notes:document.getElementById('sh-notes').value||'',
+    products:prods
+  };
+  const prodStr=prods.map(p=>`${p.name}: ${p.qty} ${p.unit}`).join('، ');
+  const preview=`📦 شحنة: ${data.num}
+🏭 المورد: ${data.supplier} (${data.country})
+📅 التاريخ: ${data.date} ${data.time}
+🏭 المستودع: ${data.warehouse}
+📍 الموقع: ${data.location}
+📦 المنتجات: ${prodStr}
+💰 القيمة: ${Number(data.value).toLocaleString()} ريال
+🚗 رسوم الشحن: ${Number(data.freight).toLocaleString()} ريال
+📝 ملاحظات: ${data.notes||'لا يوجد'}`;
+  showConfirm('تأكيد بيانات الشحنة',preview,()=>runShipment(data,prodStr));
+}
+
+async function runShipment(data,prodStr){
+  document.getElementById('sh-btn').disabled=true;
+  const ts=new Date().toLocaleString('ar-SA');
+
+  feed('النظام',`🚛 شحنة ${data.num} من ${data.supplier} — بدء سلسلة العمل`,'s');
+
+  // CEO notified
+  ag('ceo','working','📦 يراجع بيانات الشحنة...');
+  await delay(400);
+  const ceoMsg=await claude(
+    'أنت CEO. رد بجملة واحدة (أقل من 12 كلمة) عن استلام إشعار الشحنة.',
+    `وصلت شحنة ${data.num} من ${data.supplier}: ${prodStr}`
+  );
+  ag('ceo','done',ceoMsg.substring(0,55));
+  feed('خالد العمري',ceoMsg.substring(0,80),'');
+
+  // WAREHOUSE
+  await delay(400);
+  ag('wh','working','📥 يستلم الشحنة...');
+  feed('أحمد الرويلي',`استلام ${data.num} في ${data.warehouse}`,'');
+  const whMsg=await claude(
+    'أنت أحمد مدير لوجستيات. رد بجملة واحدة (أقل من 12 كلمة).',
+    `استلم شحنة ${prodStr} في ${data.warehouse} — ${data.location}`
+  );
+  ag('wh','done',whMsg.substring(0,55));
+  feed('أحمد الرويلي',whMsg.substring(0,80),'');
+
+  // STOCK
+  await delay(300);
+  ag('stk','working','📋 تحديث المخزون...');
+  const stkMsg=await claude(
+    'أنت وفاء أمينة مستودع. رد بجملة واحدة (أقل من 12 كلمة).',
+    `سجّل في المخزون: ${prodStr}`
+  );
+  ag('stk','done',stkMsg.substring(0,55));
+  feed('وفاء الصاعدي',stkMsg.substring(0,80),'');
+  await sheetAppend('الشحنات',[[data.date,data.time,data.num,data.supplier,data.country,data.warehouse,data.location,prods.map(p=>p.name).join('،'),prods.map(p=>p.qty+' '+p.unit).join('،'),data.value,data.freight,data.notes,'بانتظار الجودة']]);
+
+  // QUALITY
+  await delay(400);
+  ag('qc','working','🔬 فحص الجودة...');
+  feed('غادة الفيفي','بدء فحص عينات الشحنة','');
+  const qcMsg=await claude(
+    'أنت غادة مديرة جودة. رد بجملة واحدة (أقل من 12 كلمة) عن نتيجة فحص الشحنة.',
+    `افحص: ${prodStr} من ${data.country}. ${data.notes?'ملاحظات: '+data.notes:''}`
+  );
+  ag('qc','done',qcMsg.substring(0,55));
+  feed('غادة الفيفي',qcMsg.substring(0,80),'');
+  await sheetAppend('الجودة',[[data.date,prodStr,prods.map(p=>p.qty+' '+p.unit).join('،'),'مكتمل','قبول مبدئي','غادة الفيفي',data.notes]]);
+
+  // SALES notified
+  await delay(400);
+  ag('sal','alert','📢 بضاعة جديدة متاحة!');
+  const salMsg=await claude(
+    'أنت لينا مديرة مبيعات. رد بجملة واحدة (أقل من 12 كلمة) عن توزيع المنتجات الجديدة.',
+    `وصلت ${prodStr} للمستودع. خطة التوزيع؟`
+  );
+  ag('sal','done',salMsg.substring(0,55));
+  feed('لينا الزهراني',salMsg.substring(0,80),'');
+  ag('rep','alert','📋 توزيع منتجات جديدة');
+  await delay(300);
+  ag('rep','done','✅ جاهز للتوزيع على المنطقة أ');
+  feed('عمر السبيعي','استلام قائمة المنتجات الجديدة للعرض على العملاء','');
+
+  // FINANCE
+  await delay(400);
+  ag('cfo','working','📒 تسجيل قيد الشحنة...');
+  const finMsg=await claude(
+    'أنت محمد المدير المالي. رد بجملة واحدة (أقل من 12 كلمة) عن تسجيل الشحنة.',
+    `سجّل شحنة قيمتها ${Number(data.value).toLocaleString()} ريال + شحن ${Number(data.freight).toLocaleString()} ريال`
+  );
+  ag('cfo','done',finMsg.substring(0,55));
+  feed('محمد الشهري',finMsg.substring(0,80),'');
+  const total=(Number(data.value)+Number(data.freight)).toLocaleString();
+  await sheetAppend('المالية',[[data.date,'استلام بضاعة',total+' ريال','مدين: المخزون / دائن: الموردون','محمد الشهري',data.num]]);
+  ag('acc','done','✅ القيد مسجل');
+  feed('نورة السلمي','قيد '+data.num+' مسجل في الدفاتر','');
+
+  await sheetAppend('سجل الأحداث',[[ts,'وصول شحنة',data.num+' — '+prodStr,'المستودع + الجودة + المبيعات + المالية','استلام + فحص + إشعار + تسجيل','✅ مكتمل']]);
+  ag('ceo','done','✅ الشحنة '+data.num+' معالجة بالكامل');
+  feed('النظام','✅ شحنة '+data.num+' — كل الأقسام أنهت مهامها وسُجّل في Sheets','s');
+  document.getElementById('sh-btn').disabled=false;
+}
+
+// ══════════════════════════════
+// SUBMIT SALES
+// ══════════════════════════════
+function submitSales(){
+  const data={
+    date:document.getElementById('sl-date').value||new Date().toLocaleDateString('ar-SA'),
+    region:document.getElementById('sl-region').value,
+    rep:document.getElementById('sl-rep').value||'غير محدد',
+    amount:document.getElementById('sl-amount').value||'0',
+    target:document.getElementById('sl-target').value||'0',
+    orders:document.getElementById('sl-orders').value||'0',
+    clients:document.getElementById('sl-clients').value||''
+  };
+  const diff=Number(data.amount)-Number(data.target);
+  const preview=`📊 تقرير مبيعات
+📅 التاريخ: ${data.date}
+📍 المنطقة: ${data.region}
+🧑 المندوب: ${data.rep}
+💰 المبيعات: ${Number(data.amount).toLocaleString()} ريال
+🎯 الهدف: ${Number(data.target).toLocaleString()} ريال
+${diff>=0?'✅':'❌'} الفرق: ${diff>=0?'+':''}${diff.toLocaleString()} ريال
+📦 الطلبيات: ${data.orders}
+🏪 العملاء: ${data.clients}`;
+  showConfirm('تأكيد تقرير المبيعات',preview,()=>runSales(data));
+}
+
+async function runSales(data){
+  document.getElementById('sl-btn').disabled=true;
+  const diff=Number(data.amount)-Number(data.target);
+  const ts=new Date().toLocaleString('ar-SA');
+  feed('النظام','📊 تقرير مبيعات '+data.region+' — '+data.rep,'s');
+
+  ag('rep','working','📊 يرفع تقريره...');
+  feed('عمر السبيعي',`تقرير ${data.region}: ${Number(data.amount).toLocaleString()} ريال`,'');
+  await delay(400);
+  ag('rep','done','✅ التقرير مرفوع');
+
+  ag('sal','working','📈 تحليل الأداء...');
+  const salMsg=await claude(
+    'أنت لينا مديرة مبيعات. رد بجملة واحدة (أقل من 15 كلمة) بتقييم الأداء.',
+    `منطقة ${data.region}: مبيعات ${data.amount} ريال مقابل هدف ${data.target} ريال. ${data.clients?'عملاء: '+data.clients:''}`
+  );
+  ag('sal','done',salMsg.substring(0,55));
+  feed('لينا الزهراني',salMsg.substring(0,80),'');
+
+  ag('cfo','working','💰 يسجل الإيراد...');
+  const finMsg=await claude(
+    'أنت محمد المدير المالي. رد بجملة واحدة (أقل من 12 كلمة) عن تسجيل الإيراد.',
+    `سجّل إيراد ${data.amount} ريال من ${data.region}`
+  );
+  ag('cfo','done',finMsg.substring(0,55));
+  feed('محمد الشهري',finMsg.substring(0,80),'');
+
+  await sheetAppend('المبيعات',[[data.date,data.region,data.rep,data.amount,data.target,diff,data.orders,data.clients,diff>=0?'فوق الهدف ✅':'دون الهدف ❌']]);
+  await sheetAppend('المالية',[[data.date,'إيراد مبيعات',data.amount+' ريال','مدين: الصندوق / دائن: المبيعات','محمد الشهري',data.region+' — '+data.rep]]);
+  await sheetAppend('سجل الأحداث',[[ts,'تقرير مبيعات',data.region+' — '+data.rep,'المبيعات + المالية','تسجيل + تحليل',diff>=0?'✅ فوق الهدف':'⚠️ دون الهدف']]);
+
+  ag('ceo','done','📊 '+data.region+': '+Number(data.amount).toLocaleString()+' ريال');
+  feed('خالد العمري','📊 '+data.region+': '+(diff>=0?'✅ فوق الهدف':'⚠️ دون الهدف')+' بـ '+Math.abs(diff).toLocaleString()+' ريال','');
+  feed('النظام','✅ تقرير المبيعات مكتمل في Sheets','s');
+  document.getElementById('sl-btn').disabled=false;
+}
+
+// ══════════════════════════════
+// SUBMIT SUPPLIER
+// ══════════════════════════════
+function submitSupplier(){
+  const data={
+    date:new Date().toLocaleDateString('ar-SA'),
+    name:document.getElementById('sp-name').value||'غير محدد',
+    country:document.getElementById('sp-country').value||'',
+    contact:document.getElementById('sp-contact').value||'',
+    value:document.getElementById('sp-value').value||'0',
+    qty:document.getElementById('sp-qty').value||'',
+    eta:document.getElementById('sp-eta').value||'',
+    details:document.getElementById('sp-details').value||''
+  };
+  showConfirm('تأكيد طلب المورد',
+    `🏭 المورد: ${data.name} (${data.country})\n👤 التواصل: ${data.contact}\n💰 القيمة: ${Number(data.value).toLocaleString()} ريال\n📦 الكمية: ${data.qty}\n📅 التسليم: ${data.eta}\n📋 التفاصيل: ${data.details}`,
+    ()=>runSupplier(data)
+  );
+}
+async function runSupplier(data){
+  document.getElementById('sp-btn').disabled=true;
+  feed('النظام','🚢 طلب مورد جديد: '+data.name,'s');
+  ag('imp','working','📧 يتواصل مع المورد...');
+  const impMsg=await claude('أنت سعود مدير استيراد. رد بجملة واحدة (أقل من 12 كلمة).','طلب توريد من '+data.name+': '+data.qty+' بقيمة '+data.value+' ريال');
+  ag('imp','done',impMsg.substring(0,55));feed('سعود الحربي',impMsg.substring(0,80),'');
+  await delay(400);
+  ag('cus','working','📄 يجهز المستندات...');
+  await delay(500);ag('cus','done','✅ مستندات جاهزة');feed('تركي المالكي','المستندات الجمركية جاهزة مسبقاً','');
+  ag('cfo','working','💰 يعتمد الميزانية...');
+  const finMsg=await claude('أنت محمد المدير المالي. رد بجملة واحدة (أقل من 12 كلمة).','اعتمد طلبية '+data.value+' ريال من '+data.name);
+  ag('cfo','done',finMsg.substring(0,55));feed('محمد الشهري',finMsg.substring(0,80),'');
+  await sheetAppend('الموردون',[[data.date,data.name,data.country,data.contact,data.value,data.qty,data.eta,data.details,'طلب مُرسل']]);
+  await sheetAppend('المالية',[[data.date,'التزام شراء',data.value+' ريال','مدين: المشتريات / دائن: الدائنون','محمد الشهري',data.name]]);
+  ag('ceo','done','✅ طلبية '+data.name+' معتمدة');
+  feed('خالد العمري','✅ طلبية '+Number(data.value).toLocaleString()+' ريال معتمدة — ETA: '+data.eta,'');
+  feed('النظام','✅ طلب المورد مكتمل','s');
+  document.getElementById('sp-btn').disabled=false;
+}
+
+// ══════════════════════════════
+// SUBMIT ISSUE
+// ══════════════════════════════
+function submitIssue(){
+  const data={
+    date:new Date().toLocaleDateString('ar-SA'),
+    type:document.getElementById('is-type').value,
+    level:document.getElementById('is-level').value,
+    product:document.getElementById('is-product').value||'غير محدد',
+    qty:document.getElementById('is-qty').value||'',
+    desc:document.getElementById('is-desc').value||''
+  };
+  showConfirm('تأكيد تصعيد المشكلة',
+    `⚠️ النوع: ${data.type}\n🔴 الخطورة: ${data.level}\n📦 المنتج: ${data.product}\n🔢 الكمية: ${data.qty}\n📝 الوصف: ${data.desc}`,
+    ()=>runIssue(data)
+  );
+}
+async function runIssue(data){
+  document.getElementById('is-btn').disabled=true;
+  feed('النظام','⚠️ مشكلة: '+data.type+' — '+data.level,'e');
+  ag('ceo','alert','⚠️ تنبيه: '+data.type);
+  feed('خالد العمري','⚠️ استلام تنبيه طارئ: '+data.type,'e');
+
+  if(data.type.includes('جودة')){
+    ag('qc','working','🔬 تحقيق فوري...');
+    const qcMsg=await claude('أنت غادة مديرة جودة. رد بجملة واحدة (أقل من 12 كلمة) عن قرار المشكلة.',data.type+': '+data.product+' — '+data.qty+'. '+data.desc);
+    ag('qc','done',qcMsg.substring(0,55));feed('غادة الفيفي',qcMsg.substring(0,80),'e');
+    ag('wh','alert','🚫 عزل المنتج المتأثر');feed('أحمد الرويلي','عزل '+data.qty+' من '+data.product,'w');
+    await delay(400);ag('wh','done','✅ المنتج معزول');
+    ag('imp','working','📧 إبلاغ المورد...');
+    const impMsg=await claude('أنت سعود مدير استيراد. رد بجملة واحدة (أقل من 12 كلمة).','أبلغ المورد بمشكلة جودة في '+data.product);
+    ag('imp','done',impMsg.substring(0,55));feed('سعود الحربي',impMsg.substring(0,80),'w');
+    await sheetAppend('الجودة',[[data.date,data.product,data.qty,'مشكلة','رفض — إجراء متخذ','غادة الفيفي',data.desc]]);
+  } else if(data.type.includes('مخزون')){
+    ag('stk','working','📉 تحقق المخزون...');await delay(400);ag('stk','done','⚠️ '+data.product+' أقل من الحد');
+    ag('imp','working','🚢 طلب طارئ...');
+    const impMsg=await claude('أنت سعود مدير استيراد. رد بجملة واحدة (أقل من 12 كلمة).','طلب طارئ لتعويض نقص '+data.product);
+    ag('imp','done',impMsg.substring(0,55));feed('سعود الحربي',impMsg.substring(0,80),'w');
+    ag('sal','alert','⚠️ تقنين مبيعات '+data.product);feed('لينا الزهراني','تعليمات: أولوية للعملاء الرئيسيين فقط','w');
+  } else {
+    ag('cfo','working','💰 تقييم التأثير المالي...');
+    const finMsg=await claude('أنت محمد المدير المالي. رد بجملة واحدة (أقل من 12 كلمة) عن التأثير المالي للمشكلة.',data.type+': '+data.desc);
+    ag('cfo','done',finMsg.substring(0,55));feed('محمد الشهري',finMsg.substring(0,80),'e');
+  }
+
+  await sheetAppend('المشاكل',[[data.date,data.type,data.level,data.product,data.qty,data.desc,'إجراء متخذ','قيد المتابعة ⚠️']]);
+  await sheetAppend('سجل الأحداث',[[new Date().toLocaleString('ar-SA'),data.type,data.product+' — '+data.qty,'متعدد الأقسام','تحقيق + إجراء','⚠️ قيد المتابعة']]);
+  ag('ceo','done','⚠️ متابعة '+data.type);
+  feed('النظام','⚠️ المشكلة مسجلة وتم اتخاذ إجراء فوري','w');
+  document.getElementById('is-btn').disabled=false;
+}
+
+// ══ INIT ══
+document.addEventListener('DOMContentLoaded',async()=>{
+  // set today's date
+  const today=new Date().toISOString().split('T')[0];
+  ['sh-date','sl-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today;});
+  // init default product
+  addProduct();
+  feed('النظام','🔌 جاري الاتصال بـ Google Sheets...','s');
+  await initSheets();
+});
+</script>
+</body>
+</html>
