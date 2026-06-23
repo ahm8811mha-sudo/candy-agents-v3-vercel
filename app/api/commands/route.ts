@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { logError } from "@/lib/logger";
-import { createTask } from "@/lib/repository";
+import { createDailyLog, createTask } from "@/lib/repository";
 
 function classifyDepartment(command: string) {
   if (/مبيعات|عميل|توزيع|تحصيل/.test(command)) return "sales";
@@ -12,6 +12,7 @@ function classifyDepartment(command: string) {
 function managerForDepartment(departmentId: string) {
   if (departmentId === "sales") return "e-sales-manager";
   if (departmentId === "factory") return "e-factory-manager";
+  if (departmentId === "finance") return "e-finance-manager";
   return "e-ceo";
 }
 
@@ -31,10 +32,17 @@ export async function POST(req: Request) {
       assignedTo,
       createdBy: "e-ceo",
       departmentId,
-      priority: "HIGH",
+      priority: body.priority || "HIGH",
     });
 
-    return NextResponse.json({ ok: true, task, routedTo: assignedTo, departmentId });
+    const report = await createDailyLog({
+      employeeId: assignedTo,
+      summary: `تقرير متابعة أولي: تم استلام الأمر التنفيذي وتحويله إلى مهمة موجهة. نص الأمر: ${command}`,
+      blockers: "بانتظار تنفيذ المدير المختص وتحديث التقدم.",
+      progressScore: 1,
+    });
+
+    return NextResponse.json({ ok: true, task, report, routedTo: assignedTo, departmentId });
   } catch (error) {
     await logError("CEO_COMMAND_FAILED", error);
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Failed to execute command" }, { status: 500 });
