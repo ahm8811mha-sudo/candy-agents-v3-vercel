@@ -1,131 +1,94 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { ArrowLeft, BadgeDollarSign, BrainCircuit, CheckCircle2, ClipboardList, LineChart, Loader2, Play, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { BriefcaseBusiness, CheckCircle2, ClipboardCheck, Loader2, Send, Sparkles, UserRoundCheck } from "lucide-react";
+
+type EmployeeResult = {
+  name: string;
+  role: string;
+  output: string;
+};
 
 type PipelineResult = {
   ok: true;
   runId: string;
-  marketResult: string;
-  opportunityResult: string;
-  decisionResult: string;
-  executionResult: string;
+  finalResult: string;
+  employees: EmployeeResult[];
   saved: boolean;
 };
 
-type AgentStage = {
-  key: keyof Pick<PipelineResult, "marketResult" | "opportunityResult" | "decisionResult" | "executionResult">;
-  title: string;
-  subtitle: string;
-  icon: typeof LineChart;
-};
-
-const stages: AgentStage[] = [
-  { key: "marketResult", title: "Market Analyst Agent", subtitle: "اتجاهات السوق، حجم الطلب، المنافسة، والفرص الأولية", icon: LineChart },
-  { key: "opportunityResult", title: "Opportunity Agent", subtitle: "اختيار أفضل 3 فرص مع الربحية والمخاطر", icon: Target },
-  { key: "decisionResult", title: "Decision Agent", subtitle: "قرار تنفيذي واحد مناسب للميزانية والهدف", icon: BrainCircuit },
-  { key: "executionResult", title: "Execution Agent", subtitle: "مهام، أدوار مستقلة، جدول زمني، ومؤشرات متابعة", icon: ClipboardList },
-];
-
-const examples = [
-  "منتجات العناية والهدايا في السعودية",
-  "خدمات B2B للشركات الصغيرة",
-  "تجارة إلكترونية للمنتجات المحلية",
+const aiEmployees = [
+  { name: "موظف تحليل السوق", role: "يفهم الطلب والسوق والقيود" },
+  { name: "موظف الفرص", role: "يحدد أفضل مسارات التنفيذ" },
+  { name: "موظف القرار", role: "يختار القرار الأنسب" },
+  { name: "موظف التنفيذ", role: "يحوّل القرار إلى مهام وتسليم" },
 ];
 
 export default function StrategyRunner() {
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [market, setMarket] = useState(examples[0]);
 
-  const activeSummary = useMemo(() => {
-    if (loading) return "النظام يعمل الآن على تمرير المخرجات بين الوكلاء الأربعة بالترتيب.";
-    if (result) return result.saved ? "تم حفظ التشغيل في سجل الوكلاء." : "اكتمل التشغيل، ولم يتم الحفظ لأن Supabase غير مضبوط.";
-    return "ابدأ بتحليل سوق وميزانية، وسيبني النظام قرارًا وخطة تنفيذ كاملة.";
-  }, [loading, result]);
-
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setLoading(true);
     setError("");
     setResult(null);
-    const f = new FormData(e.currentTarget);
+
+    const form = new FormData(event.currentTarget);
+    const request = String(form.get("request") || "").trim();
 
     try {
       const res = await fetch("/api/agents/pipeline", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          market: f.get("market"),
-          budget: f.get("budget"),
-          goal: f.get("goal"),
-          riskLevel: f.get("riskLevel"),
-          timeframe: f.get("timeframe"),
+          request,
+          market: form.get("market"),
+          budget: form.get("budget"),
+          timeframe: form.get("timeframe"),
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || "تعذر تشغيل الوكلاء.");
+      if (!res.ok || !data.ok) throw new Error(data.message || "تعذر تنفيذ الطلب.");
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تشغيل الوكلاء.");
+      setError(err instanceof Error ? err.message : "تعذر تنفيذ الطلب.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <section id="agent-pipeline" className="agent-workspace" aria-label="AI agent system">
-      <div className="agent-hero">
-        <div className="hero-copy">
-          <span className="eyebrow"><Sparkles size={16} /> AI System</span>
-          <h1>نظام وكلاء ذكاء اصطناعي يحلل السوق ويتخذ القرار ويحوّله إلى تنفيذ</h1>
+    <main className="company-app">
+      <section className="request-panel">
+        <div className="request-copy">
+          <span className="eyebrow"><Sparkles size={16} /> شركة موظفين ذكاء اصطناعي</span>
+          <h1>اكتب طلبك مرة واحدة، والموظفون ينفذونه ويرجعون لك التسليم كاملًا</h1>
           <p>
-            سلسلة عملية من أربعة وكلاء: محلل سوق، مكتشف فرص، مستشار قرار، ومدير تنفيذ. كل وكيل يستلم مخرجات الذي قبله حتى تصل إلى خطة قابلة للعمل.
+            هذا هو الإجراء الأساسي: تدخل طلبًا واضحًا، يعمل فريق AI خلف الكواليس، ثم تستلم نتيجة نهائية منظمة قابلة للتنفيذ.
           </p>
-          <div className="hero-actions">
-            <a className="primary-btn" href="#pipeline-form"><Play size={18} /> تشغيل النظام</a>
-            <a className="secondary-btn" href="#execution-output"><ClipboardList size={18} /> عرض النتائج</a>
-          </div>
         </div>
-        <div className="system-map" aria-label="Agent flow">
-          {stages.map((stage, index) => {
-            const Icon = stage.icon;
-            return (
-              <div className="system-node" key={stage.key}>
-                <div className="node-icon"><Icon size={22} /></div>
-                <div>
-                  <strong>{stage.title}</strong>
-                  <span>{stage.subtitle}</span>
-                </div>
-                {index < stages.length - 1 && <ArrowLeft className="node-arrow" size={18} />}
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
-      <div className="agent-grid">
-        <form id="pipeline-form" className="operator-panel" onSubmit={submit}>
-          <div className="panel-title">
-            <div>
-              <span className="eyebrow"><ShieldCheck size={15} /> غرفة القرار</span>
-              <h2>تشغيل كامل للوكلاء</h2>
-            </div>
-            <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>{loading ? "يعمل" : result ? "مكتمل" : "جاهز"}</span>
-          </div>
-
+        <form className="request-form" onSubmit={submit}>
           <label>
-            السوق المستهدف
-            <input className="input" name="market" value={market} onChange={(event) => setMarket(event.target.value)} required />
+            الطلب المطلوب تنفيذه
+            <textarea
+              name="request"
+              className="textarea command-box"
+              required
+              defaultValue="احصر الوضع الحالي للشركة من ناحية كل شيء، ثم قدم خطة عمل تنفيذية جاهزة تشمل المهام والأدوار والجدول الزمني والمخاطر."
+            />
           </label>
-          <div className="quick-picks">
-            {examples.map((item) => <button type="button" key={item} onClick={() => setMarket(item)}>{item}</button>)}
-          </div>
-          <div className="form-row">
+
+          <div className="compact-grid">
             <label>
-              الميزانية
-              <input className="input" name="budget" type="number" min="1000" defaultValue="50000" required />
+              مجال الشركة
+              <input className="input" name="market" defaultValue="شركة تجارة وخدمات في السعودية" />
+            </label>
+            <label>
+              الميزانية التقريبية
+              <input className="input" name="budget" type="number" min="0" defaultValue="50000" />
             </label>
             <label>
               مدة التنفيذ
@@ -136,70 +99,66 @@ export default function StrategyRunner() {
               </select>
             </label>
           </div>
-          <label>
-            الهدف التجاري
-            <textarea className="textarea" name="goal" defaultValue="العثور على فرصة مربحة قابلة للتنفيذ بميزانية محدودة مع خطة تشغيل واضحة." required />
-          </label>
-          <label>
-            مستوى المخاطرة
-            <select className="input" name="riskLevel" defaultValue="متوازن">
-              <option>محافظ</option>
-              <option>متوازن</option>
-              <option>هجومي</option>
-            </select>
-          </label>
-          <button className="primary-btn submit-btn" disabled={loading}>
-            {loading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-            {loading ? "جاري تشغيل الوكلاء" : "تشغيل السلسلة الكاملة"}
+
+          <button className="primary-btn big-action" disabled={loading}>
+            {loading ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
+            {loading ? "الموظفون ينفذون الطلب الآن" : "تنفيذ الطلب"}
           </button>
           {error && <p className="notice error">{error}</p>}
-          <p className="micro-copy">{activeSummary}</p>
         </form>
+      </section>
 
-        <div className="agent-status">
-          <div className="panel-title">
-            <div>
-              <span className="eyebrow"><BadgeDollarSign size={15} /> مخرجات الإدارة</span>
-              <h2>حالة السلسلة</h2>
-            </div>
+      <section className="employee-strip" aria-label="AI employees">
+        {aiEmployees.map((employee, index) => (
+          <article className={`employee-card ${loading ? "active" : result ? "done" : ""}`} key={employee.name}>
+            <span>{result ? <CheckCircle2 size={18} /> : index + 1}</span>
+            <strong>{employee.name}</strong>
+            <small>{employee.role}</small>
+          </article>
+        ))}
+      </section>
+
+      <section className="delivery-panel">
+        <div className="delivery-header">
+          <div>
+            <span className="eyebrow"><ClipboardCheck size={16} /> التسليم النهائي</span>
+            <h2>نتيجة الطلب</h2>
           </div>
-          <div className="stage-list">
-            {stages.map((stage, index) => {
-              const Icon = stage.icon;
-              const hasOutput = Boolean(result?.[stage.key]);
-              return (
-                <article className={`stage-card ${hasOutput ? "complete" : loading ? "pending" : ""}`} key={stage.key}>
-                  <div className="stage-number">{hasOutput ? <CheckCircle2 size={18} /> : index + 1}</div>
-                  <Icon size={20} />
-                  <div>
-                    <strong>{stage.title}</strong>
-                    <span>{stage.subtitle}</span>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
+            {loading ? "قيد التنفيذ" : result ? "تم التسليم" : "بانتظار الطلب"}
+          </span>
         </div>
-      </div>
 
-      <div id="execution-output" className="results-grid">
-        {stages.map((stage) => {
-          const Icon = stage.icon;
-          const output = result?.[stage.key];
-          return (
-            <article className="result-panel" key={stage.key}>
-              <div className="result-heading">
-                <Icon size={20} />
-                <div>
-                  <strong>{stage.title}</strong>
-                  <span>{stage.subtitle}</span>
-                </div>
-              </div>
-              <pre>{output || "ستظهر النتيجة هنا بعد تشغيل النظام."}</pre>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+        {!result && !loading && (
+          <div className="empty-state">
+            <BriefcaseBusiness size={34} />
+            <strong>لا توجد نتيجة بعد</strong>
+            <span>اكتب الطلب واضغط تنفيذ. لن تظهر لك سجلات داخلية أو خطوات مشتتة، فقط التسليم الكامل.</span>
+          </div>
+        )}
+
+        {loading && (
+          <div className="empty-state">
+            <Loader2 className="spin" size={34} />
+            <strong>جاري تنفيذ الطلب</strong>
+            <span>يتم توزيع الطلب على الموظفين، تلخيص القرار، وتجهيز خطة التسليم.</span>
+          </div>
+        )}
+
+        {result && (
+          <>
+            <pre className="final-result">{result.finalResult}</pre>
+            <div className="employee-results">
+              {result.employees.map((employee) => (
+                <details key={employee.name}>
+                  <summary><UserRoundCheck size={17} /> {employee.name} - {employee.role}</summary>
+                  <pre>{employee.output}</pre>
+                </details>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+    </main>
   );
 }

@@ -2,19 +2,22 @@ import { runAgent } from "./ai";
 import { getSupabaseAdmin } from "./supabase";
 
 export type AgentInput = {
+  request: string;
   market: string;
   budget: number;
-  goal: string;
   timeframe?: string;
-  riskLevel?: string;
+};
+
+export type EmployeeResult = {
+  name: string;
+  role: string;
+  output: string;
 };
 
 export type AgentPipelineResult = {
   runId: string;
-  marketResult: string;
-  opportunityResult: string;
-  decisionResult: string;
-  executionResult: string;
+  finalResult: string;
+  employees: EmployeeResult[];
   saved: boolean;
 };
 
@@ -40,121 +43,180 @@ export async function logAgentRun(agentName: string, input: unknown, output: str
     output,
     status: "COMPLETED",
   });
+
   return !agentRunsError;
 }
 
-export async function runMarketAnalyst(input: Pick<AgentInput, "market" | "budget" | "goal" | "timeframe" | "riskLevel">) {
-  return runAgent(
+async function marketEmployee(input: AgentInput) {
+  const output = await runAgent(
     `
-Analyze this market: ${input.market}
-Budget: ${input.budget}
-Goal: ${input.goal}
-Timeframe: ${input.timeframe || "not specified"}
-Risk level: ${input.riskLevel || "balanced"}
+طلب صاحب الشركة:
+${input.request}
 
-Give:
-- Trends
-- Demand level
-- Competition
-- Practical opportunities
-- Key assumptions
+مجال الشركة: ${input.market}
+الميزانية: ${input.budget}
+مدة التنفيذ: ${input.timeframe || "غير محددة"}
+
+نفذ دورك كموظف تحليل. المطلوب:
+- فهم الطلب
+- تلخيص الوضع المطلوب فحصه
+- تحديد البيانات أو الجوانب المهمة
+- إعطاء ملاحظات عملية قصيرة
 `,
     {
       agentName: "market_analyst_agent",
-      system: "You are the Market Analyst Agent in a business AI system. Be specific, commercial, and practical for a real company.",
+      system: "أنت موظف تحليل داخل شركة ذكاء اصطناعي. اكتب بالعربية وبشكل عملي ومختصر.",
     }
   );
+
+  return { name: "موظف تحليل السوق", role: "تشخيص وفهم الطلب", output };
 }
 
-export async function runOpportunityAgent(data: string) {
-  return runAgent(
+async function opportunityEmployee(input: AgentInput, analysis: string) {
+  const output = await runAgent(
     `
-Based on this data:
-${data}
+طلب صاحب الشركة:
+${input.request}
 
-Find the top 3 business opportunities.
-For each opportunity, explain:
-- Profitability logic
-- Startup cost
-- Risk
-- Speed to launch
-- Why it fits the market
+تحليل الموظف السابق:
+${analysis}
+
+نفذ دورك كموظف فرص. المطلوب:
+- استخرج أفضل 3 إجراءات أو فرص عملية
+- رتبها حسب الأثر وسهولة التنفيذ
+- اذكر المخاطر لكل فرصة
 `,
     {
       agentName: "opportunity_agent",
-      system: "You are the Opportunity Agent. Rank options with business discipline and reject vague ideas.",
+      system: "أنت موظف فرص داخل شركة ذكاء اصطناعي. لا تعط أفكارًا عامة؛ أعط خيارات قابلة للتنفيذ.",
     }
   );
+
+  return { name: "موظف الفرص", role: "اختيار أفضل الإجراءات", output };
 }
 
-export async function runDecisionAgent(opportunities: string, budget: number) {
-  return runAgent(
+async function decisionEmployee(input: AgentInput, opportunities: string) {
+  const output = await runAgent(
     `
-You are a CEO advisor.
+طلب صاحب الشركة:
+${input.request}
 
-Budget: ${budget}
-Opportunities:
+خيارات موظف الفرص:
 ${opportunities}
 
-Choose the best decision and explain why.
-Include:
-- Selected opportunity
-- Why now
-- Main risk
-- Budget allocation
-- Success metric
+الميزانية: ${input.budget}
+
+نفذ دورك كموظف قرار. المطلوب:
+- اختر القرار التنفيذي الأفضل الآن
+- اشرح سبب الاختيار
+- حدد ما لا يجب فعله الآن
+- حدد مؤشر نجاح واضح
 `,
     {
       agentName: "decision_agent",
-      system: "You are the Decision Agent. Make one clear executive decision and defend it.",
+      system: "أنت موظف قرار تنفيذي. اختر قرارًا واحدًا واضحًا وابتعد عن العموميات.",
     }
   );
+
+  return { name: "موظف القرار", role: "اعتماد المسار الأفضل", output };
 }
 
-export async function runExecutionAgent(decision: string) {
-  return runAgent(
+async function executionEmployee(input: AgentInput, decision: string) {
+  const output = await runAgent(
     `
-You are an execution manager.
+طلب صاحب الشركة:
+${input.request}
 
-Decision:
+قرار موظف القرار:
 ${decision}
 
-Break it into:
-- Tasks
-- Required roles or freelancers
-- Timeline
-- Budget checkpoints
-- Weekly KPIs
-- Approval points
+نفذ دورك كمدير تنفيذ. المطلوب:
+- خطة تنفيذ مباشرة
+- مهام محددة
+- المسؤول أو الدور المطلوب لكل مهمة
+- جدول زمني
+- مخرجات التسليم
+- نقاط مراجعة
 `,
     {
       agentName: "execution_agent",
-      system: "You are the Execution Agent. Convert decisions into tracked work that a company can run.",
+      system: "أنت مدير تنفيذ داخل شركة ذكاء اصطناعي. حوّل القرار إلى عمل واضح قابل للتسليم.",
     }
   );
+
+  return { name: "موظف التنفيذ", role: "تحويل القرار إلى تسليم", output };
+}
+
+function buildFinalDelivery(input: AgentInput, employees: EmployeeResult[]) {
+  const [analysis, opportunities, decision, execution] = employees;
+
+  return `
+تم تنفيذ الطلب
+
+الطلب:
+${input.request}
+
+ملخص الإدارة:
+تم توزيع الطلب على موظفي الذكاء الاصطناعي، وتم تحويله من طلب عام إلى قرار وخطة تنفيذ قابلة للمتابعة.
+
+1. التشخيص
+${analysis.output}
+
+2. أفضل الإجراءات المقترحة
+${opportunities.output}
+
+3. القرار المعتمد
+${decision.output}
+
+4. خطة التنفيذ
+${execution.output}
+
+ما يجب فعله الآن:
+- اعتماد الخطة أو تعديلها من صاحب القرار.
+- تحويل المهام إلى مسؤولين وتواريخ تسليم.
+- مراجعة التقدم أسبوعيًا.
+- إرجاع النتيجة النهائية في نفس شاشة الطلب بدون الاعتماد على سجلات داخلية مشتتة.
+`.trim();
 }
 
 export async function runFullAIFlow(input: AgentInput): Promise<AgentPipelineResult> {
-  const runId = newId("pipeline");
-  const marketResult = await runMarketAnalyst(input);
-  const opportunityResult = await runOpportunityAgent(marketResult);
-  const decisionResult = await runDecisionAgent(opportunityResult, input.budget);
-  const executionResult = await runExecutionAgent(decisionResult);
-  const final = [marketResult, opportunityResult, decisionResult, executionResult].join("\n\n---\n\n");
-  const saved = await logAgentRun("full_ai_pipeline", input, final, runId);
+  const runId = newId("request");
+  const analysis = await marketEmployee(input);
+  const opportunities = await opportunityEmployee(input, analysis.output);
+  const decision = await decisionEmployee(input, opportunities.output);
+  const execution = await executionEmployee(input, decision.output);
+  const employees = [analysis, opportunities, decision, execution];
+  const finalResult = buildFinalDelivery(input, employees);
+  const saved = await logAgentRun("company_ai_request", input, finalResult, runId);
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
     await supabase.from("inbox_items").insert({
       id: newId("inbox"),
-      request_text: input.goal,
-      result_title: "خطة تنفيذ من نظام الوكلاء",
-      result_content: final,
-      assigned_agent: "full_ai_pipeline",
+      request_text: input.request,
+      result_title: "تم تنفيذ الطلب",
+      result_content: finalResult,
+      assigned_agent: "company_ai_team",
       department_id: "exec",
       status: "DELIVERED",
     });
   }
 
-  return { runId, marketResult, opportunityResult, decisionResult, executionResult, saved };
+  return { runId, finalResult, employees, saved };
+}
+
+export async function runMarketAnalyst(input: Pick<AgentInput, "market" | "budget" | "request" | "timeframe">) {
+  return (await marketEmployee(input)).output;
+}
+
+export async function runOpportunityAgent(data: string) {
+  return runAgent(data, { agentName: "opportunity_agent" });
+}
+
+export async function runDecisionAgent(opportunities: string, budget: number) {
+  return runAgent(`الميزانية: ${budget}\n${opportunities}`, { agentName: "decision_agent" });
+}
+
+export async function runExecutionAgent(decision: string) {
+  return runAgent(decision, { agentName: "execution_agent" });
 }

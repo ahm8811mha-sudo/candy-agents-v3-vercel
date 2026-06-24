@@ -4,24 +4,16 @@ import { runFullAIFlow } from "@/lib/agents";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const market = String(body.market || "").trim();
-    const goal = String(body.goal || "").trim();
+    const request = String(body.request || body.goal || "").trim();
+    const market = String(body.market || "شركة عامة").trim();
     const budget = Number(body.budget || 0);
+    const timeframe = String(body.timeframe || "").trim();
 
-    if (!market) return NextResponse.json({ ok: false, message: "يرجى إدخال السوق المستهدف." }, { status: 400 });
-    if (!goal) return NextResponse.json({ ok: false, message: "يرجى إدخال الهدف التجاري." }, { status: 400 });
-    if (!Number.isFinite(budget) || budget <= 0) return NextResponse.json({ ok: false, message: "يرجى إدخال ميزانية صحيحة." }, { status: 400 });
+    if (!request) return NextResponse.json({ ok: false, message: "اكتب الطلب الذي تريد تنفيذه." }, { status: 400 });
 
-    const result = await runFullAIFlow({
-      market,
-      budget,
-      goal,
-      timeframe: String(body.timeframe || ""),
-      riskLevel: String(body.riskLevel || ""),
-    });
-
+    const result = await runFullAIFlow({ request, market, budget, timeframe });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "تعذر تشغيل سلسلة الوكلاء." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "تعذر تنفيذ الطلب." }, { status: 500 });
   }
 }
