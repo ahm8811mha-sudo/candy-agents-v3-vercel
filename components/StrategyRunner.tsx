@@ -1,31 +1,29 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, ClipboardCheck, Loader2, Send, Sparkles, UserRoundCheck } from "lucide-react";
+import { BarChart3, Boxes, Building2, Calculator, CheckCircle2, ClipboardList, Loader2, Megaphone, Send, ShieldCheck } from "lucide-react";
 
-type EmployeeResult = {
-  name: string;
-  role: string;
-  output: string;
-};
-
-type PipelineResult = {
+type CompanyResult = {
   ok: true;
-  runId: string;
-  finalResult: string;
-  employees: EmployeeResult[];
+  request: string;
+  accounting: string;
+  marketing: string;
+  operations: string;
+  supplyChain: string;
+  decision: string;
   saved: boolean;
 };
 
-const aiEmployees = [
-  { name: "موظف تحليل السوق", role: "يفهم الطلب والسوق والقيود" },
-  { name: "موظف الفرص", role: "يحدد أفضل مسارات التنفيذ" },
-  { name: "موظف القرار", role: "يختار القرار الأنسب" },
-  { name: "موظف التنفيذ", role: "يحوّل القرار إلى مهام وتسليم" },
-];
+const departments = [
+  { key: "accounting", title: "الإدارة المالية", role: "الميزانية، التكاليف، العائد، المخاطر", icon: Calculator },
+  { key: "marketing", title: "إدارة التسويق", role: "السوق، الجمهور، الاستراتيجية، مؤشرات الأداء", icon: Megaphone },
+  { key: "operations", title: "إدارة العمليات", role: "خطة التنفيذ، الموارد، الجدول، الخطوات", icon: ClipboardList },
+  { key: "supplyChain", title: "سلسلة الإمداد", role: "المخزون، الموردون، اللوجستيات، التحسين", icon: Boxes },
+  { key: "decision", title: "الرئيس التنفيذي", role: "تلخيص التقارير وإصدار القرار النهائي", icon: ShieldCheck },
+] as const;
 
 export default function StrategyRunner() {
-  const [result, setResult] = useState<PipelineResult | null>(null);
+  const [result, setResult] = useState<CompanyResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -39,21 +37,16 @@ export default function StrategyRunner() {
     const request = String(form.get("request") || "").trim();
 
     try {
-      const res = await fetch("/api/agents/pipeline", {
+      const res = await fetch("/api/company", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          request,
-          market: form.get("market"),
-          budget: form.get("budget"),
-          timeframe: form.get("timeframe"),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.message || "تعذر تنفيذ الطلب.");
+      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر تشغيل الشركة.");
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تنفيذ الطلب.");
+      setError(err instanceof Error ? err.message : "تعذر تشغيل الشركة.");
     } finally {
       setLoading(false);
     }
@@ -63,10 +56,10 @@ export default function StrategyRunner() {
     <main className="company-app">
       <section className="request-panel">
         <div className="request-copy">
-          <span className="eyebrow"><Sparkles size={16} /> شركة موظفين ذكاء اصطناعي</span>
-          <h1>اكتب طلبك مرة واحدة، والموظفون ينفذونه ويرجعون لك التسليم كاملًا</h1>
+          <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي متكاملة</span>
+          <h1>اكتب طلبك، وكل إدارة في الشركة تنفذه وتعيد تقريرها</h1>
           <p>
-            هذا هو الإجراء الأساسي: تدخل طلبًا واضحًا، يعمل فريق AI خلف الكواليس، ثم تستلم نتيجة نهائية منظمة قابلة للتنفيذ.
+            النظام يعمل مثل شركة حقيقية: المالية تضع الميزانية، التسويق يدرس السوق، العمليات تجهز التنفيذ، سلسلة الإمداد تضبط الموردين، والرئيس التنفيذي يصدر القرار.
           </p>
         </div>
 
@@ -77,52 +70,40 @@ export default function StrategyRunner() {
               name="request"
               className="textarea command-box"
               required
-              defaultValue="احصر الوضع الحالي للشركة من ناحية كل شيء، ثم قدم خطة عمل تنفيذية جاهزة تشمل المهام والأدوار والجدول الزمني والمخاطر."
+              defaultValue="أبغى ميزانية وخطة لإطلاق متجر إلكتروني بميزانية 100,000 ريال، مع تحليل مالي وتسويقي وتشغيلي ومخاطر وسلسلة إمداد وقرار نهائي."
             />
           </label>
 
-          <div className="compact-grid">
-            <label>
-              مجال الشركة
-              <input className="input" name="market" defaultValue="شركة تجارة وخدمات في السعودية" />
-            </label>
-            <label>
-              الميزانية التقريبية
-              <input className="input" name="budget" type="number" min="0" defaultValue="50000" />
-            </label>
-            <label>
-              مدة التنفيذ
-              <select className="input" name="timeframe" defaultValue="90 يومًا">
-                <option>30 يومًا</option>
-                <option>90 يومًا</option>
-                <option>6 أشهر</option>
-              </select>
-            </label>
-          </div>
-
           <button className="primary-btn big-action" disabled={loading}>
             {loading ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
-            {loading ? "الموظفون ينفذون الطلب الآن" : "تنفيذ الطلب"}
+            {loading ? "أقسام الشركة تعمل على الطلب" : "تشغيل الشركة"}
           </button>
+
           {error && <p className="notice error">{error}</p>}
         </form>
       </section>
 
-      <section className="employee-strip" aria-label="AI employees">
-        {aiEmployees.map((employee, index) => (
-          <article className={`employee-card ${loading ? "active" : result ? "done" : ""}`} key={employee.name}>
-            <span>{result ? <CheckCircle2 size={18} /> : index + 1}</span>
-            <strong>{employee.name}</strong>
-            <small>{employee.role}</small>
-          </article>
-        ))}
+      <section className="employee-strip" aria-label="أقسام الشركة">
+        {departments.map((department, index) => {
+          const Icon = department.icon;
+          const complete = Boolean(result?.[department.key]);
+
+          return (
+            <article className={`employee-card ${loading ? "active" : complete ? "done" : ""}`} key={department.key}>
+              <span>{complete ? <CheckCircle2 size={18} /> : <Icon size={18} />}</span>
+              <strong>{department.title}</strong>
+              <small>{department.role}</small>
+              <em>{loading ? "قيد العمل" : complete ? "اكتمل التقرير" : `مرحلة ${index + 1}`}</em>
+            </article>
+          );
+        })}
       </section>
 
       <section className="delivery-panel">
         <div className="delivery-header">
           <div>
-            <span className="eyebrow"><ClipboardCheck size={16} /> التسليم النهائي</span>
-            <h2>نتيجة الطلب</h2>
+            <span className="eyebrow"><BarChart3 size={16} /> التقارير والقرار</span>
+            <h2>نتيجة الشركة</h2>
           </div>
           <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
             {loading ? "قيد التنفيذ" : result ? "تم التسليم" : "بانتظار الطلب"}
@@ -131,34 +112,39 @@ export default function StrategyRunner() {
 
         {!result && !loading && (
           <div className="empty-state">
-            <BriefcaseBusiness size={34} />
-            <strong>لا توجد نتيجة بعد</strong>
-            <span>اكتب الطلب واضغط تنفيذ. لن تظهر لك سجلات داخلية أو خطوات مشتتة، فقط التسليم الكامل.</span>
+            <Building2 size={34} />
+            <strong>لا توجد تقارير بعد</strong>
+            <span>اكتب الطلب واضغط تشغيل الشركة. سيظهر تقرير كل إدارة والقرار النهائي هنا.</span>
           </div>
         )}
 
         {loading && (
           <div className="empty-state">
             <Loader2 className="spin" size={34} />
-            <strong>جاري تنفيذ الطلب</strong>
-            <span>يتم توزيع الطلب على الموظفين، تلخيص القرار، وتجهيز خطة التسليم.</span>
+            <strong>الشركة تعمل الآن</strong>
+            <span>يتم توزيع الطلب على الإدارات ثم جمع التقارير في قرار تنفيذي واحد.</span>
           </div>
         )}
 
         {result && (
-          <>
-            <pre className="final-result">{result.finalResult}</pre>
-            <div className="employee-results">
-              {result.employees.map((employee) => (
-                <details key={employee.name}>
-                  <summary><UserRoundCheck size={17} /> {employee.name} - {employee.role}</summary>
-                  <pre>{employee.output}</pre>
-                </details>
-              ))}
-            </div>
-          </>
+          <div className="report-stack">
+            <Report title="قرار الرئيس التنفيذي" content={result.decision} featured />
+            <Report title="التقرير المالي" content={result.accounting} />
+            <Report title="تقرير التسويق" content={result.marketing} />
+            <Report title="تقرير العمليات" content={result.operations} />
+            <Report title="تقرير سلسلة الإمداد" content={result.supplyChain} />
+          </div>
         )}
       </section>
     </main>
+  );
+}
+
+function Report({ title, content, featured = false }: { title: string; content: string; featured?: boolean }) {
+  return (
+    <article className={`report-card ${featured ? "featured" : ""}`}>
+      <h3>{title}</h3>
+      <pre>{content}</pre>
+    </article>
   );
 }

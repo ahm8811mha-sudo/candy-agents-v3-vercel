@@ -142,3 +142,26 @@ create policy "app write agent runs" on agent_runs for insert to anon, authentic
 
 grant select, insert on ai_logs to anon, authenticated, service_role;
 grant select, insert on agent_runs to anon, authenticated, service_role;
+
+create extension if not exists pgcrypto;
+
+create table if not exists company_logs (
+  id uuid primary key default gen_random_uuid(),
+  request text not null,
+  accounting text,
+  marketing text,
+  operations text,
+  supply text,
+  final text,
+  created_at timestamptz default now()
+);
+
+alter table company_logs enable row level security;
+
+drop policy if exists "app read company logs" on company_logs;
+drop policy if exists "app write company logs" on company_logs;
+
+create policy "app read company logs" on company_logs for select to anon, authenticated using (true);
+create policy "app write company logs" on company_logs for insert to anon, authenticated with check (true);
+
+grant select, insert on company_logs to anon, authenticated, service_role;

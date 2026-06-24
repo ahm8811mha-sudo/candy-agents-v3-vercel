@@ -156,6 +156,12 @@ label {
 }
 
 .employee-card small { color: var(--muted); line-height: 1.6; }
+.employee-card em {
+  color: #7cc7ff;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 900;
+}
 .employee-card.active { border-color: rgba(244, 183, 64, 0.45); }
 .employee-card.done { border-color: rgba(56, 211, 159, 0.4); }
 
@@ -244,6 +250,39 @@ label {
   border-top: 1px solid var(--line);
   border-radius: 0;
   background: #111925;
+}
+
+.report-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.report-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f1520;
+  overflow: hidden;
+}
+
+.report-card.featured {
+  border-color: rgba(56, 211, 159, 0.38);
+  background: rgba(56, 211, 159, 0.06);
+}
+
+.report-card h3 {
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1rem;
+}
+
+.report-card pre {
+  margin: 0;
+  padding: 16px;
+  white-space: pre-wrap;
+  line-height: 1.9;
+  color: #e8eef7;
+  font-family: "Cairo", system-ui, sans-serif;
 }
 
 @media (max-width: 900px) {

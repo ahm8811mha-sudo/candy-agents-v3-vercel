@@ -23,6 +23,18 @@ struct AgentPipelineResponse: Codable {
     let message: String?
 }
 
+struct CompanyResponse: Codable {
+    let ok: Bool
+    let request: String?
+    let accounting: String?
+    let marketing: String?
+    let operations: String?
+    let supplyChain: String?
+    let decision: String?
+    let saved: Bool?
+    let error: String?
+}
+
 enum RequestState: Equatable {
     case idle
     case running

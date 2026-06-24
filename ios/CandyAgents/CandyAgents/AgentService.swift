@@ -12,39 +12,43 @@ struct AgentService {
             throw URLError(.badURL)
         }
 
-        let endpoint = root.appending(path: "api/agents/pipeline")
+        let endpoint = root.appending(path: "api/company")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(payload)
+        request.httpBody = try JSONEncoder().encode(["request": payload.request])
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let decoded = try? JSONDecoder().decode(AgentPipelineResponse.self, from: data)
-            throw ServiceError.server(decoded?.message ?? "تعذر تنفيذ الطلب من الخادم.")
+            let decoded = try? JSONDecoder().decode(CompanyResponse.self, from: data)
+            throw ServiceError.server(decoded?.error ?? "تعذر تنفيذ الطلب من الخادم.")
         }
 
-        return try JSONDecoder().decode(AgentPipelineResponse.self, from: data)
+        let company = try JSONDecoder().decode(CompanyResponse.self, from: data)
+        return mapCompanyResponse(company)
     }
 
     private func demoResponse(for payload: AgentRequest) -> AgentPipelineResponse {
         let employees = [
-            EmployeeResult(name: "موظف التحليل", role: "فهم الطلب", output: "تم تحليل الطلب وتحديد أن المطلوب هو تحويله إلى خطة تنفيذية واضحة قابلة للمتابعة."),
-            EmployeeResult(name: "موظف الفرص", role: "ترتيب الإجراءات", output: "أفضل إجراء الآن هو ضبط التشغيل الداخلي ثم ربطه بمهام ومسؤوليات ومؤشرات أسبوعية."),
-            EmployeeResult(name: "موظف القرار", role: "اعتماد المسار", output: "القرار المعتمد: تنفيذ خطة 90 يومًا تبدأ بتشخيص الشركة ثم توزيع المهام ومتابعة النتائج."),
-            EmployeeResult(name: "موظف التنفيذ", role: "تسليم الخطة", output: "المهام: جمع البيانات، تحديد الأولويات، توزيع المسؤوليات، مراجعة أسبوعية، وتسليم تقرير تنفيذي.")
+            EmployeeResult(name: "الإدارة المالية", role: "الميزانية والعائد", output: "تقسيم الميزانية على الإطلاق، التسويق، التشغيل، الاحتياطي، وقياس العائد."),
+            EmployeeResult(name: "إدارة التسويق", role: "السوق والنمو", output: "تحديد الجمهور المستهدف، عرض الإطلاق، قنوات التسويق، ومؤشرات الأداء."),
+            EmployeeResult(name: "إدارة العمليات", role: "التنفيذ والموارد", output: "تحويل الطلب إلى مهام أسبوعية، مسؤولين، مخرجات، ومراجعات."),
+            EmployeeResult(name: "سلسلة الإمداد", role: "المخزون والموردون", output: "اختيار الموردين، ضبط المخزون، اللوجستيات، ومخاطر التوريد."),
+            EmployeeResult(name: "الرئيس التنفيذي", role: "القرار النهائي", output: "البدء بإطلاق تجريبي مضبوط قبل التوسع الكامل.")
         ]
 
         let final = """
-        تم تنفيذ الطلب
+        تقرير الشركة التنفيذي
 
         الطلب:
         \(payload.request)
 
         النتيجة:
-        - تم فهم الطلب وتحويله إلى مسار عمل.
-        - تم تحديد الأولوية: بناء خطة تشغيل قابلة للتنفيذ.
-        - تم تحديد الموظفين المطلوبين: تحليل، فرص، قرار، تنفيذ.
+        - الإدارة المالية جهزت تصور الميزانية والمخاطر.
+        - التسويق حدد الجمهور والقنوات ومؤشرات الأداء.
+        - العمليات حولت الطلب إلى خطة تنفيذ.
+        - سلسلة الإمداد وضعت تصور الموردين والمخزون.
+        - الرئيس التنفيذي اعتمد إطلاقًا تجريبيًا مضبوطًا.
         - مدة التنفيذ المقترحة: \(payload.timeframe).
         - الميزانية التقريبية: \(Int(payload.budget)).
 
@@ -53,6 +57,40 @@ struct AgentService {
         """
 
         return AgentPipelineResponse(ok: true, runId: "demo", finalResult: final, employees: employees, saved: false, message: nil)
+    }
+
+    private func mapCompanyResponse(_ response: CompanyResponse) -> AgentPipelineResponse {
+        let employees = [
+            EmployeeResult(name: "الإدارة المالية", role: "المحاسبة والميزانية", output: response.accounting ?? ""),
+            EmployeeResult(name: "إدارة التسويق", role: "السوق والنمو", output: response.marketing ?? ""),
+            EmployeeResult(name: "إدارة العمليات", role: "التنفيذ والموارد", output: response.operations ?? ""),
+            EmployeeResult(name: "سلسلة الإمداد", role: "المخزون والموردون", output: response.supplyChain ?? ""),
+            EmployeeResult(name: "الرئيس التنفيذي", role: "القرار النهائي", output: response.decision ?? "")
+        ]
+
+        let final = """
+        تقرير الشركة التنفيذي
+
+        الطلب:
+        \(response.request ?? "")
+
+        قرار الرئيس التنفيذي:
+        \(response.decision ?? "")
+
+        التقرير المالي:
+        \(response.accounting ?? "")
+
+        تقرير التسويق:
+        \(response.marketing ?? "")
+
+        تقرير العمليات:
+        \(response.operations ?? "")
+
+        تقرير سلسلة الإمداد:
+        \(response.supplyChain ?? "")
+        """
+
+        return AgentPipelineResponse(ok: response.ok, runId: "company", finalResult: final, employees: employees, saved: response.saved, message: response.error)
     }
 }
 

@@ -6,18 +6,29 @@ AI Business Operating System built with Next.js, OpenAI, and optional Supabase l
 
 ```txt
 AI System
-├── Market Analyst Agent
-├── Opportunity Agent
-├── Decision Agent
-└── Execution Agent
+├── Financial Department
+├── Marketing Department
+├── Operations Department
+├── Supply Chain Department
+└── CEO Advisor
 ```
 
-The main screen runs the full chain:
+The main screen now runs the company flow:
 
-1. Market Analyst Agent analyzes trends, demand, competition, and initial opportunities.
-2. Opportunity Agent ranks the top 3 opportunities by profitability, cost, risk, and speed.
-3. Decision Agent chooses one executive decision for the provided budget.
-4. Execution Agent turns the decision into tasks, roles, timeline, checkpoints, and KPIs.
+1. User submits one company request.
+2. Accounting returns budget, cost allocation, ROI, and financial risk.
+3. Marketing returns market analysis, target audience, strategy, and KPIs.
+4. Operations returns execution plan, resources, timeline, and steps.
+5. Supply Chain returns inventory, suppliers, logistics, and optimization.
+6. CEO Advisor reviews all reports and returns the final decision.
+
+Core files:
+
+```txt
+lib/aiCompany.ts
+app/api/company/route.ts
+database/schema.sql
+```
 
 ## Environment
 
@@ -62,6 +73,13 @@ Health endpoint:
 
 ```txt
 /api/health
+```
+
+Company API:
+
+```txt
+POST /api/company
+{ "request": "ابغى ميزانية لإطلاق متجر الكتروني بميزانية 100,000 ريال" }
 ```
 
 ## iOS App
