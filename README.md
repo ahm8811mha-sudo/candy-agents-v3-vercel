@@ -63,3 +63,19 @@ Health endpoint:
 ```txt
 /api/health
 ```
+
+## iOS App
+
+An initial native SwiftUI app is included at:
+
+```txt
+ios/CandyAgents/CandyAgents.xcodeproj
+```
+
+The iOS app follows the intended product flow:
+
+1. The business owner writes one request.
+2. AI employees execute the request through `/api/agents/pipeline`.
+3. The app returns one final delivery with optional employee details.
+
+Open the project in Xcode, run the `CandyAgents` scheme, then paste the Vercel deployment root URL in the service URL field. If the field is empty, the app uses a local demo response so the experience can be tested before API setup.
