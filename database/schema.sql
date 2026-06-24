@@ -165,3 +165,21 @@ create policy "app read company logs" on company_logs for select to anon, authen
 create policy "app write company logs" on company_logs for insert to anon, authenticated with check (true);
 
 grant select, insert on company_logs to anon, authenticated, service_role;
+
+create table if not exists transactions (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('income', 'expense')),
+  amount numeric not null check (amount > 0),
+  description text not null,
+  created_at timestamptz default now()
+);
+
+alter table transactions enable row level security;
+
+drop policy if exists "app read transactions" on transactions;
+drop policy if exists "app write transactions" on transactions;
+
+create policy "app read transactions" on transactions for select to anon, authenticated using (true);
+create policy "app write transactions" on transactions for insert to anon, authenticated with check (type in ('income', 'expense') and amount > 0 and length(description) > 0);
+
+grant select, insert on transactions to anon, authenticated, service_role;

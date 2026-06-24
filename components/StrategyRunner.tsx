@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { BarChart3, Boxes, Building2, Calculator, CheckCircle2, ClipboardList, Loader2, Megaphone, Send, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 type CompanyResult = {
   ok: true;
@@ -87,14 +88,23 @@ export default function StrategyRunner() {
         {departments.map((department, index) => {
           const Icon = department.icon;
           const complete = Boolean(result?.[department.key]);
+          const href = department.key === "accounting"
+            ? "/departments/finance"
+            : department.key === "marketing"
+              ? "/departments/marketing"
+              : department.key === "operations"
+                ? "/departments/operations"
+                : department.key === "supplyChain"
+                  ? "/departments/supply-chain"
+                  : "/departments/executive";
 
           return (
-            <article className={`employee-card ${loading ? "active" : complete ? "done" : ""}`} key={department.key}>
+            <Link className={`employee-card department-link ${loading ? "active" : complete ? "done" : ""}`} href={href} key={department.key}>
               <span>{complete ? <CheckCircle2 size={18} /> : <Icon size={18} />}</span>
               <strong>{department.title}</strong>
               <small>{department.role}</small>
               <em>{loading ? "قيد العمل" : complete ? "اكتمل التقرير" : `مرحلة ${index + 1}`}</em>
-            </article>
+            </Link>
           );
         })}
       </section>
