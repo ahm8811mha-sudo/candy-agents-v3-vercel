@@ -1,34 +1,163 @@
 import type { ReactNode } from "react";
 import type { ActivityLog, Approval, DailyLog, Department, Employee, Notification, Task } from "@/lib/types";
-import { Activity, Bell, ClipboardList, FileCheck2, ListChecks, Users } from "lucide-react";
+import { Activity, Bell, Building2, CheckCircle2, ClipboardList, FileCheck2, Gauge, Users } from "lucide-react";
 import ActionForms from "./ActionForms";
 import TaskActions from "./TaskActions";
 
-type Props = { employees: Employee[]; departments: Department[]; tasks: Task[]; dailyLogs: DailyLog[]; approvals: Approval[]; notifications: Notification[]; activityLogs: ActivityLog[] };
-const statusClass = (v: string) => v === "DONE" || v === "APPROVED" || v === "ACTIVE" ? "green" : v === "PENDING" || v === "TODO" || v === "SUBMITTED" ? "amber" : v === "BLOCKED" ? "red" : "blue";
-function Kpi({ title, value, icon }: { title: string; value: number; icon: ReactNode }) { return <div className="card kpi"><div><div className="label">{title}</div><div className="value">{value}</div></div><span className="badge blue">{icon}</span></div>; }
+type Props = {
+  employees: Employee[];
+  departments: Department[];
+  tasks: Task[];
+  dailyLogs: DailyLog[];
+  approvals: Approval[];
+  notifications: Notification[];
+  activityLogs: ActivityLog[];
+};
+
+const statusClass = (value: string) => {
+  if (["DONE", "APPROVED", "ACTIVE"].includes(value)) return "green";
+  if (["PENDING", "TODO", "SUBMITTED", "REVIEW"].includes(value)) return "amber";
+  if (["BLOCKED", "REJECTED"].includes(value)) return "red";
+  return "blue";
+};
+
+function Kpi({ title, value, hint, icon }: { title: string; value: number | string; hint: string; icon: ReactNode }) {
+  return (
+    <article className="metric-card">
+      <div className="metric-icon">{icon}</div>
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <small>{hint}</small>
+    </article>
+  );
+}
 
 export default function CompanyOS(props: Props) {
-  const employeeName = (id: string) => props.employees.find((e) => e.id === id)?.fullName ?? "غير معروف";
-  const departmentName = (id: string) => props.departments.find((d) => d.id === id)?.name ?? "غير محدد";
-  const openTasks = props.tasks.filter((t) => t.status !== "DONE").length;
-  const pendingApprovals = props.approvals.filter((a) => a.status === "PENDING").length;
-  const overdue = props.tasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "DONE").length;
-  const inboxCount = props.notifications.length + props.activityLogs.length;
+  const employeeName = (id: string) => props.employees.find((employee) => employee.id === id)?.fullName ?? "غير محدد";
+  const departmentName = (id: string) => props.departments.find((department) => department.id === id)?.name ?? "غير محدد";
+  const openTasks = props.tasks.filter((task) => task.status !== "DONE").length;
+  const pendingApprovals = props.approvals.filter((approval) => approval.status === "PENDING").length;
+  const overdue = props.tasks.filter((task) => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "DONE").length;
+  const avgProgress = props.dailyLogs.length
+    ? Math.round(props.dailyLogs.reduce((total, log) => total + log.progressScore, 0) / props.dailyLogs.length * 10)
+    : 0;
 
-  return <div className="shell">
-    <aside className="sidebar"><div className="brand"><div className="logo">GS</div><div><h1>Golden Star OS</h1><p>نظام إدارة الشركة الداخلي</p></div></div><nav className="nav"><a className="active" href="#dashboard">لوحة القيادة</a><a href="#actions">الطلب الموحد</a><a href="#org">الهيكل الإداري</a><a href="#finance">الإدارة المالية</a><a href="#employees">الموظفون</a><a href="#tasks">المهام</a><a href="#logs">التقارير</a><a href="#approvals">الموافقات</a><a href="#notifications">الوارد والتنبيهات</a></nav></aside>
-    <main className="main">
-      <div id="dashboard" className="topbar"><div><h2>نظام إدارة تشغيلي للشركة</h2><p>حوكمة فعلية: منع الموافقة الذاتية، تواريخ استحقاق، تقدم، إغلاق وأرشفة.</p></div><span className="badge blue">Governance Enabled</span></div>
-      <section className="grid kpis"><Kpi title="الموظفون/الوكلاء" value={props.employees.length} icon={<Users size={18} />} /><Kpi title="المهام المفتوحة" value={openTasks} icon={<ClipboardList size={18} />} /><Kpi title="المهام المتأخرة" value={overdue} icon={<Activity size={18} />} /><Kpi title="موافقات معلقة" value={pendingApprovals} icon={<FileCheck2 size={18} />} /></section>
-      <ActionForms employees={props.employees} departments={props.departments} />
-      <section id="org" className="card" style={{ marginTop: 16 }}><h3>الهيكل الإداري والتسلسل الهرمي</h3><div className="grid three"><div className="feed-item"><strong>1. المدير التنفيذي</strong><span>لا يراجع طلباته بنفسه؛ الطلبات الحساسة تمر على مدير مختلف.</span></div><div className="feed-item"><strong>2. مدراء الأقسام / وكلاء AI</strong><span>تشغيل، مبيعات، مالية، إدارة، جودة، مشتريات.</span></div><div className="feed-item"><strong>3. الإغلاق والأرشفة</strong><span>كل مهمة لها تقدم وتاريخ استحقاق ولا تغلق إلا كمنجزة.</span></div></div></section>
-      <section id="finance" className="card" style={{ marginTop: 16 }}><h3>الإدارة المالية والرقابة</h3><div className="grid three"><div className="feed-item"><strong>منع تضارب المصالح</strong><span>لا موافقة ذاتية، ولا شراء بدون اعتماد مالي.</span></div><div className="feed-item"><strong>حد العاجل</strong><span>٣ طلبات عاجلة فقط يوميًا لكل مستخدم.</span></div><div className="feed-item"><strong>مؤشرات فعلية</strong><span>الأرقام من قاعدة البيانات وليست ثابتة.</span></div></div></section>
-      <section id="employees" className="card" style={{ marginTop: 16 }}><h3><Users size={16} /> الموظفون والوكلاء</h3><table className="table"><thead><tr><th>الاسم</th><th>الدور</th><th>القسم</th><th>المسمى</th></tr></thead><tbody>{props.employees.map((e) => <tr key={e.id}><td>{e.fullName}</td><td>{e.role}</td><td>{departmentName(e.departmentId)}</td><td>{e.jobTitle}</td></tr>)}</tbody></table></section>
-      <section id="tasks" className="card" style={{ marginTop: 16 }}><h3><ClipboardList size={16} /> المهام</h3><div className="feed">{props.tasks.map((t: any) => <div className="feed-item" key={t.id}><strong>{t.title}</strong><span>{employeeName(t.assignedTo)} · {departmentName(t.departmentId)} · {t.priority}</span><br/><span className={`badge ${statusClass(t.status)}`}>{t.status}</span> <span className="badge blue">التقدم {t.progressPercent ?? 0}%</span> <span className="badge">الاستحقاق {t.dueDate ? new Date(t.dueDate).toLocaleDateString("ar-SA") : "غير محدد"}</span><TaskActions id={t.id} /></div>)}</div></section>
-      <section id="logs" className="card" style={{ marginTop: 16 }}><h3><ListChecks size={16} /> التقارير اليومية المنظمة</h3><div className="feed">{props.dailyLogs.map((l: any) => <div className="feed-item" key={l.id}><strong>{employeeName(l.employeeId)} · {l.progressScore}/10</strong><span>{l.summary}</span>{l.nextStep && <span> · الخطوة التالية: {l.nextStep}</span>}<br/><span className={`badge ${statusClass(l.status)}`}>{l.status}</span></div>)}</div></section>
-      <section id="approvals" className="card" style={{ marginTop: 16 }}><h3><FileCheck2 size={16} /> الموافقات</h3><div className="feed">{props.approvals.map((a) => <div className="feed-item" key={a.id}><strong>{a.entityType}</strong><span>{employeeName(a.requestedBy)} → {employeeName(a.approverId)}</span><br/><span className={`badge ${statusClass(a.status)}`}>{a.status}</span></div>)}</div></section>
-      <section id="notifications" className="card" style={{ marginTop: 16 }}><h3><Bell size={16} /> الوارد والتنبيهات</h3><div className="feed">{props.notifications.map((n) => <div className="feed-item" key={n.id}><strong>{n.title}</strong><span>{n.message}</span><br/><span className="badge blue">{n.type}</span></div>)}</div></section>
-    </main>
-  </div>;
+  return (
+    <section className="company-shell" id="dashboard">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="logo">AI</div>
+          <div>
+            <h1>Candy Agents</h1>
+            <p>نظام تشغيل شركة مدعوم بوكلاء ذكاء اصطناعي</p>
+          </div>
+        </div>
+        <nav className="nav" aria-label="لوحة التحكم">
+          <a className="active" href="#agent-pipeline">نظام الوكلاء</a>
+          <a href="#actions">الطلبات والتقارير</a>
+          <a href="#tasks">المهام</a>
+          <a href="#approvals">الموافقات</a>
+          <a href="#activity">النشاط</a>
+        </nav>
+      </aside>
+
+      <main className="main">
+        <div className="topbar">
+          <div>
+            <span className="eyebrow"><Building2 size={16} /> Company Command Center</span>
+            <h2>لوحة إدارة فعلية تربط القرار بالتنفيذ</h2>
+            <p>المنتج لا يكتفي بإجابة نصية: يحلل السوق، يختار فرصة، يصدر قرارًا، ثم يحوّله إلى مهام وموافقات ومتابعة.</p>
+          </div>
+          <span className="status-pill done"><CheckCircle2 size={16} /> جاهز للتشغيل</span>
+        </div>
+
+        <section className="metrics-grid" aria-label="مؤشرات الشركة">
+          <Kpi title="الوكلاء والموظفون" value={props.employees.length} hint="أدوار تنفيذ ومراجعة" icon={<Users size={20} />} />
+          <Kpi title="المهام المفتوحة" value={openTasks} hint="مرتبطة بمسؤول وتاريخ" icon={<ClipboardList size={20} />} />
+          <Kpi title="موافقات معلقة" value={pendingApprovals} hint="تمنع الموافقة الذاتية" icon={<FileCheck2 size={20} />} />
+          <Kpi title="مؤشر الإنجاز" value={`${avgProgress}%`} hint={overdue ? `${overdue} مهمة متأخرة` : "لا توجد مهام متأخرة"} icon={<Gauge size={20} />} />
+        </section>
+
+        <ActionForms employees={props.employees} departments={props.departments} />
+
+        <section className="ops-grid">
+          <article id="tasks" className="data-panel wide">
+            <div className="section-heading">
+              <div>
+                <h3>المهام التنفيذية</h3>
+                <p>كل مهمة لها مالك، أولوية، حالة، ونسبة تقدم.</p>
+              </div>
+            </div>
+            <div className="task-board">
+              {props.tasks.map((task) => (
+                <div className="task-card" key={task.id}>
+                  <div className="task-header">
+                    <strong>{task.title}</strong>
+                    <span className={`badge ${statusClass(task.status)}`}>{task.status}</span>
+                  </div>
+                  <p>{task.description}</p>
+                  <div className="task-meta">
+                    <span>{employeeName(task.assignedTo)}</span>
+                    <span>{departmentName(task.departmentId)}</span>
+                    <span>{task.priority}</span>
+                  </div>
+                  <div className="progress-track"><span style={{ width: `${task.progressPercent ?? 0}%` }} /></div>
+                  <div className="task-actions">
+                    <small>الاستحقاق: {task.dueDate ? new Date(task.dueDate).toLocaleDateString("ar-SA") : "غير محدد"}</small>
+                    <TaskActions id={task.id} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article id="approvals" className="data-panel">
+            <h3><FileCheck2 size={18} /> الموافقات</h3>
+            <div className="feed">
+              {props.approvals.map((approval) => (
+                <div className="feed-item" key={approval.id}>
+                  <strong>{approval.entityType}</strong>
+                  <span>{employeeName(approval.requestedBy)} إلى {employeeName(approval.approverId)}</span>
+                  <span className={`badge ${statusClass(approval.status)}`}>{approval.status}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="data-panel">
+            <h3><Bell size={18} /> الوارد</h3>
+            <div className="feed">
+              {props.notifications.map((notification) => (
+                <div className="feed-item" key={notification.id}>
+                  <strong>{notification.title}</strong>
+                  <span>{notification.message}</span>
+                  <span className="badge blue">{notification.type}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article id="activity" className="data-panel wide">
+            <h3><Activity size={18} /> سجل النشاط والتقارير اليومية</h3>
+            <div className="activity-grid">
+              {props.dailyLogs.map((log) => (
+                <div className="feed-item" key={log.id}>
+                  <strong>{employeeName(log.employeeId)} · {log.progressScore}/10</strong>
+                  <span>{log.summary}</span>
+                  <span className={`badge ${statusClass(log.status)}`}>{log.status}</span>
+                </div>
+              ))}
+              {props.activityLogs.slice(0, 4).map((item) => (
+                <div className="feed-item" key={item.id}>
+                  <strong>{item.action}</strong>
+                  <span>{item.entityType ?? "system"} · {item.entityId ?? "general"}</span>
+                  <span>{new Date(item.createdAt).toLocaleDateString("ar-SA")}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      </main>
+    </section>
+  );
 }

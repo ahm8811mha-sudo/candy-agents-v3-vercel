@@ -18,7 +18,7 @@ export async function listEmployees() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return employees;
   const { data, error } = await supabase.from("employees").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) return employees;
   return data.length ? data.map(mapEmployee) : employees;
 }
 
@@ -26,7 +26,7 @@ export async function listDepartments() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return departments;
   const { data, error } = await supabase.from("departments").select("*").order("name");
-  if (error) throw error;
+  if (error) return departments;
   return data.length ? data.map((r: any) => ({ id: r.id, name: r.name, description: r.description, managerId: r.manager_id })) : departments;
 }
 
@@ -34,7 +34,7 @@ export async function listTasks() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return tasks;
   const { data, error } = await supabase.from("tasks").select("*").is("archived_at", null).order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) return tasks;
   return data.length ? data.map(mapTask) : tasks;
 }
 
@@ -70,7 +70,7 @@ export async function listDailyLogs() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return dailyLogs;
   const { data, error } = await supabase.from("daily_logs").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) return dailyLogs;
   return data.length ? data.map(mapLog) : dailyLogs;
 }
 
@@ -107,7 +107,7 @@ export async function listApprovals() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return approvals;
   const { data, error } = await supabase.from("approvals").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) return approvals;
   return data.length ? data.map((r: any) => ({ id: r.id, entityType: r.entity_type, entityId: r.entity_id, requestedBy: r.requested_by, approverId: r.approver_id, status: r.status, notes: r.notes, createdAt: r.created_at })) : approvals;
 }
 
@@ -115,7 +115,7 @@ export async function listNotifications() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return notifications;
   const { data, error } = await supabase.from("notifications").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) return notifications;
   return data.length ? data.map((r: any) => ({ id: r.id, employeeId: r.employee_id, title: r.title, message: r.message, type: r.type, readAt: r.read_at, createdAt: r.created_at })) : notifications;
 }
 
@@ -123,6 +123,6 @@ export async function listActivity() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return activityLogs;
   const { data, error } = await supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(50);
-  if (error) throw error;
+  if (error) return activityLogs;
   return data.length ? data.map((r: any) => ({ id: r.id, actorId: r.actor_id, action: r.action, entityType: r.entity_type, entityId: r.entity_id, metadata: r.metadata, createdAt: r.created_at })) : activityLogs;
 }

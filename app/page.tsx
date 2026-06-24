@@ -15,6 +15,9 @@ export default async function HomePage() {
 
   return (
     <>
+      <main className="main standalone">
+        <StrategyRunner />
+      </main>
       <CompanyOS
         employees={employees}
         departments={departments}
@@ -24,9 +27,6 @@ export default async function HomePage() {
         notifications={notifications}
         activityLogs={activityLogs}
       />
-      <main className="main">
-        <StrategyRunner />
-      </main>
     </>
   );
 }

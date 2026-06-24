@@ -1,5 +1,6 @@
 "use client";
 
+import { Inbox } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type Item = { id: string; requestText: string; resultTitle: string; resultContent: string; status: string; createdAt: string };
@@ -23,19 +24,35 @@ export default function AgentInboxWidget() {
 
   const current = items.find((item) => item.id === selected) || items[0];
 
-  return <div style={{ position: "fixed", left: 18, bottom: 18, zIndex: 50, direction: "rtl" }}>
-    <button className="primary-btn" onClick={() => setOpen(!open)}>سجل الوارد ({items.length})</button>
-    {open && <div className="card" style={{ width: 360, maxWidth: "calc(100vw - 36px)", maxHeight: "70vh", overflow: "auto", marginTop: 10 }}>
-      <h3>سجل الوارد — نتائج الموظفين الذكيين</h3>
-      {items.length === 0 && <div className="feed-item"><strong>لا توجد نتائج بعد</strong><span>أرسل طلبًا موحدًا وستظهر النتيجة هنا.</span></div>}
-      <div className="feed">
-        {items.map((item) => <button key={item.id} className="secondary-btn" style={{ textAlign: "right" }} onClick={() => setSelected(item.id)}>{item.resultTitle}<br/><small>{new Date(item.createdAt).toLocaleString("ar-SA")}</small></button>)}
-      </div>
-      {current && <div className="feed-item" style={{ marginTop: 12 }}>
-        <strong>{current.resultTitle}</strong>
-        <p style={{ color: "var(--muted)" }}>{current.requestText}</p>
-        <pre style={{ whiteSpace: "pre-wrap", lineHeight: 1.8, fontFamily: "inherit" }}>{current.resultContent}</pre>
-      </div>}
-    </div>}
-  </div>;
+  return (
+    <div className="inbox-widget">
+      <button className="primary-btn" onClick={() => setOpen(!open)}><Inbox size={17} /> الوارد ({items.length})</button>
+      {open && (
+        <div className="inbox-panel">
+          <h3>نتائج الوكلاء والطلبات</h3>
+          {items.length === 0 && (
+            <div className="feed-item">
+              <strong>لا توجد نتائج بعد</strong>
+              <span>شغّل سلسلة الوكلاء أو أرسل طلبًا موحدًا لتظهر النتيجة هنا.</span>
+            </div>
+          )}
+          <div className="feed">
+            {items.map((item) => (
+              <button key={item.id} className="secondary-btn inbox-item-button" onClick={() => setSelected(item.id)}>
+                {item.resultTitle}
+                <small>{new Date(item.createdAt).toLocaleString("ar-SA")}</small>
+              </button>
+            ))}
+          </div>
+          {current && (
+            <div className="feed-item" style={{ marginTop: 12 }}>
+              <strong>{current.resultTitle}</strong>
+              <span>{current.requestText}</span>
+              <pre>{current.resultContent}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

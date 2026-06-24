@@ -32,6 +32,8 @@ create table if not exists tasks (
   created_by text references employees(id),
   department_id text references departments(id),
   due_date timestamptz,
+  progress_percent int not null default 0 check (progress_percent between 0 and 100),
+  archived_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -50,7 +52,9 @@ create table if not exists daily_logs (
   employee_id text references employees(id),
   log_date date not null,
   summary text not null,
+  achievements text,
   blockers text,
+  next_step text,
   progress_score int check (progress_score between 1 and 10),
   status text not null default 'SUBMITTED' check (status in ('DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED')),
   reviewed_by text references employees(id),
@@ -105,3 +109,36 @@ create index if not exists idx_tasks_status on tasks(status);
 create index if not exists idx_daily_logs_employee_date on daily_logs(employee_id, log_date);
 create index if not exists idx_activity_logs_created_at on activity_logs(created_at desc);
 create index if not exists idx_notifications_employee on notifications(employee_id, read_at);
+
+create table if not exists ai_logs (
+  id text primary key,
+  type text not null,
+  content text not null,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists agent_runs (
+  id text primary key,
+  agent_name text not null,
+  input text not null,
+  output text not null,
+  status text not null default 'COMPLETED',
+  created_at timestamptz default now()
+);
+
+alter table ai_logs enable row level security;
+alter table agent_runs enable row level security;
+
+drop policy if exists "app read ai logs" on ai_logs;
+drop policy if exists "app write ai logs" on ai_logs;
+drop policy if exists "app read agent runs" on agent_runs;
+drop policy if exists "app write agent runs" on agent_runs;
+
+create policy "app read ai logs" on ai_logs for select to anon, authenticated using (true);
+create policy "app write ai logs" on ai_logs for insert to anon, authenticated with check (true);
+create policy "app read agent runs" on agent_runs for select to anon, authenticated using (true);
+create policy "app write agent runs" on agent_runs for insert to anon, authenticated with check (true);
+
+grant select, insert on ai_logs to anon, authenticated, service_role;
+grant select, insert on agent_runs to anon, authenticated, service_role;

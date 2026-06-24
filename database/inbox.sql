@@ -17,3 +17,5 @@ drop policy if exists "app write inbox" on inbox_items;
 
 create policy "app read inbox" on inbox_items for select to anon, authenticated using (true);
 create policy "app write inbox" on inbox_items for insert to anon, authenticated with check (true);
+
+grant select, insert on inbox_items to anon, authenticated, service_role;
