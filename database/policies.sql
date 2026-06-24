@@ -1,4 +1,5 @@
 alter table departments enable row level security;
+alter table projects enable row level security;
 alter table employees enable row level security;
 alter table tasks enable row level security;
 alter table task_comments enable row level security;
@@ -9,6 +10,10 @@ alter table activity_logs enable row level security;
 alter table external_sync_logs enable row level security;
 
 create policy "app read departments" on departments for select to anon, authenticated using (true);
+drop policy if exists "app read projects" on projects;
+drop policy if exists "app write projects" on projects;
+create policy "app read projects" on projects for select to anon, authenticated using (true);
+create policy "app write projects" on projects for insert to anon, authenticated with check (length(name) > 0);
 create policy "app read employees" on employees for select to anon, authenticated using (true);
 create policy "app read tasks" on tasks for select to anon, authenticated using (true);
 create policy "app write tasks" on tasks for insert to anon, authenticated with check (true);
@@ -27,3 +32,6 @@ create policy "app read activity" on activity_logs for select to anon, authentic
 create policy "app write activity" on activity_logs for insert to anon, authenticated with check (true);
 create policy "app read sync logs" on external_sync_logs for select to anon, authenticated using (true);
 create policy "app write sync logs" on external_sync_logs for insert to anon, authenticated with check (true);
+
+grant select, insert on projects to anon, authenticated, service_role;
+grant select, insert, update on tasks to anon, authenticated, service_role;

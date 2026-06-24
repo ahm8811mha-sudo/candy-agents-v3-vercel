@@ -110,6 +110,21 @@ create index if not exists idx_daily_logs_employee_date on daily_logs(employee_i
 create index if not exists idx_activity_logs_created_at on activity_logs(created_at desc);
 create index if not exists idx_notifications_employee on notifications(employee_id, read_at);
 
+create extension if not exists pgcrypto;
+
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  request text,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now()
+);
+
+alter table tasks add column if not exists project_id uuid references projects(id) on delete set null;
+alter table tasks add column if not exists content text;
+
+create index if not exists idx_tasks_project_id on tasks(project_id);
+
 create table if not exists ai_logs (
   id text primary key,
   type text not null,
@@ -142,8 +157,6 @@ create policy "app write agent runs" on agent_runs for insert to anon, authentic
 
 grant select, insert on ai_logs to anon, authenticated, service_role;
 grant select, insert on agent_runs to anon, authenticated, service_role;
-
-create extension if not exists pgcrypto;
 
 create table if not exists company_logs (
   id uuid primary key default gen_random_uuid(),
@@ -202,3 +215,14 @@ create policy "app read financial decisions" on financial_decisions for select t
 create policy "app write financial decisions" on financial_decisions for insert to anon, authenticated with check (length(request) > 0);
 
 grant select, insert on financial_decisions to anon, authenticated, service_role;
+
+alter table projects enable row level security;
+
+drop policy if exists "app read projects" on projects;
+drop policy if exists "app write projects" on projects;
+
+create policy "app read projects" on projects for select to anon, authenticated using (true);
+create policy "app write projects" on projects for insert to anon, authenticated with check (length(name) > 0);
+
+grant select, insert on projects to anon, authenticated, service_role;
+grant select, insert, update on tasks to anon, authenticated, service_role;

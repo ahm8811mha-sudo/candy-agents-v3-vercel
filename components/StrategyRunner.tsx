@@ -1,32 +1,78 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { BarChart3, Boxes, Building2, Calculator, CheckCircle2, ClipboardList, Loader2, Megaphone, Send, ShieldCheck } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Loader2, Send, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
-type CompanyResult = {
+type ExecutionResult = {
   ok: true;
-  request: string;
-  accounting: string;
-  marketing: string;
-  operations: string;
-  supplyChain: string;
-  decision: string;
+  financials: {
+    income: number;
+    expenses: number;
+    profit: number;
+    transactionCount: number;
+  };
+  cfo: string;
+  ceo: string;
+  tasks: string;
+  project: {
+    id: string;
+    name: string;
+    status?: string;
+    created_at?: string;
+  };
+  task: {
+    id: string;
+    project_id: string;
+    title: string;
+    content: string;
+    status: string;
+    created_at?: string;
+  };
   saved: boolean;
 };
 
-const departments = [
-  { key: "accounting", title: "الإدارة المالية", role: "الميزانية، التكاليف، العائد، المخاطر", icon: Calculator },
-  { key: "marketing", title: "إدارة التسويق", role: "السوق، الجمهور، الاستراتيجية، مؤشرات الأداء", icon: Megaphone },
-  { key: "operations", title: "إدارة العمليات", role: "خطة التنفيذ، الموارد، الجدول، الخطوات", icon: ClipboardList },
-  { key: "supplyChain", title: "سلسلة الإمداد", role: "المخزون، الموردون، اللوجستيات، التحسين", icon: Boxes },
-  { key: "decision", title: "الرئيس التنفيذي", role: "تلخيص التقارير وإصدار القرار النهائي", icon: ShieldCheck },
+type DashboardData = {
+  projects: unknown[];
+  tasks: unknown[];
+  decisions: unknown[];
+};
+
+const currency = new Intl.NumberFormat("ar-SA", {
+  style: "currency",
+  currency: "SAR",
+  maximumFractionDigits: 0,
+});
+
+const stages = [
+  { key: "financials", title: "البيانات المالية", role: "قراءة الإيرادات والمصروفات والربح", icon: Calculator, href: "/departments/finance" },
+  { key: "cfo", title: "المدير المالي CFO", role: "اعتماد الميزانية وتحليل المخاطر", icon: Calculator, href: "/departments/finance" },
+  { key: "ceo", title: "الرئيس التنفيذي CEO", role: "إصدار القرار النهائي", icon: ShieldCheck, href: "/departments/executive" },
+  { key: "tasks", title: "خطة التنفيذ", role: "تحويل القرار إلى مهام وأدوار وجدول", icon: ClipboardList, href: "/departments/operations" },
+  { key: "project", title: "المشروع", role: "حفظ مشروع ومهمة تنفيذية للمتابعة", icon: FolderKanban, href: "/departments/executive" },
 ] as const;
 
 export default function StrategyRunner() {
-  const [result, setResult] = useState<CompanyResult | null>(null);
+  const [result, setResult] = useState<ExecutionResult | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  async function loadDashboard() {
+    try {
+      const res = await fetch("/api/company-dashboard", { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setDashboard({
+          projects: data.projects || [],
+          tasks: data.tasks || [],
+          decisions: data.decisions || [],
+        });
+      }
+    } catch {
+      setDashboard(null);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,29 +84,34 @@ export default function StrategyRunner() {
     const request = String(form.get("request") || "").trim();
 
     try {
-      const res = await fetch("/api/company", {
+      const res = await fetch("/api/company-execution", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ request }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر تشغيل الشركة.");
+      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر تشغيل الشركة التنفيذية.");
       setResult(data);
+      await loadDashboard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تشغيل الشركة.");
+      setError(err instanceof Error ? err.message : "تعذر تشغيل الشركة التنفيذية.");
     } finally {
       setLoading(false);
     }
   }
 
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
   return (
     <main className="company-app">
       <section className="request-panel">
         <div className="request-copy">
-          <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي متكاملة</span>
-          <h1>اكتب طلبك، وكل إدارة في الشركة تنفذه وتعيد تقريرها</h1>
+          <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي تنفيذية</span>
+          <h1>اكتب الطلب، والشركة تقرر ثم تنشئ مشروع التنفيذ</h1>
           <p>
-            النظام يعمل مثل شركة حقيقية: المالية تضع الميزانية، التسويق يدرس السوق، العمليات تجهز التنفيذ، سلسلة الإمداد تضبط الموردين، والرئيس التنفيذي يصدر القرار.
+            هذا المسار يوحد الشركة: يقرأ البيانات المالية، يراجعها المدير المالي، يعتمد الرئيس التنفيذي القرار، ثم تتحول النتيجة إلى مهام ومشروع محفوظين للمتابعة.
           </p>
         </div>
 
@@ -71,39 +122,30 @@ export default function StrategyRunner() {
               name="request"
               className="textarea command-box"
               required
-              defaultValue="أبغى ميزانية وخطة لإطلاق متجر إلكتروني بميزانية 100,000 ريال، مع تحليل مالي وتسويقي وتشغيلي ومخاطر وسلسلة إمداد وقرار نهائي."
+              defaultValue="هل يمكن اعتماد ميزانية لإطلاق متجر إلكتروني جديد بميزانية 50,000 ريال مع تحويل القرار إلى مشروع ومهام تنفيذية؟"
             />
           </label>
 
           <button className="primary-btn big-action" disabled={loading}>
             {loading ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
-            {loading ? "أقسام الشركة تعمل على الطلب" : "تشغيل الشركة"}
+            {loading ? "الشركة تصدر القرار وتنشئ المشروع" : "تشغيل الشركة التنفيذية"}
           </button>
 
           {error && <p className="notice error">{error}</p>}
         </form>
       </section>
 
-      <section className="employee-strip" aria-label="أقسام الشركة">
-        {departments.map((department, index) => {
-          const Icon = department.icon;
-          const complete = Boolean(result?.[department.key]);
-          const href = department.key === "accounting"
-            ? "/departments/finance"
-            : department.key === "marketing"
-              ? "/departments/marketing"
-              : department.key === "operations"
-                ? "/departments/operations"
-                : department.key === "supplyChain"
-                  ? "/departments/supply-chain"
-                  : "/departments/executive";
+      <section className="employee-strip" aria-label="مراحل تنفيذ الشركة">
+        {stages.map((stage, index) => {
+          const Icon = stage.icon;
+          const complete = Boolean(result?.[stage.key]);
 
           return (
-            <Link className={`employee-card department-link ${loading ? "active" : complete ? "done" : ""}`} href={href} key={department.key}>
+            <Link className={`employee-card department-link ${loading ? "active" : complete ? "done" : ""}`} href={stage.href} key={stage.key}>
               <span>{complete ? <CheckCircle2 size={18} /> : <Icon size={18} />}</span>
-              <strong>{department.title}</strong>
-              <small>{department.role}</small>
-              <em>{loading ? "قيد العمل" : complete ? "اكتمل التقرير" : `مرحلة ${index + 1}`}</em>
+              <strong>{stage.title}</strong>
+              <small>{stage.role}</small>
+              <em>{loading ? "قيد العمل" : complete ? "اكتمل" : `مرحلة ${index + 1}`}</em>
             </Link>
           );
         })}
@@ -112,19 +154,19 @@ export default function StrategyRunner() {
       <section className="delivery-panel">
         <div className="delivery-header">
           <div>
-            <span className="eyebrow"><BarChart3 size={16} /> التقارير والقرار</span>
+            <span className="eyebrow"><BarChart3 size={16} /> التسليم النهائي</span>
             <h2>نتيجة الشركة</h2>
           </div>
           <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
-            {loading ? "قيد التنفيذ" : result ? "تم التسليم" : "بانتظار الطلب"}
+            {loading ? "قيد التنفيذ" : result ? "تم إنشاء المشروع" : "بانتظار الطلب"}
           </span>
         </div>
 
         {!result && !loading && (
           <div className="empty-state">
             <Building2 size={34} />
-            <strong>لا توجد تقارير بعد</strong>
-            <span>اكتب الطلب واضغط تشغيل الشركة. سيظهر تقرير كل إدارة والقرار النهائي هنا.</span>
+            <strong>لا توجد نتيجة بعد</strong>
+            <span>اكتب الطلب واضغط تشغيل الشركة. ستظهر نتيجة CFO وCEO والمهام والمشروع هنا.</span>
           </div>
         )}
 
@@ -132,21 +174,68 @@ export default function StrategyRunner() {
           <div className="empty-state">
             <Loader2 className="spin" size={34} />
             <strong>الشركة تعمل الآن</strong>
-            <span>يتم توزيع الطلب على الإدارات ثم جمع التقارير في قرار تنفيذي واحد.</span>
+            <span>يتم إصدار القرار المالي والتنفيذي ثم تحويله إلى مشروع ومهمة متابعة.</span>
           </div>
         )}
 
         {result && (
           <div className="report-stack">
-            <Report title="قرار الرئيس التنفيذي" content={result.decision} featured />
-            <Report title="التقرير المالي" content={result.accounting} />
-            <Report title="تقرير التسويق" content={result.marketing} />
-            <Report title="تقرير العمليات" content={result.operations} />
-            <Report title="تقرير سلسلة الإمداد" content={result.supplyChain} />
+            <div className="finance-summary">
+              <Metric title="الإيرادات" value={result.financials.income} />
+              <Metric title="المصروفات" value={result.financials.expenses} />
+              <Metric title="صافي الربح" value={result.financials.profit} />
+            </div>
+
+            <article className="report-card featured">
+              <h3>المشروع الذي تم إنشاؤه</h3>
+              <pre>{`اسم المشروع: ${result.project.name}
+الحالة: ${result.project.status || "ACTIVE"}
+المهمة: ${result.task.title}
+حالة المهمة: ${result.task.status}
+الحفظ في قاعدة البيانات: ${result.saved ? "تم" : "غير متصل بقاعدة البيانات"}`}</pre>
+            </article>
+
+            <Report title="قرار الرئيس التنفيذي CEO" content={result.ceo} featured />
+            <Report title="تقرير المدير المالي CFO" content={result.cfo} />
+            <Report title="المهام التنفيذية" content={result.tasks} />
           </div>
         )}
       </section>
+
+      <section className="delivery-panel">
+        <div className="delivery-header">
+          <div>
+            <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
+            <h2>لوحة متابعة الشركة</h2>
+          </div>
+          <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
+        </div>
+
+        <div className="finance-summary">
+          <DashboardMetric title="المشاريع" value={dashboard?.projects.length ?? 0} />
+          <DashboardMetric title="المهام" value={dashboard?.tasks.length ?? 0} />
+          <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
+        </div>
+      </section>
     </main>
+  );
+}
+
+function Metric({ title, value }: { title: string; value: number }) {
+  return (
+    <article className={`metric-card ${value >= 0 ? "green" : "red"}`}>
+      <small>{title}</small>
+      <strong>{currency.format(value)}</strong>
+    </article>
+  );
+}
+
+function DashboardMetric({ title, value }: { title: string; value: number }) {
+  return (
+    <article className="metric-card green">
+      <small>{title}</small>
+      <strong>{value.toLocaleString("ar-SA")}</strong>
+    </article>
   );
 }
 

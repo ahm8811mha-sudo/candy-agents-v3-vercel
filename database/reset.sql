@@ -5,6 +5,7 @@ drop table if exists approvals cascade;
 drop table if exists daily_logs cascade;
 drop table if exists task_comments cascade;
 drop table if exists tasks cascade;
+drop table if exists projects cascade;
 drop table if exists employees cascade;
 drop table if exists departments cascade;
 
