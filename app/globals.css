@@ -260,6 +260,12 @@ label {
   gap: 14px;
 }
 
+.decision-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
 .report-card {
   border: 1px solid var(--line);
   border-radius: 10px;

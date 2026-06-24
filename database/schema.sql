@@ -183,3 +183,22 @@ create policy "app read transactions" on transactions for select to anon, authen
 create policy "app write transactions" on transactions for insert to anon, authenticated with check (type in ('income', 'expense') and amount > 0 and length(description) > 0);
 
 grant select, insert on transactions to anon, authenticated, service_role;
+
+create table if not exists financial_decisions (
+  id uuid primary key default gen_random_uuid(),
+  request text not null,
+  financials jsonb,
+  cfo_report text,
+  ceo_decision text,
+  created_at timestamptz default now()
+);
+
+alter table financial_decisions enable row level security;
+
+drop policy if exists "app read financial decisions" on financial_decisions;
+drop policy if exists "app write financial decisions" on financial_decisions;
+
+create policy "app read financial decisions" on financial_decisions for select to anon, authenticated using (true);
+create policy "app write financial decisions" on financial_decisions for insert to anon, authenticated with check (length(request) > 0);
+
+grant select, insert on financial_decisions to anon, authenticated, service_role;

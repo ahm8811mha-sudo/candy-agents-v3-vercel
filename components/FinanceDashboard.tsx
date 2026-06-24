@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, BarChart3, BrainCircuit, CircleDollarSign, Loader2, Plus, ReceiptText, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, BarChart3, BrainCircuit, CircleDollarSign, Loader2, Plus, ReceiptText, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 type Transaction = {
@@ -22,6 +22,18 @@ type FinanceReport = {
   report: string;
 };
 
+type FinanceDecision = {
+  financials: {
+    income: number;
+    expenses: number;
+    profit: number;
+    transactionCount: number;
+  };
+  cfo: string;
+  ceo: string;
+  saved: boolean;
+};
+
 const currency = new Intl.NumberFormat("ar-SA", {
   style: "currency",
   currency: "SAR",
@@ -33,6 +45,10 @@ export default function FinanceDashboard() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [decisionRequest, setDecisionRequest] = useState("هل يمكنني استثمار 50,000 ريال في متجر إلكتروني جديد؟");
+  const [decisionError, setDecisionError] = useState("");
+  const [decision, setDecision] = useState<FinanceDecision | null>(null);
 
   async function loadReport() {
     setLoading(true);
@@ -72,10 +88,32 @@ export default function FinanceDashboard() {
       if (!res.ok || !data.ok) throw new Error(data.error || "تعذر حفظ العملية.");
       event.currentTarget.reset();
       await loadReport();
+      setDecision(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر حفظ العملية.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runDecision(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDecisionLoading(true);
+    setDecisionError("");
+
+    try {
+      const res = await fetch("/api/finance-decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request: decisionRequest }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر إصدار القرار المالي.");
+      setDecision(data);
+    } catch (err) {
+      setDecisionError(err instanceof Error ? err.message : "تعذر إصدار القرار المالي.");
+    } finally {
+      setDecisionLoading(false);
     }
   }
 
@@ -125,6 +163,47 @@ export default function FinanceDashboard() {
           <Metric title="المصروفات" value={report?.expenses ?? 0} icon={<TrendingDown size={20} />} tone="red" />
           <Metric title="صافي الربح" value={report?.profit ?? 0} icon={<BarChart3 size={20} />} tone={(report?.profit ?? 0) >= 0 ? "green" : "red"} />
         </div>
+      </section>
+
+      <section className="delivery-panel">
+        <div className="delivery-header">
+          <div>
+            <span className="eyebrow"><ShieldCheck size={16} /> قرار CFO + CEO</span>
+            <h2>موافقة مالية تنفيذية</h2>
+          </div>
+          <span className={`status-pill ${decision ? "done" : ""}`}>{decision ? "تم إصدار القرار" : "بانتظار الطلب"}</span>
+        </div>
+
+        <form className="decision-form" onSubmit={runDecision}>
+          <label>
+            الطلب المالي
+            <textarea
+              className="textarea"
+              value={decisionRequest}
+              onChange={(event) => setDecisionRequest(event.target.value)}
+              placeholder="اكتب طلب ميزانية أو استثمار ليحلله CFO ثم يعتمد CEO القرار"
+              required
+            />
+          </label>
+          <button className="primary-btn" disabled={decisionLoading}>
+            {decisionLoading ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+            إصدار القرار التنفيذي
+          </button>
+          {decisionError && <p className="notice error">{decisionError}</p>}
+        </form>
+
+        {decision && (
+          <div className="report-stack">
+            <article className="report-card">
+              <h3>تقرير المدير المالي CFO</h3>
+              <pre>{decision.cfo}</pre>
+            </article>
+            <article className="report-card featured">
+              <h3>قرار الرئيس التنفيذي CEO</h3>
+              <pre>{decision.ceo}</pre>
+            </article>
+          </div>
+        )}
       </section>
 
       <section className="delivery-panel">
