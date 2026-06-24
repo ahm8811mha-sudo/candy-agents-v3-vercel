@@ -1,4 +1,5 @@
 import CompanyOS from "@/components/CompanyOS";
+import StrategyRunner from "@/components/StrategyRunner";
 import { listActivity, listApprovals, listDailyLogs, listDepartments, listEmployees, listNotifications, listTasks } from "@/lib/repository";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +14,19 @@ export default async function HomePage() {
   const activityLogs = await listActivity();
 
   return (
-    <CompanyOS
-      employees={employees}
-      departments={departments}
-      tasks={tasks}
-      dailyLogs={dailyLogs}
-      approvals={approvals}
-      notifications={notifications}
-      activityLogs={activityLogs}
-    />
+    <>
+      <CompanyOS
+        employees={employees}
+        departments={departments}
+        tasks={tasks}
+        dailyLogs={dailyLogs}
+        approvals={approvals}
+        notifications={notifications}
+        activityLogs={activityLogs}
+      />
+      <main className="main">
+        <StrategyRunner />
+      </main>
+    </>
   );
 }
