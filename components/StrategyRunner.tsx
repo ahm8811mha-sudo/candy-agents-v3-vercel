@@ -208,7 +208,10 @@ export default function StrategyRunner() {
             <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
             <h2>لوحة متابعة الشركة</h2>
           </div>
-          <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
+          <div className="dashboard-actions">
+            <Link className="secondary-btn" href="/dashboard">فتح Dashboard</Link>
+            <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
+          </div>
         </div>
 
         <div className="finance-summary">
