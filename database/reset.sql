@@ -1,4 +1,16 @@
 drop table if exists external_sync_logs cascade;
+drop table if exists company_strategy cascade;
+drop table if exists opportunity_radar_runs cascade;
+drop table if exists marketing_campaigns cascade;
+drop table if exists marketing_channels cascade;
+drop table if exists ceo_office_items cascade;
+drop table if exists accounting_bank_transactions cascade;
+drop table if exists accounting_bank_accounts cascade;
+drop table if exists accounting_invoices cascade;
+drop table if exists accounting_contacts cascade;
+drop table if exists accounting_journal_lines cascade;
+drop table if exists accounting_journal_entries cascade;
+drop table if exists accounting_accounts cascade;
 drop table if exists freelancer_assignments cascade;
 drop table if exists financial_transactions cascade;
 drop table if exists decisions cascade;

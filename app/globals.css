@@ -810,6 +810,118 @@ label {
   font-style: normal;
 }
 
+.enterprise-os {
+  gap: 18px;
+}
+
+.enterprise-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.enterprise-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.enterprise-card {
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, rgba(124, 199, 255, 0.06), transparent),
+    var(--panel);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.enterprise-card > span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #9bc9ff;
+  background: var(--panel-2);
+}
+
+.enterprise-card strong {
+  font-size: 1.08rem;
+}
+
+.enterprise-card em {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--green);
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.enterprise-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+  font-size: 0.9rem;
+}
+
+.enterprise-card div {
+  display: grid;
+  gap: 7px;
+  margin-top: auto;
+}
+
+.enterprise-card small {
+  color: #b8c5d5;
+  line-height: 1.5;
+}
+
+.enterprise-card b {
+  color: #f5f7fb;
+}
+
+.enterprise-thesis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.enterprise-thesis article {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f1520;
+  padding: 16px;
+}
+
+.enterprise-thesis strong {
+  color: #7cc7ff;
+}
+
+.enterprise-thesis p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.85;
+}
+
+.enterprise-lists {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .apple-dashboard {
   min-height: 100vh;
   color: #1d1d1f;
@@ -1189,7 +1301,7 @@ label {
   .request-panel, .compact-grid { grid-template-columns: 1fr; }
   .request-panel { min-height: auto; }
   .employee-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .department-hero, .finance-grid, .department-workbench, .department-board, .intelligence-grid, .opportunity-grid { grid-template-columns: 1fr; flex-direction: column; align-items: flex-start; }
+  .department-hero, .finance-grid, .department-workbench, .department-board, .intelligence-grid, .opportunity-grid, .enterprise-grid, .enterprise-thesis, .enterprise-lists { grid-template-columns: 1fr; flex-direction: column; align-items: flex-start; }
   .finance-summary, .department-capabilities { grid-template-columns: 1fr; }
   .transaction-row { grid-template-columns: 1fr; }
   .apple-header { align-items: flex-start; flex-direction: column; }

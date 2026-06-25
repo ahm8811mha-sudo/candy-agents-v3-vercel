@@ -1,4 +1,10 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "crons": [
+    {
+      "path": "/api/opportunity-radar",
+      "schedule": "0 5 * * *"
+    }
+  ]
 }

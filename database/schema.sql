@@ -407,9 +407,149 @@ create table if not exists business_integrations (
   updated_at timestamptz default now()
 );
 
+create table if not exists accounting_accounts (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  name text not null,
+  type text not null check (type in ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')),
+  normal_balance text not null check (normal_balance in ('DEBIT', 'CREDIT')),
+  is_system boolean default false,
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_journal_entries (
+  id uuid primary key default gen_random_uuid(),
+  entry_number text unique not null default ('JE-' || extract(epoch from now())::bigint::text),
+  entry_date date not null default current_date,
+  memo text,
+  source text default 'manual',
+  status text not null default 'POSTED' check (status in ('DRAFT', 'POSTED', 'VOID')),
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_journal_lines (
+  id uuid primary key default gen_random_uuid(),
+  entry_id uuid references accounting_journal_entries(id) on delete cascade,
+  account_id uuid references accounting_accounts(id) on delete restrict,
+  memo text,
+  debit numeric not null default 0,
+  credit numeric not null default 0,
+  created_at timestamptz default now(),
+  check (debit >= 0 and credit >= 0 and debit <> credit)
+);
+
+create table if not exists accounting_contacts (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('CUSTOMER', 'VENDOR')),
+  name text not null,
+  email text,
+  phone text,
+  tax_number text,
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_invoices (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid references accounting_contacts(id) on delete set null,
+  invoice_type text not null check (invoice_type in ('SALES', 'PURCHASE')),
+  status text not null default 'DRAFT',
+  issue_date date not null default current_date,
+  due_date date,
+  subtotal numeric not null default 0,
+  tax numeric not null default 0,
+  total numeric not null default 0,
+  paid numeric not null default 0,
+  notes text,
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_bank_accounts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  provider text,
+  currency text not null default 'SAR',
+  balance numeric not null default 0,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_bank_transactions (
+  id uuid primary key default gen_random_uuid(),
+  bank_account_id uuid references accounting_bank_accounts(id) on delete cascade,
+  transaction_date date not null default current_date,
+  description text not null,
+  amount numeric not null,
+  matched_entry_id uuid references accounting_journal_entries(id) on delete set null,
+  status text not null default 'UNMATCHED',
+  created_at timestamptz default now()
+);
+
+create table if not exists ceo_office_items (
+  id text primary key,
+  item_type text not null,
+  title text not null,
+  owner_role text not null,
+  status text not null default 'PENDING',
+  priority text not null default 'MEDIUM',
+  cadence text,
+  due_at timestamptz,
+  notes text,
+  metadata jsonb default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists marketing_channels (
+  id text primary key,
+  name text not null,
+  funnel_stage text not null,
+  status text not null default 'READY_FOR_CONNECTION',
+  config jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  product_name text,
+  target_audience text,
+  offer text,
+  channel_id text references marketing_channels(id) on delete set null,
+  budget numeric not null default 0,
+  status text not null default 'DRAFT',
+  kpis jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists opportunity_radar_runs (
+  id uuid primary key default gen_random_uuid(),
+  source text not null default 'MANUAL',
+  status text not null default 'PROPOSED',
+  signal_summary text not null,
+  recommended_opportunity jsonb not null default '{}',
+  cfo_required boolean default true,
+  ceo_required boolean default false,
+  created_at timestamptz default now()
+);
+
+create table if not exists company_strategy (
+  id text primary key,
+  focus text not null,
+  investment_thesis text not null,
+  capital_rules jsonb default '{}',
+  target_markets text[] default '{}',
+  updated_at timestamptz default now()
+);
+
 create index if not exists idx_business_kpis_project_id on business_kpis(project_id);
 create index if not exists idx_business_actions_project_id on business_actions(project_id);
 create index if not exists idx_business_alerts_status on business_alerts(status, severity);
+create index if not exists idx_accounting_journal_lines_entry_id on accounting_journal_lines(entry_id);
+create index if not exists idx_accounting_invoices_contact_id on accounting_invoices(contact_id);
+create index if not exists idx_ceo_office_items_status on ceo_office_items(status, priority);
+create index if not exists idx_marketing_campaigns_status on marketing_campaigns(status);
+create index if not exists idx_opportunity_radar_runs_created_at on opportunity_radar_runs(created_at desc);
 
 alter table projects enable row level security;
 alter table business_kpis enable row level security;
@@ -417,6 +557,18 @@ alter table business_alerts enable row level security;
 alter table business_actions enable row level security;
 alter table business_memory enable row level security;
 alter table business_integrations enable row level security;
+alter table accounting_accounts enable row level security;
+alter table accounting_journal_entries enable row level security;
+alter table accounting_journal_lines enable row level security;
+alter table accounting_contacts enable row level security;
+alter table accounting_invoices enable row level security;
+alter table accounting_bank_accounts enable row level security;
+alter table accounting_bank_transactions enable row level security;
+alter table ceo_office_items enable row level security;
+alter table marketing_channels enable row level security;
+alter table marketing_campaigns enable row level security;
+alter table opportunity_radar_runs enable row level security;
+alter table company_strategy enable row level security;
 
 drop policy if exists "app read projects" on projects;
 drop policy if exists "app write projects" on projects;
@@ -430,6 +582,30 @@ drop policy if exists "app read business memory" on business_memory;
 drop policy if exists "app write business memory" on business_memory;
 drop policy if exists "app read business integrations" on business_integrations;
 drop policy if exists "app write business integrations" on business_integrations;
+drop policy if exists "app read accounting accounts" on accounting_accounts;
+drop policy if exists "app write accounting accounts" on accounting_accounts;
+drop policy if exists "app read accounting journal entries" on accounting_journal_entries;
+drop policy if exists "app write accounting journal entries" on accounting_journal_entries;
+drop policy if exists "app read accounting journal lines" on accounting_journal_lines;
+drop policy if exists "app write accounting journal lines" on accounting_journal_lines;
+drop policy if exists "app read accounting contacts" on accounting_contacts;
+drop policy if exists "app write accounting contacts" on accounting_contacts;
+drop policy if exists "app read accounting invoices" on accounting_invoices;
+drop policy if exists "app write accounting invoices" on accounting_invoices;
+drop policy if exists "app read accounting bank accounts" on accounting_bank_accounts;
+drop policy if exists "app write accounting bank accounts" on accounting_bank_accounts;
+drop policy if exists "app read accounting bank transactions" on accounting_bank_transactions;
+drop policy if exists "app write accounting bank transactions" on accounting_bank_transactions;
+drop policy if exists "app read ceo office items" on ceo_office_items;
+drop policy if exists "app write ceo office items" on ceo_office_items;
+drop policy if exists "app read marketing channels" on marketing_channels;
+drop policy if exists "app write marketing channels" on marketing_channels;
+drop policy if exists "app read marketing campaigns" on marketing_campaigns;
+drop policy if exists "app write marketing campaigns" on marketing_campaigns;
+drop policy if exists "app read opportunity radar runs" on opportunity_radar_runs;
+drop policy if exists "app write opportunity radar runs" on opportunity_radar_runs;
+drop policy if exists "app read company strategy" on company_strategy;
+drop policy if exists "app write company strategy" on company_strategy;
 
 create policy "app read projects" on projects for select to anon, authenticated using (true);
 create policy "app write projects" on projects for insert to anon, authenticated with check (length(name) > 0);
@@ -443,6 +619,30 @@ create policy "app read business memory" on business_memory for select to anon, 
 create policy "app write business memory" on business_memory for insert to anon, authenticated with check (length(title) > 0);
 create policy "app read business integrations" on business_integrations for select to anon, authenticated using (true);
 create policy "app write business integrations" on business_integrations for insert to anon, authenticated with check (length(id) > 0);
+create policy "app read accounting accounts" on accounting_accounts for select to anon, authenticated using (true);
+create policy "app write accounting accounts" on accounting_accounts for insert to anon, authenticated with check (length(code) > 0);
+create policy "app read accounting journal entries" on accounting_journal_entries for select to anon, authenticated using (true);
+create policy "app write accounting journal entries" on accounting_journal_entries for insert to anon, authenticated with check (true);
+create policy "app read accounting journal lines" on accounting_journal_lines for select to anon, authenticated using (true);
+create policy "app write accounting journal lines" on accounting_journal_lines for insert to anon, authenticated with check (debit >= 0 and credit >= 0);
+create policy "app read accounting contacts" on accounting_contacts for select to anon, authenticated using (true);
+create policy "app write accounting contacts" on accounting_contacts for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read accounting invoices" on accounting_invoices for select to anon, authenticated using (true);
+create policy "app write accounting invoices" on accounting_invoices for insert to anon, authenticated with check (total >= 0);
+create policy "app read accounting bank accounts" on accounting_bank_accounts for select to anon, authenticated using (true);
+create policy "app write accounting bank accounts" on accounting_bank_accounts for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read accounting bank transactions" on accounting_bank_transactions for select to anon, authenticated using (true);
+create policy "app write accounting bank transactions" on accounting_bank_transactions for insert to anon, authenticated with check (length(description) > 0);
+create policy "app read ceo office items" on ceo_office_items for select to anon, authenticated using (true);
+create policy "app write ceo office items" on ceo_office_items for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read marketing channels" on marketing_channels for select to anon, authenticated using (true);
+create policy "app write marketing channels" on marketing_channels for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read marketing campaigns" on marketing_campaigns for select to anon, authenticated using (true);
+create policy "app write marketing campaigns" on marketing_campaigns for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read opportunity radar runs" on opportunity_radar_runs for select to anon, authenticated using (true);
+create policy "app write opportunity radar runs" on opportunity_radar_runs for insert to anon, authenticated with check (length(signal_summary) > 0);
+create policy "app read company strategy" on company_strategy for select to anon, authenticated using (true);
+create policy "app write company strategy" on company_strategy for insert to anon, authenticated with check (length(id) > 0);
 
 grant select, insert on projects to anon, authenticated, service_role;
 grant select, insert, update on tasks to anon, authenticated, service_role;
@@ -452,3 +652,15 @@ grant select, insert, update on business_alerts to anon, authenticated, service_
 grant select, insert, update on business_actions to anon, authenticated, service_role;
 grant select, insert on business_memory to anon, authenticated, service_role;
 grant select, insert, update on business_integrations to anon, authenticated, service_role;
+grant select, insert, update on accounting_accounts to anon, authenticated, service_role;
+grant select, insert, update on accounting_journal_entries to anon, authenticated, service_role;
+grant select, insert, update on accounting_journal_lines to anon, authenticated, service_role;
+grant select, insert, update on accounting_contacts to anon, authenticated, service_role;
+grant select, insert, update on accounting_invoices to anon, authenticated, service_role;
+grant select, insert, update on accounting_bank_accounts to anon, authenticated, service_role;
+grant select, insert, update on accounting_bank_transactions to anon, authenticated, service_role;
+grant select, insert, update on ceo_office_items to anon, authenticated, service_role;
+grant select, insert, update on marketing_channels to anon, authenticated, service_role;
+grant select, insert, update on marketing_campaigns to anon, authenticated, service_role;
+grant select, insert, update on opportunity_radar_runs to anon, authenticated, service_role;
+grant select, insert, update on company_strategy to anon, authenticated, service_role;
