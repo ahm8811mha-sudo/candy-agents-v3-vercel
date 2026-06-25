@@ -439,6 +439,377 @@ label {
   gap: 12px;
 }
 
+.department-hero-live {
+  background:
+    linear-gradient(135deg, rgba(47, 128, 237, 0.08), rgba(56, 211, 159, 0.04)),
+    var(--panel);
+}
+
+.department-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.department-hero-actions span,
+.department-badge small {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 11px;
+  color: #b9c8da;
+  background: rgba(255, 255, 255, 0.035);
+  font-weight: 900;
+  font-size: 0.78rem;
+}
+
+.department-badge {
+  display: grid;
+  gap: 10px;
+  min-width: 150px;
+}
+
+.department-badge strong {
+  color: #7cc7ff;
+}
+
+.department-badge small {
+  color: var(--green);
+}
+
+.department-live-panel {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(124, 199, 255, 0.08), transparent 26%),
+    var(--panel);
+}
+
+.department-capabilities.live .capability-card {
+  position: relative;
+  min-height: 170px;
+  align-content: start;
+  overflow: hidden;
+}
+
+.department-capabilities.live .capability-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 14px 0 14px;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #7cc7ff;
+}
+
+.department-capabilities.live .capability-card.green::after { background: var(--green); }
+.department-capabilities.live .capability-card.amber::after { background: var(--amber); }
+.department-capabilities.live .capability-card.red::after { background: var(--red); }
+
+.department-capabilities.live .capability-card em {
+  margin-top: auto;
+  font-size: 0.9rem;
+}
+
+.department-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 16px;
+}
+
+.department-command-card,
+.department-decision-card,
+.department-board-column {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.department-command-card {
+  display: grid;
+  gap: 13px;
+  padding: clamp(16px, 3vw, 24px);
+}
+
+.department-command-card h2,
+.department-decision-card h3 {
+  margin: 0;
+}
+
+.department-command-card p,
+.department-decision-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.department-decision-card {
+  padding: clamp(16px, 3vw, 24px);
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.department-decision-card h3 {
+  line-height: 1.7;
+  font-size: 1.08rem;
+}
+
+.department-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.department-signal-grid div {
+  min-height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f1520;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+}
+
+.department-signal-grid small {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.department-signal-grid strong {
+  color: #f5f7fb;
+  font-size: 1.15rem;
+}
+
+.department-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.department-board-column {
+  overflow: hidden;
+  min-height: 260px;
+}
+
+.department-board-column > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.department-board-column h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.department-board-column header span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #7cc7ff;
+  background: var(--panel-2);
+  font-weight: 900;
+}
+
+.department-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.department-row:first-child {
+  border-top: 0;
+}
+
+.department-row strong {
+  display: block;
+  margin: 8px 0 4px;
+  line-height: 1.55;
+}
+
+.department-row p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+  font-size: 0.88rem;
+}
+
+.department-row small {
+  display: inline-block;
+  margin-top: 8px;
+  color: #7cc7ff;
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.row-actions {
+  display: flex;
+  align-items: start;
+  gap: 7px;
+}
+
+.row-actions button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: #cfe7ff;
+  background: var(--panel-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.row-actions button:disabled {
+  opacity: 0.58;
+  cursor: progress;
+}
+
+.mini-pill {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: #cfe7ff;
+  background: rgba(124, 199, 255, 0.13);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.mini-pill.pending,
+.mini-pill.todo,
+.mini-pill.waiting_approval,
+.mini-pill.medium {
+  color: var(--amber);
+  background: rgba(244, 183, 64, 0.13);
+}
+
+.mini-pill.done,
+.mini-pill.approved,
+.mini-pill.low {
+  color: var(--green);
+  background: rgba(56, 211, 159, 0.13);
+}
+
+.mini-pill.high,
+.mini-pill.critical,
+.alert-row .mini-pill {
+  color: var(--red);
+  background: rgba(239, 100, 97, 0.13);
+}
+
+.kpi-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.kpi-progress {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #0b1018;
+}
+
+.kpi-progress i {
+  display: block;
+  min-width: 4px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--green));
+}
+
+.department-empty {
+  margin: 16px 18px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #0f1520;
+  color: var(--muted);
+  line-height: 1.8;
+  padding: 18px;
+}
+
+.notice.done {
+  color: var(--green);
+  background: rgba(56, 211, 159, 0.09);
+  border-radius: 8px;
+}
+
+.intelligence-panel {
+  background:
+    radial-gradient(circle at 85% 10%, rgba(47, 128, 237, 0.1), transparent 28%),
+    var(--panel);
+}
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+  gap: 16px;
+}
+
+.intelligence-form {
+  display: grid;
+  gap: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 16px;
+}
+
+.intelligence-result {
+  min-width: 0;
+}
+
+.opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.opportunity-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f1520;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.opportunity-card span,
+.opportunity-card em {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7cc7ff;
+  font-weight: 900;
+  font-size: 0.78rem;
+}
+
+.opportunity-card strong {
+  line-height: 1.6;
+}
+
+.opportunity-card small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.opportunity-card em {
+  color: var(--green);
+  font-style: normal;
+}
+
 .apple-dashboard {
   min-height: 100vh;
   color: #1d1d1f;
@@ -818,7 +1189,7 @@ label {
   .request-panel, .compact-grid { grid-template-columns: 1fr; }
   .request-panel { min-height: auto; }
   .employee-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .department-hero, .finance-grid { grid-template-columns: 1fr; flex-direction: column; align-items: flex-start; }
+  .department-hero, .finance-grid, .department-workbench, .department-board, .intelligence-grid, .opportunity-grid { grid-template-columns: 1fr; flex-direction: column; align-items: flex-start; }
   .finance-summary, .department-capabilities { grid-template-columns: 1fr; }
   .transaction-row { grid-template-columns: 1fr; }
   .apple-header { align-items: flex-start; flex-direction: column; }
@@ -834,6 +1205,9 @@ label {
   .employee-strip { grid-template-columns: 1fr; }
   .delivery-header { align-items: flex-start; flex-direction: column; }
   .command-box { min-height: 180px; }
+  .department-row { grid-template-columns: 1fr; }
+  .row-actions { justify-content: flex-start; }
+  .department-signal-grid { grid-template-columns: 1fr; }
   .apple-dashboard { padding: 16px; }
   .apple-card, .apple-control { border-radius: 18px; }
   .apple-item { grid-template-columns: 1fr; }

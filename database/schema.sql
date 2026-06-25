@@ -169,6 +169,123 @@ create policy "app write agent runs" on agent_runs for insert to anon, authentic
 grant select, insert on ai_logs to anon, authenticated, service_role;
 grant select, insert on agent_runs to anon, authenticated, service_role;
 
+create table if not exists strategies (
+  id text primary key,
+  name text not null,
+  budget numeric not null default 0,
+  risk_profile text not null default 'MEDIUM',
+  goals text not null,
+  market text,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now()
+);
+
+create table if not exists market_reports (
+  id text primary key,
+  strategy_id text references strategies(id) on delete cascade,
+  agent_id text,
+  market_name text not null,
+  summary text not null,
+  trend_score int,
+  demand_score int,
+  competition_score int,
+  risk_score int,
+  created_at timestamptz default now()
+);
+
+create table if not exists opportunities (
+  id text primary key,
+  strategy_id text references strategies(id) on delete cascade,
+  market_report_id text references market_reports(id) on delete set null,
+  title text not null,
+  description text not null,
+  category text not null,
+  estimated_cost numeric not null default 0,
+  expected_revenue numeric not null default 0,
+  expected_roi numeric not null default 0,
+  risk_level text not null default 'MEDIUM',
+  status text not null default 'NEW',
+  created_at timestamptz default now()
+);
+
+create table if not exists decisions (
+  id text primary key,
+  opportunity_id text references opportunities(id) on delete set null,
+  recommendation text not null,
+  rationale text not null,
+  decision_status text not null default 'PENDING',
+  approved_by text,
+  approved_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table if not exists financial_transactions (
+  id text primary key,
+  opportunity_id text references opportunities(id) on delete set null,
+  type text not null,
+  amount numeric not null,
+  description text not null,
+  status text not null default 'PENDING',
+  created_at timestamptz default now()
+);
+
+create table if not exists freelancer_assignments (
+  id text primary key,
+  opportunity_id text references opportunities(id) on delete set null,
+  task_id text references tasks(id) on delete set null,
+  role_needed text not null,
+  brief text not null,
+  budget numeric not null default 0,
+  status text not null default 'DRAFT',
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_market_reports_strategy_id on market_reports(strategy_id);
+create index if not exists idx_opportunities_strategy_id on opportunities(strategy_id);
+create index if not exists idx_decisions_opportunity_id on decisions(opportunity_id);
+create index if not exists idx_financial_transactions_opportunity_id on financial_transactions(opportunity_id);
+create index if not exists idx_freelancer_assignments_opportunity_id on freelancer_assignments(opportunity_id);
+
+alter table strategies enable row level security;
+alter table market_reports enable row level security;
+alter table opportunities enable row level security;
+alter table decisions enable row level security;
+alter table financial_transactions enable row level security;
+alter table freelancer_assignments enable row level security;
+
+drop policy if exists "app read strategies" on strategies;
+drop policy if exists "app write strategies" on strategies;
+drop policy if exists "app read market reports" on market_reports;
+drop policy if exists "app write market reports" on market_reports;
+drop policy if exists "app read opportunities" on opportunities;
+drop policy if exists "app write opportunities" on opportunities;
+drop policy if exists "app read decisions" on decisions;
+drop policy if exists "app write decisions" on decisions;
+drop policy if exists "app read financial transactions" on financial_transactions;
+drop policy if exists "app write financial transactions" on financial_transactions;
+drop policy if exists "app read freelancer assignments" on freelancer_assignments;
+drop policy if exists "app write freelancer assignments" on freelancer_assignments;
+
+create policy "app read strategies" on strategies for select to anon, authenticated using (true);
+create policy "app write strategies" on strategies for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read market reports" on market_reports for select to anon, authenticated using (true);
+create policy "app write market reports" on market_reports for insert to anon, authenticated with check (length(market_name) > 0);
+create policy "app read opportunities" on opportunities for select to anon, authenticated using (true);
+create policy "app write opportunities" on opportunities for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read decisions" on decisions for select to anon, authenticated using (true);
+create policy "app write decisions" on decisions for insert to anon, authenticated with check (length(recommendation) > 0);
+create policy "app read financial transactions" on financial_transactions for select to anon, authenticated using (true);
+create policy "app write financial transactions" on financial_transactions for insert to anon, authenticated with check (amount >= 0 and length(description) > 0);
+create policy "app read freelancer assignments" on freelancer_assignments for select to anon, authenticated using (true);
+create policy "app write freelancer assignments" on freelancer_assignments for insert to anon, authenticated with check (length(role_needed) > 0);
+
+grant select, insert on strategies to anon, authenticated, service_role;
+grant select, insert on market_reports to anon, authenticated, service_role;
+grant select, insert on opportunities to anon, authenticated, service_role;
+grant select, insert on decisions to anon, authenticated, service_role;
+grant select, insert on financial_transactions to anon, authenticated, service_role;
+grant select, insert on freelancer_assignments to anon, authenticated, service_role;
+
 create table if not exists company_logs (
   id uuid primary key default gen_random_uuid(),
   request text not null,

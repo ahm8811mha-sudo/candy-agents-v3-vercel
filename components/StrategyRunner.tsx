@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Loader2, Send, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import BIForm from "./BIForm";
 
 type ExecutionResult = {
   ok: true;
@@ -220,6 +221,8 @@ export default function StrategyRunner() {
           <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
         </div>
       </section>
+
+      <BIForm />
     </main>
   );
 }

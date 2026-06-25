@@ -1,4 +1,10 @@
 drop table if exists external_sync_logs cascade;
+drop table if exists freelancer_assignments cascade;
+drop table if exists financial_transactions cascade;
+drop table if exists decisions cascade;
+drop table if exists opportunities cascade;
+drop table if exists market_reports cascade;
+drop table if exists strategies cascade;
 drop table if exists business_integrations cascade;
 drop table if exists business_memory cascade;
 drop table if exists business_actions cascade;
