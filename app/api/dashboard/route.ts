@@ -1,4 +1,5 @@
 import { calculateFinancials } from "@/lib/accountingSystem";
+import { evaluateBusiness } from "@/lib/businessBrain";
 import { getDashboardData } from "@/lib/companyExecutionSystem";
 import { NextResponse } from "next/server";
 
@@ -10,11 +11,13 @@ export async function GET() {
       getDashboardData(),
       calculateFinancials(),
     ]);
+    const commandCenter = evaluateBusiness("تشغيل يومي للشركة", financials);
 
     return NextResponse.json({
       ok: true,
       ...dashboard,
       financials,
+      commandCenter,
     });
   } catch (error) {
     return NextResponse.json(

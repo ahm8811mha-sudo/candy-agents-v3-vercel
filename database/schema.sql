@@ -117,11 +117,22 @@ create table if not exists projects (
   name text not null,
   request text,
   status text not null default 'ACTIVE',
+  budget numeric default 0,
+  approved_budget numeric default 0,
+  health_score int default 0 check (health_score between 0 and 100),
+  risk_level text default 'LOW',
+  approval_status text default 'NOT_REQUIRED',
+  strategic_direction text,
+  financial_snapshot jsonb default '{}',
+  next_review_at timestamptz,
   created_at timestamptz default now()
 );
 
 alter table tasks add column if not exists project_id uuid references projects(id) on delete set null;
 alter table tasks add column if not exists content text;
+alter table tasks add column if not exists owner_role text;
+alter table tasks add column if not exists kpi_name text;
+alter table tasks add column if not exists kpi_target numeric;
 
 create index if not exists idx_tasks_project_id on tasks(project_id);
 
@@ -189,6 +200,10 @@ create table if not exists transactions (
 
 alter table transactions enable row level security;
 
+alter table transactions add column if not exists category text not null default 'general';
+alter table transactions add column if not exists project_id uuid references projects(id) on delete set null;
+alter table transactions add column if not exists channel text;
+
 drop policy if exists "app read transactions" on transactions;
 drop policy if exists "app write transactions" on transactions;
 
@@ -216,13 +231,107 @@ create policy "app write financial decisions" on financial_decisions for insert 
 
 grant select, insert on financial_decisions to anon, authenticated, service_role;
 
+create table if not exists business_kpis (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  name text not null,
+  target numeric not null default 0,
+  current numeric not null default 0,
+  unit text default '',
+  status text not null default 'WATCH',
+  due_date timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists business_alerts (
+  id uuid primary key default gen_random_uuid(),
+  severity text not null default 'MEDIUM',
+  title text not null,
+  message text not null,
+  source text not null default 'rules_engine',
+  status text not null default 'OPEN',
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists business_actions (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete set null,
+  action_type text not null,
+  title text not null,
+  description text,
+  status text not null default 'QUEUED',
+  execution_mode text not null default 'INTERNAL',
+  provider text,
+  requires_approval boolean default false,
+  approval_status text default 'NOT_REQUIRED',
+  payload jsonb default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists business_memory (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  title text not null,
+  summary text,
+  decision_quality text default 'WATCH',
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists business_integrations (
+  id text primary key,
+  provider text not null,
+  status text not null default 'NOT_CONNECTED',
+  config jsonb default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_business_kpis_project_id on business_kpis(project_id);
+create index if not exists idx_business_actions_project_id on business_actions(project_id);
+create index if not exists idx_business_alerts_status on business_alerts(status, severity);
+
 alter table projects enable row level security;
+alter table business_kpis enable row level security;
+alter table business_alerts enable row level security;
+alter table business_actions enable row level security;
+alter table business_memory enable row level security;
+alter table business_integrations enable row level security;
 
 drop policy if exists "app read projects" on projects;
 drop policy if exists "app write projects" on projects;
+drop policy if exists "app read business kpis" on business_kpis;
+drop policy if exists "app write business kpis" on business_kpis;
+drop policy if exists "app read business alerts" on business_alerts;
+drop policy if exists "app write business alerts" on business_alerts;
+drop policy if exists "app read business actions" on business_actions;
+drop policy if exists "app write business actions" on business_actions;
+drop policy if exists "app read business memory" on business_memory;
+drop policy if exists "app write business memory" on business_memory;
+drop policy if exists "app read business integrations" on business_integrations;
+drop policy if exists "app write business integrations" on business_integrations;
 
 create policy "app read projects" on projects for select to anon, authenticated using (true);
 create policy "app write projects" on projects for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read business kpis" on business_kpis for select to anon, authenticated using (true);
+create policy "app write business kpis" on business_kpis for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read business alerts" on business_alerts for select to anon, authenticated using (true);
+create policy "app write business alerts" on business_alerts for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read business actions" on business_actions for select to anon, authenticated using (true);
+create policy "app write business actions" on business_actions for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read business memory" on business_memory for select to anon, authenticated using (true);
+create policy "app write business memory" on business_memory for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read business integrations" on business_integrations for select to anon, authenticated using (true);
+create policy "app write business integrations" on business_integrations for insert to anon, authenticated with check (length(id) > 0);
 
 grant select, insert on projects to anon, authenticated, service_role;
 grant select, insert, update on tasks to anon, authenticated, service_role;
+grant select, insert, update on approvals to anon, authenticated, service_role;
+grant select, insert, update on business_kpis to anon, authenticated, service_role;
+grant select, insert, update on business_alerts to anon, authenticated, service_role;
+grant select, insert, update on business_actions to anon, authenticated, service_role;
+grant select, insert on business_memory to anon, authenticated, service_role;
+grant select, insert, update on business_integrations to anon, authenticated, service_role;

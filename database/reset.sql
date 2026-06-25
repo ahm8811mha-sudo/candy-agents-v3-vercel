@@ -1,4 +1,9 @@
 drop table if exists external_sync_logs cascade;
+drop table if exists business_integrations cascade;
+drop table if exists business_memory cascade;
+drop table if exists business_actions cascade;
+drop table if exists business_alerts cascade;
+drop table if exists business_kpis cascade;
 drop table if exists activity_logs cascade;
 drop table if exists notifications cascade;
 drop table if exists approvals cascade;

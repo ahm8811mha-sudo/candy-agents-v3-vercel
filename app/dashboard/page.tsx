@@ -19,6 +19,10 @@ type Task = {
   description?: string;
   status?: string;
   priority?: string;
+  owner_role?: string;
+  kpi_name?: string;
+  kpi_target?: number;
+  progress_percent?: number;
 };
 
 type Decision = {
@@ -36,9 +40,60 @@ type DashboardData = {
     profit: number;
     transactionCount?: number;
   };
+  commandCenter: {
+    healthScore: number;
+    actionToday: string;
+    riskLevel: string;
+    expenseRatio: number;
+    profitMargin: number;
+    runwayMonths: number;
+    burnRate: number;
+    approval: {
+      gate: string;
+      requiredRole: string;
+      reason: string;
+      budget: number;
+    };
+  };
   projects: Project[];
   tasks: Task[];
   decisions: Decision[];
+  alerts: Array<{
+    id: string;
+    severity: string;
+    title: string;
+    message: string;
+    status?: string;
+  }>;
+  kpis: Array<{
+    id: string;
+    name: string;
+    target: number;
+    current: number;
+    unit: string;
+    status: string;
+  }>;
+  actions: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    status: string;
+    execution_mode: string;
+    provider?: string;
+    approval_status?: string;
+  }>;
+  approvals: Array<{
+    id: string;
+    entity_type: string;
+    status: string;
+    notes?: string;
+  }>;
+  memory: Array<{
+    id: string;
+    title: string;
+    summary?: string;
+    decision_quality?: string;
+  }>;
 };
 
 type ExecutionResult = {
@@ -48,9 +103,24 @@ type ExecutionResult = {
 
 const emptyData: DashboardData = {
   financials: { income: 0, expenses: 0, profit: 0, transactionCount: 0 },
+  commandCenter: {
+    healthScore: 0,
+    actionToday: "بانتظار تحميل بيانات الشركة.",
+    riskLevel: "LOW",
+    expenseRatio: 0,
+    profitMargin: 0,
+    runwayMonths: 0,
+    burnRate: 0,
+    approval: { gate: "AUTO", requiredRole: "NONE", reason: "لا توجد موافقة مطلوبة.", budget: 0 },
+  },
   projects: [],
   tasks: [],
   decisions: [],
+  alerts: [],
+  kpis: [],
+  actions: [],
+  approvals: [],
+  memory: [],
 };
 
 const currency = new Intl.NumberFormat("ar-SA", {
@@ -77,9 +147,15 @@ export default function Dashboard() {
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل لوحة CEO.");
       setData({
         financials: json.financials || emptyData.financials,
+        commandCenter: json.commandCenter || emptyData.commandCenter,
         projects: json.projects || [],
         tasks: json.tasks || [],
         decisions: json.decisions || [],
+        alerts: json.alerts || [],
+        kpis: json.kpis || [],
+        actions: json.actions || [],
+        approvals: json.approvals || [],
+        memory: json.memory || [],
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل لوحة CEO.");
@@ -134,10 +210,25 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <section className="apple-metrics" aria-label="Financial cards">
+        <section className="apple-metrics extended" aria-label="Financial cards">
+          <Card title="Health Score" value={`${data.commandCenter.healthScore}/100`} tone={data.commandCenter.healthScore >= 70 ? "green" : data.commandCenter.healthScore >= 45 ? "blue" : "red"} />
           <Card title="Revenue" value={currency.format(Number(data.financials.income) || 0)} tone="blue" />
           <Card title="Expenses" value={currency.format(Number(data.financials.expenses) || 0)} tone="red" />
           <Card title="Profit" value={currency.format(Number(data.financials.profit) || 0)} tone={data.financials.profit >= 0 ? "green" : "red"} />
+        </section>
+
+        <section className="apple-command-center">
+          <div className="apple-command-main">
+            <span className="apple-eyebrow"><Sparkles size={16} /> Recommended Action Today</span>
+            <h2>{data.commandCenter.actionToday}</h2>
+            <p>{data.commandCenter.approval.reason}</p>
+          </div>
+          <div className="apple-signal-grid">
+            <Signal title="Risk" value={data.commandCenter.riskLevel} />
+            <Signal title="Approval" value={data.commandCenter.approval.gate} />
+            <Signal title="Expense Ratio" value={`${Math.round(data.commandCenter.expenseRatio * 100)}%`} />
+            <Signal title="Runway" value={`${Number(data.commandCenter.runwayMonths || 0).toFixed(1)} شهر`} />
+          </div>
         </section>
 
         <section className="apple-control">
@@ -175,6 +266,39 @@ export default function Dashboard() {
         </section>
 
         <div className="apple-sections">
+          <Section title="Alerts" count={data.alerts.length}>
+            {data.alerts.length === 0 && <EmptyRow text="لا توجد تنبيهات مفتوحة." />}
+            {data.alerts.map((alert) => (
+              <AlertItem key={alert.id} severity={alert.severity} title={alert.title} text={alert.message} />
+            ))}
+          </Section>
+
+          <Section title="Approvals" count={data.approvals.length}>
+            {data.approvals.length === 0 && <EmptyRow text="لا توجد موافقات معلقة." />}
+            {data.approvals.map((approval) => (
+              <Item key={approval.id} title={approval.entity_type} text={approval.notes || ""} meta={approval.status} />
+            ))}
+          </Section>
+
+          <Section title="KPIs" count={data.kpis.length}>
+            {data.kpis.length === 0 && <EmptyRow text="لا توجد مؤشرات أداء بعد." />}
+            {data.kpis.map((kpi) => (
+              <KpiItem key={kpi.id} name={kpi.name} current={Number(kpi.current) || 0} target={Number(kpi.target) || 0} unit={kpi.unit} status={kpi.status} />
+            ))}
+          </Section>
+
+          <Section title="Business Actions" count={data.actions.length}>
+            {data.actions.length === 0 && <EmptyRow text="لا توجد إجراءات تجارية جاهزة." />}
+            {data.actions.map((action) => (
+              <Item
+                key={action.id}
+                title={action.title}
+                text={action.description || ""}
+                meta={`${action.status} · ${action.provider || action.execution_mode}`}
+              />
+            ))}
+          </Section>
+
           <Section title="Projects" count={data.projects.length}>
             {data.projects.length === 0 && <EmptyRow text="لا توجد مشاريع محفوظة بعد." />}
             {data.projects.map((project) => (
@@ -203,6 +327,13 @@ export default function Dashboard() {
                 text={shortText(decision.ceo_decision || decision.cfo_report || "")}
                 meta={formatDate(decision.created_at)}
               />
+            ))}
+          </Section>
+
+          <Section title="Business Memory" count={data.memory.length}>
+            {data.memory.length === 0 && <EmptyRow text="لا توجد ذاكرة تجارية بعد." />}
+            {data.memory.map((memory) => (
+              <Item key={memory.id} title={memory.title} text={shortText(memory.summary || "")} meta={memory.decision_quality || "WATCH"} />
             ))}
           </Section>
         </div>
@@ -240,6 +371,38 @@ function Item({ title, text, meta }: { title: string; text?: string; meta?: stri
         {text && <p>{text}</p>}
       </div>
       {meta && <small>{meta}</small>}
+    </article>
+  );
+}
+
+function Signal({ title, value }: { title: string; value: string }) {
+  return (
+    <article className="apple-signal">
+      <small>{title}</small>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function AlertItem({ severity, title, text }: { severity: string; title: string; text: string }) {
+  return (
+    <article className={`apple-alert ${severity.toLowerCase()}`}>
+      <small>{severity}</small>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </article>
+  );
+}
+
+function KpiItem({ name, current, target, unit, status }: { name: string; current: number; target: number; unit: string; status: string }) {
+  const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  return (
+    <article className="apple-kpi">
+      <div>
+        <strong>{name}</strong>
+        <small>{status} · {current.toLocaleString("ar-SA")} / {target.toLocaleString("ar-SA")} {unit}</small>
+      </div>
+      <span><i style={{ width: `${percent}%` }} /></span>
     </article>
   );
 }

@@ -1,4 +1,5 @@
 import { calculateFinancials, type Financials } from "./accountingSystem";
+import { buildExecutionBlueprint, evaluateBusiness, type BusinessAlert, type BusinessIntelligence, type ExecutionBlueprint, type RecommendedAction } from "./businessBrain";
 import { getSupabaseAdmin } from "./supabase";
 
 type ExecutionProject = {
@@ -17,13 +18,37 @@ type ExecutionTask = {
   created_at?: string;
 };
 
+type ExecutionKpi = {
+  id?: string;
+  project_id?: string;
+  name: string;
+  target: number;
+  current?: number;
+  unit: string;
+  status: string;
+};
+
+type ExecutionApproval = {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  status: string;
+  notes?: string;
+};
+
 type CompanyExecutionResult = {
   financials: Financials;
+  intelligence: BusinessIntelligence;
   cfo: string;
   ceo: string;
   tasks: string;
   project: ExecutionProject;
   task: ExecutionTask;
+  tasksCreated: ExecutionTask[];
+  kpis: ExecutionKpi[];
+  actions: RecommendedAction[];
+  alerts: BusinessAlert[];
+  approval: ExecutionApproval | null;
   saved: boolean;
 };
 
@@ -202,9 +227,14 @@ Rules:
   );
 }
 
-async function createProjectFlow(request: string, tasks: string) {
+async function createProjectFlow(
+  request: string,
+  tasksReport: string,
+  intelligence: BusinessIntelligence,
+  blueprint: ExecutionBlueprint,
+  ceo: string
+) {
   const projectName = request.trim().slice(0, 120);
-  const taskTitle = `تنفيذ قرار: ${projectName.slice(0, 70)}`;
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
@@ -214,16 +244,20 @@ async function createProjectFlow(request: string, tasks: string) {
       status: "ACTIVE",
       created_at: new Date().toISOString(),
     };
+    const tasksCreated = blueprint.tasks.map((task) => ({
+      id: newId("execution-task"),
+      project_id: project.id,
+      title: task.title,
+      content: task.content,
+      status: "TODO",
+      created_at: new Date().toISOString(),
+    }));
     return {
       project,
-      task: {
-        id: newId("execution-task"),
-        project_id: project.id,
-        title: taskTitle,
-        content: tasks,
-        status: "TODO",
-        created_at: new Date().toISOString(),
-      },
+      task: tasksCreated[0],
+      tasksCreated,
+      kpis: blueprint.kpis,
+      approval: null,
       saved: false,
     };
   }
@@ -234,33 +268,133 @@ async function createProjectFlow(request: string, tasks: string) {
       name: projectName,
       request: request.trim(),
       status: "ACTIVE",
+      budget: intelligence.requestedBudget,
+      approved_budget: intelligence.approval.gate === "AUTO" ? intelligence.requestedBudget : 0,
+      health_score: intelligence.healthScore,
+      risk_level: intelligence.riskLevel,
+      approval_status: intelligence.approval.gate === "AUTO" ? "APPROVED" : "PENDING",
+      strategic_direction: intelligence.actionToday,
+      financial_snapshot: {
+        requestedBudget: intelligence.requestedBudget,
+        healthScore: intelligence.healthScore,
+        riskLevel: intelligence.riskLevel,
+        approval: intelligence.approval,
+      },
+      next_review_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     })
     .select("id,name,status,created_at")
     .single();
 
   if (projectError) throw projectError;
 
-  const { data: task, error: taskError } = await supabase
+  const taskRows = blueprint.tasks.map((task) => ({
+    id: newId("execution-task"),
+    project_id: project.id,
+    title: task.title,
+    description: task.content,
+    content: task.content,
+    status: "TODO",
+    priority: task.priority,
+    progress_percent: 0,
+    owner_role: task.ownerRole,
+    kpi_name: task.kpiName,
+    kpi_target: task.kpiTarget,
+    due_date: new Date(Date.now() + task.dueDays * 86400000).toISOString(),
+  }));
+
+  const { data: tasksCreated, error: taskError } = await supabase
     .from("tasks")
-    .insert({
-      id: newId("execution-task"),
-      project_id: project.id,
-      title: taskTitle,
-      description: tasks,
-      content: tasks,
-      status: "TODO",
-      priority: "HIGH",
-      progress_percent: 0,
-      due_date: new Date(Date.now() + 14 * 86400000).toISOString(),
-    })
+    .insert(taskRows)
     .select("id,project_id,title,content,status,created_at")
-    .single();
+    .order("created_at", { ascending: true });
 
   if (taskError) throw taskError;
 
+  const kpiRows = blueprint.kpis.map((kpi) => ({
+    project_id: project.id,
+    name: kpi.name,
+    target: kpi.target,
+    current: 0,
+    unit: kpi.unit,
+    status: kpi.status,
+    due_date: new Date(Date.now() + kpi.dueDays * 86400000).toISOString(),
+  }));
+  const { data: kpis, error: kpiError } = await supabase
+    .from("business_kpis")
+    .insert(kpiRows)
+    .select("id,project_id,name,target,current,unit,status");
+  if (kpiError) throw kpiError;
+
+  const actionRows = blueprint.actions.map((action) => ({
+    project_id: project.id,
+    action_type: action.actionType,
+    title: action.title,
+    description: action.description,
+    status: action.requiresApproval ? "WAITING_APPROVAL" : "QUEUED",
+    execution_mode: action.executionMode,
+    provider: action.provider || "internal",
+    requires_approval: action.requiresApproval,
+    approval_status: action.requiresApproval ? "PENDING" : "NOT_REQUIRED",
+    payload: {
+      request,
+      priority: action.priority,
+      approval: intelligence.approval,
+    },
+  }));
+  const { error: actionsError } = await supabase.from("business_actions").insert(actionRows);
+  if (actionsError) throw actionsError;
+
+  if (intelligence.alerts.length) {
+    const alertRows = intelligence.alerts.map((alert) => ({
+      severity: alert.severity,
+      title: alert.title,
+      message: alert.message,
+      source: alert.source,
+      metadata: alert.metadata || {},
+    }));
+    const { error: alertError } = await supabase.from("business_alerts").insert(alertRows);
+    if (alertError) throw alertError;
+  }
+
+  let approval: ExecutionApproval | null = null;
+  if (intelligence.approval.requiredRole !== "NONE") {
+    const approvalId = newId("approval");
+    const { data: approvalData, error: approvalError } = await supabase
+      .from("approvals")
+      .insert({
+        id: approvalId,
+        entity_type: `${intelligence.approval.requiredRole}_PROJECT_APPROVAL`,
+        entity_id: project.id,
+        status: "PENDING",
+        notes: intelligence.approval.reason,
+      })
+      .select("id,entity_type,entity_id,status,notes")
+      .single();
+    if (approvalError) throw approvalError;
+    approval = approvalData as ExecutionApproval;
+  }
+
+  const { error: memoryError } = await supabase.from("business_memory").insert({
+    event_type: "COMPANY_EXECUTION",
+    title: projectName,
+    summary: `قرار: ${intelligence.actionToday}\n\n${ceo.slice(0, 1200)}`,
+    decision_quality: intelligence.riskLevel === "LOW" ? "PROMISING" : "WATCH",
+    metadata: {
+      request,
+      tasksReport,
+      healthScore: intelligence.healthScore,
+      approval: intelligence.approval,
+      actions: blueprint.actions.map((action) => action.actionType),
+    },
+  });
+  if (memoryError) throw memoryError;
+
   return {
     project: project as ExecutionProject,
-    task: task as ExecutionTask,
+    task: (tasksCreated?.[0] || taskRows[0]) as ExecutionTask,
+    tasksCreated: (tasksCreated || []) as ExecutionTask[],
+    kpis: (kpis || []) as ExecutionKpi[],
+    approval,
     saved: true,
   };
 }
@@ -286,19 +420,33 @@ export async function runCompanyExecution(request: string): Promise<CompanyExecu
   }
 
   const financials = await calculateFinancials();
+  const intelligence = evaluateBusiness(request.trim(), financials);
   const cfo = await CFO(request.trim(), financials);
   const ceo = await CEO(cfo);
   await saveFinancialDecision(request.trim(), financials, cfo, ceo);
   const tasks = await generateTasks(ceo);
-  const { project, task, saved } = await createProjectFlow(request.trim(), tasks);
+  const blueprint = buildExecutionBlueprint(request.trim(), intelligence);
+  const { project, task, tasksCreated, kpis, approval, saved } = await createProjectFlow(
+    request.trim(),
+    tasks,
+    intelligence,
+    blueprint,
+    ceo
+  );
 
   return {
     financials,
+    intelligence,
     cfo,
     ceo,
     tasks,
     project,
     task,
+    tasksCreated,
+    kpis,
+    actions: blueprint.actions,
+    alerts: intelligence.alerts,
+    approval,
     saved,
   };
 }
@@ -310,26 +458,46 @@ export async function getDashboardData() {
       projects: [],
       tasks: [],
       decisions: [],
+      alerts: [],
+      kpis: [],
+      actions: [],
+      approvals: [],
+      memory: [],
     };
   }
 
-  const [projects, tasks, decisions] = await Promise.all([
+  const [projects, tasks, decisions, alerts, kpis, actions, approvals, memory] = await Promise.all([
     supabase.from("projects").select("*").order("created_at", { ascending: false }).limit(20),
     supabase
       .from("tasks")
-      .select("id,project_id,title,content,status,priority,created_at,due_date,progress_percent")
+      .select("id,project_id,title,content,description,status,priority,created_at,due_date,progress_percent,owner_role,kpi_name,kpi_target")
       .order("created_at", { ascending: false })
       .limit(20),
     supabase.from("financial_decisions").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("business_alerts").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("business_kpis").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("business_actions").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("approvals").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("business_memory").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
 
   if (projects.error) throw projects.error;
   if (tasks.error) throw tasks.error;
   if (decisions.error) throw decisions.error;
+  if (alerts.error) throw alerts.error;
+  if (kpis.error) throw kpis.error;
+  if (actions.error) throw actions.error;
+  if (approvals.error) throw approvals.error;
+  if (memory.error) throw memory.error;
 
   return {
     projects: projects.data || [],
     tasks: tasks.data || [],
     decisions: decisions.data || [],
+    alerts: alerts.data || [],
+    kpis: kpis.data || [],
+    actions: actions.data || [],
+    approvals: approvals.data || [],
+    memory: memory.data || [],
   };
 }
