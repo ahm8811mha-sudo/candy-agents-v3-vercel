@@ -61,6 +61,7 @@ drop policy if exists "app read accounting bank transactions" on accounting_bank
 drop policy if exists "app write accounting bank transactions" on accounting_bank_transactions;
 drop policy if exists "app read ceo office items" on ceo_office_items;
 drop policy if exists "app write ceo office items" on ceo_office_items;
+drop policy if exists "app update ceo office items" on ceo_office_items;
 drop policy if exists "app read marketing channels" on marketing_channels;
 drop policy if exists "app write marketing channels" on marketing_channels;
 drop policy if exists "app read marketing campaigns" on marketing_campaigns;
@@ -109,6 +110,7 @@ create policy "app read accounting bank transactions" on accounting_bank_transac
 create policy "app write accounting bank transactions" on accounting_bank_transactions for insert to anon, authenticated with check (length(description) > 0);
 create policy "app read ceo office items" on ceo_office_items for select to anon, authenticated using (true);
 create policy "app write ceo office items" on ceo_office_items for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update ceo office items" on ceo_office_items for update to anon, authenticated using (true) with check (length(title) > 0);
 create policy "app read marketing channels" on marketing_channels for select to anon, authenticated using (true);
 create policy "app write marketing channels" on marketing_channels for insert to anon, authenticated with check (length(name) > 0);
 create policy "app read marketing campaigns" on marketing_campaigns for select to anon, authenticated using (true);

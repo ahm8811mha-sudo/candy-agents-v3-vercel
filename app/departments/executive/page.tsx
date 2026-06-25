@@ -1,13 +1,7 @@
-import DepartmentPage from "@/components/DepartmentPage";
+import ExecutiveOfficeConsole from "@/components/ExecutiveOfficeConsole";
+
+export const dynamic = "force-dynamic";
 
 export default function ExecutivePage() {
-  return (
-    <DepartmentPage
-      title="الإدارة التنفيذية"
-      subtitle="صفحة مستقلة لتجميع تقارير الإدارات، إصدار القرارات، واعتماد مسارات التنفيذ."
-      badge="CEO OS"
-      icon="executive"
-      capabilities={["ملخص تنفيذي", "اعتماد القرارات", "إدارة المخاطر", "متابعة الأداء"]}
-    />
-  );
+  return <ExecutiveOfficeConsole />;
 }

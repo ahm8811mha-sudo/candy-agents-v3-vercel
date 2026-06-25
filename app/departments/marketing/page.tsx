@@ -1,13 +1,7 @@
-import DepartmentPage from "@/components/DepartmentPage";
+import MarketingOperatingConsole from "@/components/MarketingOperatingConsole";
+
+export const dynamic = "force-dynamic";
 
 export default function MarketingPage() {
-  return (
-    <DepartmentPage
-      title="إدارة التسويق"
-      subtitle="صفحة مستقلة لإدارة الحملات، الجمهور المستهدف، الميزانيات التسويقية، ومؤشرات الأداء."
-      badge="Marketing OS"
-      icon="marketing"
-      capabilities={["إدارة الحملات", "تحليل الجمهور", "ميزانية التسويق", "تقرير KPIs"]}
-    />
-  );
+  return <MarketingOperatingConsole />;
 }

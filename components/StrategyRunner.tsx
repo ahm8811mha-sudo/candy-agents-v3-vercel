@@ -212,6 +212,9 @@ export default function StrategyRunner() {
           <div className="dashboard-actions">
             <Link className="secondary-btn" href="/dashboard">فتح Dashboard</Link>
             <Link className="secondary-btn" href="/enterprise-os">Enterprise OS</Link>
+            <Link className="secondary-btn" href="/departments/finance">Accounting OS</Link>
+            <Link className="secondary-btn" href="/departments/executive">CEO Office</Link>
+            <Link className="secondary-btn" href="/departments/marketing">Marketing OS</Link>
             <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
           </div>
         </div>
