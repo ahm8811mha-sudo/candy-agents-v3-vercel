@@ -207,6 +207,7 @@ export async function getAccountingConsole() {
       payables,
       simpleCashBasis: simpleFinancials,
     },
+    aging: buildAgingReport(invoices),
     cfoSummary: buildCfoSummary({
       revenue,
       expenses,
@@ -218,6 +219,37 @@ export async function getAccountingConsole() {
       bankCash,
     }),
   };
+}
+
+type AgingBucket = "current" | "days_1_30" | "days_31_60" | "days_61_90" | "over_90";
+type AgingBuckets = Record<AgingBucket, number>;
+
+function buildAgingReport(invoices: any[]) {
+  const buckets: AgingBuckets = {
+    current: 0,
+    days_1_30: 0,
+    days_31_60: 0,
+    days_61_90: 0,
+    over_90: 0,
+  };
+  const sales = { ...buckets };
+  const purchases = { ...buckets };
+
+  for (const invoice of invoices) {
+    const outstanding = number(invoice.total) - number(invoice.paid);
+    if (outstanding <= 0) continue;
+    const due = invoice.due_date ? new Date(invoice.due_date) : new Date();
+    const days = Math.floor((Date.now() - due.getTime()) / 86400000);
+    const bucket: AgingBucket =
+      days <= 0 ? "current" : days <= 30 ? "days_1_30" : days <= 60 ? "days_31_60" : days <= 90 ? "days_61_90" : "over_90";
+    if (invoice.invoice_type === "SALES") {
+      sales[bucket] += outstanding;
+    } else {
+      purchases[bucket] += outstanding;
+    }
+  }
+
+  return { receivables: sales, payables: purchases };
 }
 
 export async function postJournalEntry(input: JournalInput) {

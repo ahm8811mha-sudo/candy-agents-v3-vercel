@@ -1117,3 +1117,298 @@ grant select, insert, update on gov_documents to anon, authenticated, service_ro
 grant select, insert on gov_document_files to anon, authenticated, service_role;
 grant select, insert on gov_document_extractions to anon, authenticated, service_role;
 grant select, insert, update on gov_renewal_tasks to anon, authenticated, service_role;
+
+alter table gov_document_files add column if not exists storage_bucket text not null default 'government-documents';
+alter table gov_document_files add column if not exists storage_path text;
+alter table gov_document_files add column if not exists file_category text;
+alter table gov_document_files add column if not exists version_no int not null default 1;
+alter table gov_document_files add column if not exists is_current boolean not null default true;
+
+create table if not exists gov_document_access_logs (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references gov_documents(id) on delete cascade,
+  file_id uuid references gov_document_files(id) on delete cascade,
+  actor_role text not null default 'SYSTEM',
+  action text not null,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists operational_alerts (
+  id uuid primary key default gen_random_uuid(),
+  alert_key text unique not null,
+  department text not null,
+  severity text not null default 'MEDIUM',
+  title text not null,
+  message text not null,
+  source_table text,
+  source_id text,
+  action_url text,
+  due_date date,
+  status text not null default 'OPEN',
+  metadata jsonb default '{}',
+  last_seen_at timestamptz default now(),
+  resolved_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table if not exists crm_leads (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  company text,
+  phone text,
+  email text,
+  source text not null default 'manual',
+  interest text,
+  estimated_value numeric not null default 0,
+  status text not null default 'NEW',
+  next_follow_up_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists crm_deals (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid references crm_leads(id) on delete set null,
+  title text not null,
+  stage text not null default 'DISCOVERY',
+  value numeric not null default 0,
+  probability numeric not null default 0,
+  expected_close_date date,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists crm_activities (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid references crm_leads(id) on delete cascade,
+  deal_id uuid references crm_deals(id) on delete cascade,
+  activity_type text not null default 'FOLLOW_UP',
+  summary text not null,
+  next_step text,
+  due_at timestamptz,
+  status text not null default 'OPEN',
+  created_at timestamptz default now()
+);
+
+create table if not exists sales_quotes (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid references crm_deals(id) on delete set null,
+  quote_number text unique not null,
+  customer_name text not null,
+  total numeric not null default 0,
+  status text not null default 'DRAFT',
+  valid_until date,
+  items jsonb default '[]',
+  created_at timestamptz default now()
+);
+
+create table if not exists suppliers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  category text not null default 'general',
+  contact_name text,
+  phone text,
+  email text,
+  rating numeric not null default 3,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists supplier_quotes (
+  id uuid primary key default gen_random_uuid(),
+  supplier_id uuid references suppliers(id) on delete cascade,
+  title text not null,
+  total numeric not null default 0,
+  status text not null default 'RECEIVED',
+  items jsonb default '[]',
+  created_at timestamptz default now()
+);
+
+create table if not exists purchase_orders (
+  id uuid primary key default gen_random_uuid(),
+  supplier_id uuid references suppliers(id) on delete set null,
+  po_number text unique not null,
+  title text not null,
+  status text not null default 'DRAFT',
+  total numeric not null default 0,
+  expected_delivery date,
+  items jsonb default '[]',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  sku text unique not null,
+  name text not null,
+  category text not null default 'commerce',
+  unit_cost numeric not null default 0,
+  target_price numeric not null default 0,
+  on_hand numeric not null default 0,
+  reorder_point numeric not null default 0,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists inventory_movements (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid references inventory_items(id) on delete cascade,
+  movement_type text not null default 'ADJUSTMENT',
+  quantity numeric not null default 0,
+  unit_cost numeric not null default 0,
+  note text,
+  created_at timestamptz default now()
+);
+
+create table if not exists accounting_payments (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid references accounting_invoices(id) on delete cascade,
+  amount numeric not null default 0,
+  payment_date date not null default current_date,
+  method text not null default 'manual',
+  reference text,
+  created_at timestamptz default now()
+);
+
+create table if not exists bank_reconciliation_rules (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  match_text text not null,
+  account_code text not null,
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_operational_alerts_status on operational_alerts(status, severity);
+create index if not exists idx_crm_leads_status on crm_leads(status);
+create index if not exists idx_crm_deals_stage on crm_deals(stage);
+create index if not exists idx_inventory_items_reorder on inventory_items(on_hand, reorder_point);
+create index if not exists idx_purchase_orders_status on purchase_orders(status);
+create index if not exists idx_gov_document_access_logs_created_at on gov_document_access_logs(created_at desc);
+
+alter table gov_document_access_logs enable row level security;
+alter table operational_alerts enable row level security;
+alter table crm_leads enable row level security;
+alter table crm_deals enable row level security;
+alter table crm_activities enable row level security;
+alter table sales_quotes enable row level security;
+alter table suppliers enable row level security;
+alter table supplier_quotes enable row level security;
+alter table purchase_orders enable row level security;
+alter table inventory_items enable row level security;
+alter table inventory_movements enable row level security;
+alter table accounting_payments enable row level security;
+alter table bank_reconciliation_rules enable row level security;
+
+drop policy if exists "app read gov document access logs" on gov_document_access_logs;
+drop policy if exists "app write gov document access logs" on gov_document_access_logs;
+drop policy if exists "app read operational alerts" on operational_alerts;
+drop policy if exists "app write operational alerts" on operational_alerts;
+drop policy if exists "app update operational alerts" on operational_alerts;
+drop policy if exists "app read crm leads" on crm_leads;
+drop policy if exists "app write crm leads" on crm_leads;
+drop policy if exists "app update crm leads" on crm_leads;
+drop policy if exists "app read crm deals" on crm_deals;
+drop policy if exists "app write crm deals" on crm_deals;
+drop policy if exists "app update crm deals" on crm_deals;
+drop policy if exists "app read crm activities" on crm_activities;
+drop policy if exists "app write crm activities" on crm_activities;
+drop policy if exists "app read sales quotes" on sales_quotes;
+drop policy if exists "app write sales quotes" on sales_quotes;
+drop policy if exists "app read suppliers" on suppliers;
+drop policy if exists "app write suppliers" on suppliers;
+drop policy if exists "app update suppliers" on suppliers;
+drop policy if exists "app read supplier quotes" on supplier_quotes;
+drop policy if exists "app write supplier quotes" on supplier_quotes;
+drop policy if exists "app read purchase orders" on purchase_orders;
+drop policy if exists "app write purchase orders" on purchase_orders;
+drop policy if exists "app update purchase orders" on purchase_orders;
+drop policy if exists "app read inventory items" on inventory_items;
+drop policy if exists "app write inventory items" on inventory_items;
+drop policy if exists "app update inventory items" on inventory_items;
+drop policy if exists "app read inventory movements" on inventory_movements;
+drop policy if exists "app write inventory movements" on inventory_movements;
+drop policy if exists "app read accounting payments" on accounting_payments;
+drop policy if exists "app write accounting payments" on accounting_payments;
+drop policy if exists "app read bank reconciliation rules" on bank_reconciliation_rules;
+drop policy if exists "app write bank reconciliation rules" on bank_reconciliation_rules;
+
+create policy "app read gov document access logs" on gov_document_access_logs for select to anon, authenticated using (true);
+create policy "app write gov document access logs" on gov_document_access_logs for insert to anon, authenticated with check (length(action) > 0);
+create policy "app read operational alerts" on operational_alerts for select to anon, authenticated using (true);
+create policy "app write operational alerts" on operational_alerts for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update operational alerts" on operational_alerts for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read crm leads" on crm_leads for select to anon, authenticated using (true);
+create policy "app write crm leads" on crm_leads for insert to anon, authenticated with check (length(name) > 0);
+create policy "app update crm leads" on crm_leads for update to anon, authenticated using (true) with check (length(name) > 0);
+create policy "app read crm deals" on crm_deals for select to anon, authenticated using (true);
+create policy "app write crm deals" on crm_deals for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update crm deals" on crm_deals for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read crm activities" on crm_activities for select to anon, authenticated using (true);
+create policy "app write crm activities" on crm_activities for insert to anon, authenticated with check (length(summary) > 0);
+create policy "app read sales quotes" on sales_quotes for select to anon, authenticated using (true);
+create policy "app write sales quotes" on sales_quotes for insert to anon, authenticated with check (length(customer_name) > 0);
+create policy "app read suppliers" on suppliers for select to anon, authenticated using (true);
+create policy "app write suppliers" on suppliers for insert to anon, authenticated with check (length(name) > 0);
+create policy "app update suppliers" on suppliers for update to anon, authenticated using (true) with check (length(name) > 0);
+create policy "app read supplier quotes" on supplier_quotes for select to anon, authenticated using (true);
+create policy "app write supplier quotes" on supplier_quotes for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read purchase orders" on purchase_orders for select to anon, authenticated using (true);
+create policy "app write purchase orders" on purchase_orders for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update purchase orders" on purchase_orders for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read inventory items" on inventory_items for select to anon, authenticated using (true);
+create policy "app write inventory items" on inventory_items for insert to anon, authenticated with check (length(sku) > 0 and length(name) > 0);
+create policy "app update inventory items" on inventory_items for update to anon, authenticated using (true) with check (length(sku) > 0 and length(name) > 0);
+create policy "app read inventory movements" on inventory_movements for select to anon, authenticated using (true);
+create policy "app write inventory movements" on inventory_movements for insert to anon, authenticated with check (quantity <> 0);
+create policy "app read accounting payments" on accounting_payments for select to anon, authenticated using (true);
+create policy "app write accounting payments" on accounting_payments for insert to anon, authenticated with check (amount > 0);
+create policy "app read bank reconciliation rules" on bank_reconciliation_rules for select to anon, authenticated using (true);
+create policy "app write bank reconciliation rules" on bank_reconciliation_rules for insert to anon, authenticated with check (length(name) > 0);
+
+grant select, insert on gov_document_access_logs to anon, authenticated, service_role;
+grant select, insert, update on operational_alerts to anon, authenticated, service_role;
+grant select, insert, update on crm_leads to anon, authenticated, service_role;
+grant select, insert, update on crm_deals to anon, authenticated, service_role;
+grant select, insert on crm_activities to anon, authenticated, service_role;
+grant select, insert on sales_quotes to anon, authenticated, service_role;
+grant select, insert, update on suppliers to anon, authenticated, service_role;
+grant select, insert on supplier_quotes to anon, authenticated, service_role;
+grant select, insert, update on purchase_orders to anon, authenticated, service_role;
+grant select, insert, update on inventory_items to anon, authenticated, service_role;
+grant select, insert on inventory_movements to anon, authenticated, service_role;
+grant select, insert on accounting_payments to anon, authenticated, service_role;
+grant select, insert, update on bank_reconciliation_rules to anon, authenticated, service_role;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'government-documents',
+  'government-documents',
+  false,
+  10485760,
+  array['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'text/plain', 'application/json', 'text/csv']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "app read government document objects" on storage.objects;
+drop policy if exists "app write government document objects" on storage.objects;
+drop policy if exists "app update government document objects" on storage.objects;
+
+create policy "app read government document objects" on storage.objects
+for select to anon, authenticated
+using (bucket_id = 'government-documents');
+
+create policy "app write government document objects" on storage.objects
+for insert to anon, authenticated
+with check (bucket_id = 'government-documents');
+
+create policy "app update government document objects" on storage.objects
+for update to anon, authenticated
+using (bucket_id = 'government-documents')
+with check (bucket_id = 'government-documents');

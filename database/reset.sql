@@ -1,4 +1,17 @@
 drop table if exists external_sync_logs cascade;
+drop table if exists bank_reconciliation_rules cascade;
+drop table if exists accounting_payments cascade;
+drop table if exists inventory_movements cascade;
+drop table if exists inventory_items cascade;
+drop table if exists purchase_orders cascade;
+drop table if exists supplier_quotes cascade;
+drop table if exists suppliers cascade;
+drop table if exists sales_quotes cascade;
+drop table if exists crm_activities cascade;
+drop table if exists crm_deals cascade;
+drop table if exists crm_leads cascade;
+drop table if exists operational_alerts cascade;
+drop table if exists gov_document_access_logs cascade;
 drop table if exists gov_renewal_tasks cascade;
 drop table if exists gov_document_extractions cascade;
 drop table if exists gov_document_files cascade;

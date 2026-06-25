@@ -10,6 +10,7 @@ type GovernmentDocumentInput = {
   fileBase64?: string;
   fileText?: string;
   notes?: string;
+  category?: string;
 };
 
 type FeeSourceInput = {
@@ -152,6 +153,15 @@ function newId(prefix: string) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function storagePathFor(documentId: string, fileName?: string) {
+  const safeName = (fileName || "government-document").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-|-$/g, "");
+  return `${documentId}/${Date.now()}-${safeName || "document"}`;
+}
+
+function base64ToBuffer(value: string) {
+  return Buffer.from(value, "base64");
 }
 
 function dateOnly(value?: string) {
@@ -405,6 +415,17 @@ export async function seedGovernmentRelationsOS() {
   await seedGovernanceOS();
   const supabase = requireSupabase();
 
+  const bucket = await supabase.storage.getBucket("government-documents");
+  if (bucket.error) {
+    const created = await supabase.storage.createBucket("government-documents", {
+      public: false,
+      fileSizeLimit: 10 * 1024 * 1024,
+      allowedMimeTypes: ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain", "application/json", "text/csv"],
+    });
+    const recoverableStorageMessage = /already exists|not authorized|permission|row-level security|rls/i;
+    if (created.error && !recoverableStorageMessage.test(created.error.message)) throw created.error;
+  }
+
   const { error: departmentError } = await supabase.from("departments").upsert(
     {
       id: "government-relations",
@@ -459,17 +480,22 @@ export async function seedGovernmentRelationsOS() {
 export async function getGovernmentRelationsOS() {
   await seedGovernmentRelationsOS();
   const supabase = requireSupabase();
-  const [types, documents, files, fees, tasks, integrations, auditRows] = await Promise.all([
+  const [types, documents, files, fees, tasks, integrations, auditRows, accessRows] = await Promise.all([
     supabase.from("gov_document_types").select("*").order("name", { ascending: true }),
     supabase.from("gov_documents").select("*").order("created_at", { ascending: false }).limit(80),
-    supabase.from("gov_document_files").select("id, document_id, file_name, mime_type, file_size, created_at").order("created_at", { ascending: false }).limit(80),
+    supabase
+      .from("gov_document_files")
+      .select("id, document_id, file_name, mime_type, file_size, storage_bucket, storage_path, file_category, version_no, is_current, created_at")
+      .order("created_at", { ascending: false })
+      .limit(80),
     supabase.from("gov_fee_sources").select("*").order("document_type", { ascending: true }),
     supabase.from("gov_renewal_tasks").select("*").order("due_date", { ascending: true }).limit(80),
     supabase.from("business_integrations").select("*").like("id", "gov-%").order("provider", { ascending: true }),
     supabase.from("decision_audit_log").select("*").eq("entity_type", "gov_documents").order("created_at", { ascending: false }).limit(30),
+    supabase.from("gov_document_access_logs").select("*").order("created_at", { ascending: false }).limit(50),
   ]);
 
-  for (const result of [types, documents, files, fees, tasks, integrations, auditRows]) {
+  for (const result of [types, documents, files, fees, tasks, integrations, auditRows, accessRows]) {
     if (result.error) throw result.error;
   }
 
@@ -488,6 +514,7 @@ export async function getGovernmentRelationsOS() {
     tasks: tasks.data || [],
     integrations: integrations.data || [],
     audits: auditRows.data || [],
+    accessLogs: accessRows.data || [],
     metrics: {
       totalDocuments: documentRows.length,
       activeDocuments: documentRows.filter((doc: any) => doc.status === "ACTIVE").length,
@@ -497,6 +524,7 @@ export async function getGovernmentRelationsOS() {
       totalEstimatedFees,
       readyPortals,
       lastCheckedSources: (fees.data || []).filter((item: any) => item.last_checked_at).length,
+      storedFiles: (files.data || []).length,
     },
   };
 }
@@ -580,12 +608,28 @@ export async function uploadGovernmentDocument(input: GovernmentDocumentInput) {
   if (documentError) throw documentError;
 
   if (input.fileName || input.fileBase64 || input.fileText) {
+    const existingFiles = await supabase.from("gov_document_files").select("version_no").eq("document_id", document.id);
+    if (existingFiles.error) throw existingFiles.error;
+    const versionNo = Math.max(0, ...(existingFiles.data || []).map((file: any) => number(file.version_no))) + 1;
+    const storagePath = storagePathFor(document.id, input.fileName);
+    const fileBody = input.fileBase64 ? base64ToBuffer(input.fileBase64) : Buffer.from(input.fileText || "", "utf8");
+    const uploaded = await supabase.storage.from("government-documents").upload(storagePath, fileBody, {
+      contentType: input.mimeType || (input.fileText ? "text/plain" : "application/octet-stream"),
+      upsert: false,
+    });
+    if (uploaded.error) throw uploaded.error;
+
+    await supabase.from("gov_document_files").update({ is_current: false }).eq("document_id", document.id);
     const { error: fileError } = await supabase.from("gov_document_files").insert({
       document_id: document.id,
       file_name: input.fileName || "government-document",
       mime_type: input.mimeType || "application/octet-stream",
-      file_size: Math.round(((input.fileBase64 || input.fileText || "").length * 3) / 4),
-      file_payload: input.fileBase64 || null,
+      file_size: fileBody.length,
+      storage_bucket: "government-documents",
+      storage_path: storagePath,
+      file_category: input.category || extracted.documentType,
+      version_no: versionNo,
+      is_current: true,
       text_payload: input.fileText || null,
     });
     if (fileError) throw fileError;
@@ -771,4 +815,22 @@ export async function prepareDigitalRenewal(documentId: string) {
         : "Connect Nafath/government portal credentials or official API access, then rerun preparation.",
     },
   };
+}
+
+export async function createGovernmentDocumentPreview(fileId: string, actorRole = "Government Relations Manager") {
+  if (!fileId) throw new Error("Document file id is required.");
+  await seedGovernmentRelationsOS();
+  const supabase = requireSupabase();
+  const { data: file, error } = await supabase.from("gov_document_files").select("*").eq("id", fileId).single();
+  if (error) throw error;
+  const signed = await supabase.storage.from(file.storage_bucket || "government-documents").createSignedUrl(file.storage_path, 60 * 10);
+  if (signed.error) throw signed.error;
+  await supabase.from("gov_document_access_logs").insert({
+    document_id: file.document_id,
+    file_id: file.id,
+    actor_role: actorRole,
+    action: "PREVIEW",
+    metadata: { file_name: file.file_name, mime_type: file.mime_type },
+  });
+  return { file, signedUrl: signed.data.signedUrl, expiresInSeconds: 600 };
 }

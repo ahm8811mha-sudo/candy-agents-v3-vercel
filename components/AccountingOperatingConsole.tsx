@@ -37,6 +37,10 @@ type AccountingData = {
     message: string;
     controls: string[];
   };
+  aging?: {
+    receivables: Record<string, number>;
+    payables: Record<string, number>;
+  };
   accounts?: Array<{ id: string; code: string; name: string; type: string; balance?: number }>;
   journalEntries?: Array<{ id: string; entry_number: string; memo?: string; status: string; created_at: string }>;
   invoices?: Array<{ id: string; invoice_type: string; status: string; total: number; paid: number; created_at: string }>;
@@ -373,6 +377,8 @@ export default function AccountingOperatingConsole() {
           <Statement label="صافي الضريبة المستحقة" value={currency.format(data?.taxSummary?.netTaxPayable || 0)} strong />
           <Statement label="موعد مراجعة VAT" value={data?.taxSummary?.nextVatReview || "-"} />
           <Statement label="حركات بنك غير مطابقة" value={String(data?.reconciliation?.unmatchedBank || 0)} />
+          <Statement label="ذمم مدينة متأخرة +90" value={currency.format(data?.aging?.receivables?.over_90 || 0)} />
+          <Statement label="ذمم دائنة متأخرة +90" value={currency.format(data?.aging?.payables?.over_90 || 0)} />
         </Panel>
       </section>
 

@@ -73,9 +73,20 @@ type RenewalTask = {
 type GovernmentData = {
   ok: boolean;
   documents: GovernmentDocument[];
+  files: Array<{
+    id: string;
+    document_id: string;
+    file_name: string;
+    mime_type?: string | null;
+    file_size?: number;
+    file_category?: string | null;
+    version_no?: number;
+    is_current?: boolean;
+  }>;
   fees: FeeSource[];
   tasks: RenewalTask[];
   integrations: Array<{ id: string; provider: string; status: string }>;
+  accessLogs: Array<{ id: string; action: string; actor_role: string; created_at: string }>;
   metrics: {
     totalDocuments: number;
     activeDocuments: number;
@@ -91,9 +102,11 @@ type GovernmentData = {
 const emptyData: GovernmentData = {
   ok: true,
   documents: [],
+  files: [],
   fees: [],
   tasks: [],
   integrations: [],
+  accessLogs: [],
   metrics: {
     totalDocuments: 0,
     activeDocuments: 0,
@@ -146,15 +159,37 @@ export default function GovernmentRelationsConsole() {
       setData({
         ok: true,
         documents: json.documents || [],
+        files: json.files || [],
         fees: json.fees || [],
         tasks: json.tasks || [],
         integrations: json.integrations || [],
+        accessLogs: json.accessLogs || [],
         metrics: json.metrics || emptyData.metrics,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل إدارة العلاقات الحكومية.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function previewFile(fileId: string) {
+    setWorking(`preview-${fileId}`);
+    setError("");
+    try {
+      const res = await fetch("/api/government-relations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview-file", fileId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر إنشاء رابط المعاينة.");
+      window.open(json.result.signedUrl, "_blank", "noopener,noreferrer");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر إنشاء رابط المعاينة.");
+    } finally {
+      setWorking("");
     }
   }
 
@@ -375,6 +410,39 @@ export default function GovernmentRelationsConsole() {
                 <strong>{task.title}</strong>
                 <p>{task.status} - موعد المتابعة {formatDate(task.due_date)}</p>
                 <small>{formatMoney(task.fee_amount)} · {task.renewal_url ? "يوجد رابط تجديد" : "يحتاج رابط"}</small>
+              </div>
+            </article>
+          ))}
+        </Board>
+      </section>
+
+      <section className="ops-board two">
+        <Board title="ملفات الوثائق والنسخ" count={data.files.length}>
+          {data.files.length === 0 && <Empty text="لا توجد ملفات مخزنة بعد." />}
+          {data.files.slice(0, 10).map((file) => (
+            <article className="department-row" key={file.id}>
+              <div>
+                <span className={`mini-pill ${file.is_current ? "done" : ""}`}>v{file.version_no || 1}</span>
+                <strong>{file.file_name}</strong>
+                <p>{file.file_category || file.mime_type || "ملف وثيقة"} · {Math.round(Number(file.file_size || 0) / 1024)} KB</p>
+              </div>
+              <div className="row-actions">
+                <button type="button" onClick={() => previewFile(file.id)} disabled={Boolean(working)} title="معاينة الملف">
+                  {working === `preview-${file.id}` ? <Loader2 className="spin" size={15} /> : <FileSearch size={15} />}
+                </button>
+              </div>
+            </article>
+          ))}
+        </Board>
+
+        <Board title="سجل الوصول للوثائق" count={data.accessLogs.length}>
+          {data.accessLogs.length === 0 && <Empty text="لا يوجد سجل وصول بعد." />}
+          {data.accessLogs.slice(0, 10).map((log) => (
+            <article className="department-row" key={log.id}>
+              <div>
+                <span className="mini-pill">{log.action}</span>
+                <strong>{log.actor_role}</strong>
+                <p>{formatDate(log.created_at)}</p>
               </div>
             </article>
           ))}

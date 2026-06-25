@@ -322,3 +322,127 @@ grant select, insert, update on gov_documents to anon, authenticated, service_ro
 grant select, insert on gov_document_files to anon, authenticated, service_role;
 grant select, insert on gov_document_extractions to anon, authenticated, service_role;
 grant select, insert, update on gov_renewal_tasks to anon, authenticated, service_role;
+
+alter table gov_document_access_logs enable row level security;
+alter table operational_alerts enable row level security;
+alter table crm_leads enable row level security;
+alter table crm_deals enable row level security;
+alter table crm_activities enable row level security;
+alter table sales_quotes enable row level security;
+alter table suppliers enable row level security;
+alter table supplier_quotes enable row level security;
+alter table purchase_orders enable row level security;
+alter table inventory_items enable row level security;
+alter table inventory_movements enable row level security;
+alter table accounting_payments enable row level security;
+alter table bank_reconciliation_rules enable row level security;
+
+drop policy if exists "app read gov document access logs" on gov_document_access_logs;
+drop policy if exists "app write gov document access logs" on gov_document_access_logs;
+drop policy if exists "app read operational alerts" on operational_alerts;
+drop policy if exists "app write operational alerts" on operational_alerts;
+drop policy if exists "app update operational alerts" on operational_alerts;
+drop policy if exists "app read crm leads" on crm_leads;
+drop policy if exists "app write crm leads" on crm_leads;
+drop policy if exists "app update crm leads" on crm_leads;
+drop policy if exists "app read crm deals" on crm_deals;
+drop policy if exists "app write crm deals" on crm_deals;
+drop policy if exists "app update crm deals" on crm_deals;
+drop policy if exists "app read crm activities" on crm_activities;
+drop policy if exists "app write crm activities" on crm_activities;
+drop policy if exists "app read sales quotes" on sales_quotes;
+drop policy if exists "app write sales quotes" on sales_quotes;
+drop policy if exists "app read suppliers" on suppliers;
+drop policy if exists "app write suppliers" on suppliers;
+drop policy if exists "app update suppliers" on suppliers;
+drop policy if exists "app read supplier quotes" on supplier_quotes;
+drop policy if exists "app write supplier quotes" on supplier_quotes;
+drop policy if exists "app read purchase orders" on purchase_orders;
+drop policy if exists "app write purchase orders" on purchase_orders;
+drop policy if exists "app update purchase orders" on purchase_orders;
+drop policy if exists "app read inventory items" on inventory_items;
+drop policy if exists "app write inventory items" on inventory_items;
+drop policy if exists "app update inventory items" on inventory_items;
+drop policy if exists "app read inventory movements" on inventory_movements;
+drop policy if exists "app write inventory movements" on inventory_movements;
+drop policy if exists "app read accounting payments" on accounting_payments;
+drop policy if exists "app write accounting payments" on accounting_payments;
+drop policy if exists "app read bank reconciliation rules" on bank_reconciliation_rules;
+drop policy if exists "app write bank reconciliation rules" on bank_reconciliation_rules;
+
+create policy "app read gov document access logs" on gov_document_access_logs for select to anon, authenticated using (true);
+create policy "app write gov document access logs" on gov_document_access_logs for insert to anon, authenticated with check (length(action) > 0);
+create policy "app read operational alerts" on operational_alerts for select to anon, authenticated using (true);
+create policy "app write operational alerts" on operational_alerts for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update operational alerts" on operational_alerts for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read crm leads" on crm_leads for select to anon, authenticated using (true);
+create policy "app write crm leads" on crm_leads for insert to anon, authenticated with check (length(name) > 0);
+create policy "app update crm leads" on crm_leads for update to anon, authenticated using (true) with check (length(name) > 0);
+create policy "app read crm deals" on crm_deals for select to anon, authenticated using (true);
+create policy "app write crm deals" on crm_deals for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update crm deals" on crm_deals for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read crm activities" on crm_activities for select to anon, authenticated using (true);
+create policy "app write crm activities" on crm_activities for insert to anon, authenticated with check (length(summary) > 0);
+create policy "app read sales quotes" on sales_quotes for select to anon, authenticated using (true);
+create policy "app write sales quotes" on sales_quotes for insert to anon, authenticated with check (length(customer_name) > 0);
+create policy "app read suppliers" on suppliers for select to anon, authenticated using (true);
+create policy "app write suppliers" on suppliers for insert to anon, authenticated with check (length(name) > 0);
+create policy "app update suppliers" on suppliers for update to anon, authenticated using (true) with check (length(name) > 0);
+create policy "app read supplier quotes" on supplier_quotes for select to anon, authenticated using (true);
+create policy "app write supplier quotes" on supplier_quotes for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read purchase orders" on purchase_orders for select to anon, authenticated using (true);
+create policy "app write purchase orders" on purchase_orders for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update purchase orders" on purchase_orders for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read inventory items" on inventory_items for select to anon, authenticated using (true);
+create policy "app write inventory items" on inventory_items for insert to anon, authenticated with check (length(sku) > 0 and length(name) > 0);
+create policy "app update inventory items" on inventory_items for update to anon, authenticated using (true) with check (length(sku) > 0 and length(name) > 0);
+create policy "app read inventory movements" on inventory_movements for select to anon, authenticated using (true);
+create policy "app write inventory movements" on inventory_movements for insert to anon, authenticated with check (quantity <> 0);
+create policy "app read accounting payments" on accounting_payments for select to anon, authenticated using (true);
+create policy "app write accounting payments" on accounting_payments for insert to anon, authenticated with check (amount > 0);
+create policy "app read bank reconciliation rules" on bank_reconciliation_rules for select to anon, authenticated using (true);
+create policy "app write bank reconciliation rules" on bank_reconciliation_rules for insert to anon, authenticated with check (length(name) > 0);
+
+grant select, insert on gov_document_access_logs to anon, authenticated, service_role;
+grant select, insert, update on operational_alerts to anon, authenticated, service_role;
+grant select, insert, update on crm_leads to anon, authenticated, service_role;
+grant select, insert, update on crm_deals to anon, authenticated, service_role;
+grant select, insert on crm_activities to anon, authenticated, service_role;
+grant select, insert on sales_quotes to anon, authenticated, service_role;
+grant select, insert, update on suppliers to anon, authenticated, service_role;
+grant select, insert on supplier_quotes to anon, authenticated, service_role;
+grant select, insert, update on purchase_orders to anon, authenticated, service_role;
+grant select, insert, update on inventory_items to anon, authenticated, service_role;
+grant select, insert on inventory_movements to anon, authenticated, service_role;
+grant select, insert on accounting_payments to anon, authenticated, service_role;
+grant select, insert, update on bank_reconciliation_rules to anon, authenticated, service_role;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'government-documents',
+  'government-documents',
+  false,
+  10485760,
+  array['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'text/plain', 'application/json', 'text/csv']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "app read government document objects" on storage.objects;
+drop policy if exists "app write government document objects" on storage.objects;
+drop policy if exists "app update government document objects" on storage.objects;
+
+create policy "app read government document objects" on storage.objects
+for select to anon, authenticated
+using (bucket_id = 'government-documents');
+
+create policy "app write government document objects" on storage.objects
+for insert to anon, authenticated
+with check (bucket_id = 'government-documents');
+
+create policy "app update government document objects" on storage.objects
+for update to anon, authenticated
+using (bucket_id = 'government-documents')
+with check (bucket_id = 'government-documents');

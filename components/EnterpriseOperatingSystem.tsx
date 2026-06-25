@@ -16,6 +16,9 @@ import {
   RefreshCw,
   ShieldCheck,
   LockKeyhole,
+  PackageSearch,
+  Users,
+  BellRing,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -57,6 +60,9 @@ type EnterpriseStatus = {
       lastCheckedSources: number;
     };
   };
+  crm?: { metrics?: { leads: number; openPipeline: number; staleLeads: number } };
+  procurement?: { metrics?: { suppliers: number; items: number; lowStock: number; inventoryValue: number } };
+  alerts?: { metrics?: { open: number; critical: number; high: number } };
 };
 
 const currency = new Intl.NumberFormat("ar-SA", {
@@ -83,10 +89,19 @@ export default function EnterpriseOperatingSystem() {
       const governanceJson = await governanceRes.json();
       const governmentRes = await fetch("/api/government-relations", { cache: "no-store" });
       const governmentJson = await governmentRes.json();
+      const [crmRes, procurementRes, alertsRes] = await Promise.all([
+        fetch("/api/crm-sales", { cache: "no-store" }),
+        fetch("/api/procurement-inventory", { cache: "no-store" }),
+        fetch("/api/alerts", { cache: "no-store" }),
+      ]);
+      const [crmJson, procurementJson, alertsJson] = await Promise.all([crmRes.json(), procurementRes.json(), alertsRes.json()]);
       setData({
         ...json,
         governance: governanceJson.ok ? governanceJson : undefined,
         government: governmentJson.ok ? governmentJson : undefined,
+        crm: crmJson.ok ? crmJson : undefined,
+        procurement: procurementJson.ok ? procurementJson : undefined,
+        alerts: alertsJson.ok ? alertsJson : undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل Enterprise OS.");
@@ -231,6 +246,39 @@ export default function EnterpriseOperatingSystem() {
             ["الوثائق", data?.government?.metrics?.totalDocuments || 0],
             ["قريب الانتهاء", data?.government?.metrics?.expiringSoon || 0],
             ["مصادر متحققة", data?.government?.metrics?.lastCheckedSources || 0],
+          ]}
+        />
+        <SystemCard
+          icon={Users}
+          title="CRM والمبيعات"
+          status="Pipeline operating model"
+          body="تحويل التسويق إلى Leads وصفقات وعروض أسعار ومتابعات، حتى يعرف CEO أين تتحول الفرص إلى إيراد."
+          metrics={[
+            ["Leads", data?.crm?.metrics?.leads || 0],
+            ["Pipeline", currency.format(data?.crm?.metrics?.openPipeline || 0)],
+            ["متابعات متأخرة", data?.crm?.metrics?.staleLeads || 0],
+          ]}
+        />
+        <SystemCard
+          icon={PackageSearch}
+          title="المشتريات والمخزون"
+          status="Procurement and inventory"
+          body="إدارة الموردين وأوامر الشراء والأصناف والهامش وحدود إعادة الطلب، مرتبطة بالتنبيهات التشغيلية."
+          metrics={[
+            ["الموردون", data?.procurement?.metrics?.suppliers || 0],
+            ["الأصناف", data?.procurement?.metrics?.items || 0],
+            ["مخزون منخفض", data?.procurement?.metrics?.lowStock || 0],
+          ]}
+        />
+        <SystemCard
+          icon={BellRing}
+          title="محرك التنبيهات"
+          status="Company follow-up engine"
+          body="يراقب الوثائق والفواتير والحملات والمهام والفرص والمخزون والعملاء، ثم يرفع التنبيه للإدارة المعنية."
+          metrics={[
+            ["مفتوحة", data?.alerts?.metrics?.open || 0],
+            ["حرجة", data?.alerts?.metrics?.critical || 0],
+            ["مرتفعة", data?.alerts?.metrics?.high || 0],
           ]}
         />
       </section>

@@ -5,6 +5,10 @@
     {
       "path": "/api/opportunity-radar",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/alerts/cron",
+      "schedule": "30 5 * * *"
     }
   ]
 }

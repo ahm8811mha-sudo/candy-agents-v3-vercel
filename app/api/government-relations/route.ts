@@ -1,5 +1,6 @@
 import {
   createGovernmentRenewalPlan,
+  createGovernmentDocumentPreview,
   getGovernmentRelationsOS,
   prepareDigitalRenewal,
   refreshGovernmentFees,
@@ -50,6 +51,11 @@ export async function POST(req: Request) {
 
     if (action === "prepare-renewal") {
       const result = await prepareDigitalRenewal(String(body.documentId || ""));
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "preview-file") {
+      const result = await createGovernmentDocumentPreview(String(body.fileId || ""), String(body.actorRole || "Government Relations Manager"));
       return NextResponse.json({ ok: true, result });
     }
 

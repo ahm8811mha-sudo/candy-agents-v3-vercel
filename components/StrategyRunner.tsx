@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Landmark, Loader2, Send, ShieldCheck } from "lucide-react";
+import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Landmark, Loader2, PackageSearch, Send, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import BIForm from "./BIForm";
 
@@ -215,8 +215,17 @@ export default function StrategyRunner() {
             <Link className="secondary-btn" href="/departments/finance">Accounting OS</Link>
             <Link className="secondary-btn" href="/departments/executive">CEO Office</Link>
             <Link className="secondary-btn" href="/departments/marketing">Marketing OS</Link>
+            <Link className="secondary-btn" href="/departments/sales">
+              <Users size={16} /> CRM
+            </Link>
+            <Link className="secondary-btn" href="/departments/procurement">
+              <PackageSearch size={16} /> المشتريات والمخزون
+            </Link>
             <Link className="secondary-btn" href="/departments/government-relations">
               <Landmark size={16} /> العلاقات الحكومية
+            </Link>
+            <Link className="secondary-btn" href="/bi-center">
+              <BarChart3 size={16} /> BI موحد
             </Link>
             <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
           </div>
