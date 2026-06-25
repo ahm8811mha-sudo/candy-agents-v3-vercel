@@ -659,7 +659,8 @@ label {
   gap: 7px;
 }
 
-.row-actions button {
+.row-actions button,
+.row-actions a {
   width: 34px;
   height: 34px;
   border: 1px solid var(--line);

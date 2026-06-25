@@ -969,3 +969,151 @@ grant select, insert, update on marketing_ab_tests to anon, authenticated, servi
 grant select, insert, update on marketing_content_calendar to anon, authenticated, service_role;
 grant select, insert, update on marketing_funnel_events to anon, authenticated, service_role;
 grant select, insert, update on opportunity_scores to anon, authenticated, service_role;
+
+create table if not exists gov_document_types (
+  id text primary key,
+  name text not null,
+  issuer text not null,
+  official_url text,
+  renewal_url text,
+  required_fields text[] default '{}',
+  automation_level text not null default 'PORTAL_PREPARATION',
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists gov_fee_sources (
+  id uuid primary key default gen_random_uuid(),
+  document_type text not null references gov_document_types(id) on delete cascade,
+  issuer text not null,
+  service_name text not null,
+  official_url text not null,
+  renewal_url text,
+  fee_amount numeric,
+  fee_currency text not null default 'SAR',
+  fee_text text not null,
+  source_confidence text not null default 'OFFICIAL_SOURCE',
+  last_checked_at timestamptz,
+  last_checked_status text,
+  last_checked_excerpt text,
+  created_at timestamptz default now(),
+  unique(document_type, issuer, service_name)
+);
+
+create table if not exists gov_documents (
+  id uuid primary key default gen_random_uuid(),
+  document_type text not null references gov_document_types(id) on delete restrict,
+  title text not null,
+  document_number text,
+  issuer text,
+  owner_name text,
+  tax_number text,
+  start_date date,
+  expiry_date date,
+  renewal_date date,
+  city text,
+  activity text,
+  status text not null default 'NEEDS_REVIEW',
+  official_url text,
+  renewal_url text,
+  fee_amount numeric,
+  fee_currency text not null default 'SAR',
+  fee_text text,
+  extracted_data jsonb default '{}',
+  missing_fields text[] default '{}',
+  extraction_confidence numeric not null default 0,
+  notes text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists gov_document_files (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references gov_documents(id) on delete cascade,
+  file_name text not null,
+  mime_type text,
+  file_size numeric not null default 0,
+  file_payload text,
+  text_payload text,
+  created_at timestamptz default now()
+);
+
+create table if not exists gov_document_extractions (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references gov_documents(id) on delete cascade,
+  extraction_engine text not null,
+  raw_text text,
+  extracted_json jsonb default '{}',
+  confidence numeric not null default 0,
+  status text not null default 'EXTRACTED',
+  created_at timestamptz default now()
+);
+
+create table if not exists gov_renewal_tasks (
+  id text primary key,
+  document_id uuid references gov_documents(id) on delete cascade,
+  task_type text not null default 'RENEWAL_PREPARATION',
+  title text not null,
+  due_date date,
+  priority text not null default 'MEDIUM',
+  status text not null default 'OPEN',
+  fee_amount numeric,
+  fee_currency text not null default 'SAR',
+  official_url text,
+  renewal_url text,
+  checklist jsonb default '[]',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_gov_documents_status on gov_documents(status);
+create index if not exists idx_gov_documents_expiry_date on gov_documents(expiry_date);
+create index if not exists idx_gov_documents_document_type on gov_documents(document_type);
+create index if not exists idx_gov_renewal_tasks_due_date on gov_renewal_tasks(due_date);
+create index if not exists idx_gov_fee_sources_document_type on gov_fee_sources(document_type);
+
+alter table gov_document_types enable row level security;
+alter table gov_fee_sources enable row level security;
+alter table gov_documents enable row level security;
+alter table gov_document_files enable row level security;
+alter table gov_document_extractions enable row level security;
+alter table gov_renewal_tasks enable row level security;
+
+drop policy if exists "app read gov document types" on gov_document_types;
+drop policy if exists "app write gov document types" on gov_document_types;
+drop policy if exists "app read gov fee sources" on gov_fee_sources;
+drop policy if exists "app write gov fee sources" on gov_fee_sources;
+drop policy if exists "app update gov fee sources" on gov_fee_sources;
+drop policy if exists "app read gov documents" on gov_documents;
+drop policy if exists "app write gov documents" on gov_documents;
+drop policy if exists "app update gov documents" on gov_documents;
+drop policy if exists "app read gov document files" on gov_document_files;
+drop policy if exists "app write gov document files" on gov_document_files;
+drop policy if exists "app read gov document extractions" on gov_document_extractions;
+drop policy if exists "app write gov document extractions" on gov_document_extractions;
+drop policy if exists "app read gov renewal tasks" on gov_renewal_tasks;
+drop policy if exists "app write gov renewal tasks" on gov_renewal_tasks;
+drop policy if exists "app update gov renewal tasks" on gov_renewal_tasks;
+
+create policy "app read gov document types" on gov_document_types for select to anon, authenticated using (true);
+create policy "app write gov document types" on gov_document_types for insert to anon, authenticated with check (length(id) > 0);
+create policy "app read gov fee sources" on gov_fee_sources for select to anon, authenticated using (true);
+create policy "app write gov fee sources" on gov_fee_sources for insert to anon, authenticated with check (length(service_name) > 0);
+create policy "app update gov fee sources" on gov_fee_sources for update to anon, authenticated using (true) with check (length(service_name) > 0);
+create policy "app read gov documents" on gov_documents for select to anon, authenticated using (true);
+create policy "app write gov documents" on gov_documents for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update gov documents" on gov_documents for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read gov document files" on gov_document_files for select to anon, authenticated using (true);
+create policy "app write gov document files" on gov_document_files for insert to anon, authenticated with check (length(file_name) > 0);
+create policy "app read gov document extractions" on gov_document_extractions for select to anon, authenticated using (true);
+create policy "app write gov document extractions" on gov_document_extractions for insert to anon, authenticated with check (length(extraction_engine) > 0);
+create policy "app read gov renewal tasks" on gov_renewal_tasks for select to anon, authenticated using (true);
+create policy "app write gov renewal tasks" on gov_renewal_tasks for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update gov renewal tasks" on gov_renewal_tasks for update to anon, authenticated using (true) with check (length(title) > 0);
+
+grant select, insert, update on gov_document_types to anon, authenticated, service_role;
+grant select, insert, update on gov_fee_sources to anon, authenticated, service_role;
+grant select, insert, update on gov_documents to anon, authenticated, service_role;
+grant select, insert on gov_document_files to anon, authenticated, service_role;
+grant select, insert on gov_document_extractions to anon, authenticated, service_role;
+grant select, insert, update on gov_renewal_tasks to anon, authenticated, service_role;

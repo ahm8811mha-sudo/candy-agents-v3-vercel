@@ -1,4 +1,10 @@
 drop table if exists external_sync_logs cascade;
+drop table if exists gov_renewal_tasks cascade;
+drop table if exists gov_document_extractions cascade;
+drop table if exists gov_document_files cascade;
+drop table if exists gov_documents cascade;
+drop table if exists gov_fee_sources cascade;
+drop table if exists gov_document_types cascade;
 drop table if exists opportunity_scores cascade;
 drop table if exists marketing_funnel_events cascade;
 drop table if exists marketing_content_calendar cascade;

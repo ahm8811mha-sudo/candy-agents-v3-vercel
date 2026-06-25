@@ -276,3 +276,49 @@ grant select, insert, update on marketing_ab_tests to anon, authenticated, servi
 grant select, insert, update on marketing_content_calendar to anon, authenticated, service_role;
 grant select, insert, update on marketing_funnel_events to anon, authenticated, service_role;
 grant select, insert, update on opportunity_scores to anon, authenticated, service_role;
+
+alter table gov_document_types enable row level security;
+alter table gov_fee_sources enable row level security;
+alter table gov_documents enable row level security;
+alter table gov_document_files enable row level security;
+alter table gov_document_extractions enable row level security;
+alter table gov_renewal_tasks enable row level security;
+
+drop policy if exists "app read gov document types" on gov_document_types;
+drop policy if exists "app write gov document types" on gov_document_types;
+drop policy if exists "app read gov fee sources" on gov_fee_sources;
+drop policy if exists "app write gov fee sources" on gov_fee_sources;
+drop policy if exists "app update gov fee sources" on gov_fee_sources;
+drop policy if exists "app read gov documents" on gov_documents;
+drop policy if exists "app write gov documents" on gov_documents;
+drop policy if exists "app update gov documents" on gov_documents;
+drop policy if exists "app read gov document files" on gov_document_files;
+drop policy if exists "app write gov document files" on gov_document_files;
+drop policy if exists "app read gov document extractions" on gov_document_extractions;
+drop policy if exists "app write gov document extractions" on gov_document_extractions;
+drop policy if exists "app read gov renewal tasks" on gov_renewal_tasks;
+drop policy if exists "app write gov renewal tasks" on gov_renewal_tasks;
+drop policy if exists "app update gov renewal tasks" on gov_renewal_tasks;
+
+create policy "app read gov document types" on gov_document_types for select to anon, authenticated using (true);
+create policy "app write gov document types" on gov_document_types for insert to anon, authenticated with check (length(id) > 0);
+create policy "app read gov fee sources" on gov_fee_sources for select to anon, authenticated using (true);
+create policy "app write gov fee sources" on gov_fee_sources for insert to anon, authenticated with check (length(service_name) > 0);
+create policy "app update gov fee sources" on gov_fee_sources for update to anon, authenticated using (true) with check (length(service_name) > 0);
+create policy "app read gov documents" on gov_documents for select to anon, authenticated using (true);
+create policy "app write gov documents" on gov_documents for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update gov documents" on gov_documents for update to anon, authenticated using (true) with check (length(title) > 0);
+create policy "app read gov document files" on gov_document_files for select to anon, authenticated using (true);
+create policy "app write gov document files" on gov_document_files for insert to anon, authenticated with check (length(file_name) > 0);
+create policy "app read gov document extractions" on gov_document_extractions for select to anon, authenticated using (true);
+create policy "app write gov document extractions" on gov_document_extractions for insert to anon, authenticated with check (length(extraction_engine) > 0);
+create policy "app read gov renewal tasks" on gov_renewal_tasks for select to anon, authenticated using (true);
+create policy "app write gov renewal tasks" on gov_renewal_tasks for insert to anon, authenticated with check (length(title) > 0);
+create policy "app update gov renewal tasks" on gov_renewal_tasks for update to anon, authenticated using (true) with check (length(title) > 0);
+
+grant select, insert, update on gov_document_types to anon, authenticated, service_role;
+grant select, insert, update on gov_fee_sources to anon, authenticated, service_role;
+grant select, insert, update on gov_documents to anon, authenticated, service_role;
+grant select, insert on gov_document_files to anon, authenticated, service_role;
+grant select, insert on gov_document_extractions to anon, authenticated, service_role;
+grant select, insert, update on gov_renewal_tasks to anon, authenticated, service_role;

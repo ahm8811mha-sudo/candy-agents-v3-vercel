@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   CheckCircle2,
   Gauge,
+  Landmark,
   Loader2,
   Megaphone,
   Radar,
@@ -43,6 +44,19 @@ type EnterpriseStatus = {
       readyIntegrations: number;
     };
   };
+  government?: {
+    documents?: Array<{ id: string; title: string; status: string; expiry_date?: string | null }>;
+    fees?: Array<{ id: string; service_name: string; fee_text: string; last_checked_status?: string | null }>;
+    tasks?: Array<{ id: string; title: string; status: string }>;
+    metrics?: {
+      totalDocuments: number;
+      expiringSoon: number;
+      expired: number;
+      missingData: number;
+      readyPortals: number;
+      lastCheckedSources: number;
+    };
+  };
 };
 
 const currency = new Intl.NumberFormat("ar-SA", {
@@ -67,7 +81,13 @@ export default function EnterpriseOperatingSystem() {
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل Enterprise OS.");
       const governanceRes = await fetch("/api/governance", { cache: "no-store" });
       const governanceJson = await governanceRes.json();
-      setData({ ...json, governance: governanceJson.ok ? governanceJson : undefined });
+      const governmentRes = await fetch("/api/government-relations", { cache: "no-store" });
+      const governmentJson = await governmentRes.json();
+      setData({
+        ...json,
+        governance: governanceJson.ok ? governanceJson : undefined,
+        government: governmentJson.ok ? governmentJson : undefined,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل Enterprise OS.");
     } finally {
@@ -202,6 +222,17 @@ export default function EnterpriseOperatingSystem() {
             ["سجل اليوم", data?.governance?.controlSummary?.auditEventsToday || 0],
           ]}
         />
+        <SystemCard
+          icon={Landmark}
+          title="العلاقات الحكومية"
+          status="Government documents control"
+          body="أرشيف وثائق حكومي يقرأ السجلات والشهادات والرخص، يراقب الانتهاء، يتحقق من الرسوم من المصادر الرسمية، ويجهز مسار التجديد."
+          metrics={[
+            ["الوثائق", data?.government?.metrics?.totalDocuments || 0],
+            ["قريب الانتهاء", data?.government?.metrics?.expiringSoon || 0],
+            ["مصادر متحققة", data?.government?.metrics?.lastCheckedSources || 0],
+          ]}
+        />
       </section>
 
       <section className="delivery-panel">
@@ -239,6 +270,13 @@ export default function EnterpriseOperatingSystem() {
         <ListPanel
           title="التكاملات والحوكمة"
           items={(data?.governance?.integrations || []).map((item) => `${item.provider} - ${item.status}`)}
+        />
+        <ListPanel
+          title="العلاقات الحكومية"
+          items={[
+            ...(data?.government?.documents || []).map((item) => `${item.title} - ${item.status}`),
+            ...(data?.government?.tasks || []).map((item) => `${item.title} - ${item.status}`),
+          ]}
         />
       </section>
     </main>

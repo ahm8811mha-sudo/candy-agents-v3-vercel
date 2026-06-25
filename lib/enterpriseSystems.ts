@@ -1,6 +1,7 @@
 import { calculateFinancials } from "./accountingSystem";
 import { evaluateBusiness } from "./businessBrain";
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
+import { seedGovernmentRelationsOS } from "./governmentRelations";
 import { getSupabaseAdmin } from "./supabase";
 
 type AccountSeed = {
@@ -136,6 +137,7 @@ export async function seedEnterpriseOperatingSystem() {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured.");
   await seedGovernanceOS();
+  await seedGovernmentRelationsOS();
 
   const { error: accountError } = await supabase.from("accounting_accounts").upsert(
     accounts.map((account) => ({ ...account, is_system: true })),
