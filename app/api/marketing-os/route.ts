@@ -1,4 +1,15 @@
-import { createCampaignFromRadar, createMarketingCampaign, getMarketingOS } from "@/lib/marketingOS";
+import {
+  createABTest,
+  createCampaignFromRadar,
+  createContentCalendarItem,
+  createMarketingCampaign,
+  createMarketingOffer,
+  createMarketingProduct,
+  createMarketingSegment,
+  createProactiveMarketingPlan,
+  getMarketingOS,
+  recordFunnelEvent,
+} from "@/lib/marketingOS";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +38,41 @@ export async function POST(req: Request) {
 
     if (action === "from-radar") {
       const result = await createCampaignFromRadar();
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "product") {
+      const result = await createMarketingProduct(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "segment") {
+      const result = await createMarketingSegment(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "offer") {
+      const result = await createMarketingOffer(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "content") {
+      const result = await createContentCalendarItem(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "ab-test") {
+      const result = await createABTest(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "funnel-event") {
+      const result = await recordFunnelEvent(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "proactive-plan") {
+      const result = await createProactiveMarketingPlan();
       return NextResponse.json({ ok: true, result });
     }
 

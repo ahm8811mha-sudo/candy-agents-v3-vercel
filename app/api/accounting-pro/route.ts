@@ -1,8 +1,12 @@
 import {
   addBankTransaction,
+  closeAccountingPeriod,
   createAccountingInvoice,
+  createCostCenter,
+  generateAndSaveCashForecast,
   getAccountingConsole,
   postJournalEntry,
+  reconcileBankTransaction,
 } from "@/lib/proAccounting";
 import { seedEnterpriseOperatingSystem } from "@/lib/enterpriseSystems";
 import { NextResponse } from "next/server";
@@ -44,6 +48,26 @@ export async function POST(req: Request) {
 
     if (action === "bank") {
       const result = await addBankTransaction(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "cost-center") {
+      const result = await createCostCenter(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "close-period") {
+      const result = await closeAccountingPeriod(String(body.period || ""));
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "cash-forecast") {
+      const result = await generateAndSaveCashForecast();
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "reconcile") {
+      const result = await reconcileBankTransaction(String(body.transactionId || ""), String(body.entryId || ""));
       return NextResponse.json({ ok: true, result });
     }
 

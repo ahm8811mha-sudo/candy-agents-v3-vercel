@@ -26,6 +26,7 @@ type OfficeData = {
     pendingItems: number;
     waitingApprovals: number;
     highRisks: number;
+    lateTasks: number;
     activeProjects: number;
   };
   enterprise?: {
@@ -41,6 +42,10 @@ type OfficeData = {
     alerts?: Array<{ id: string; severity: string; title: string; message: string }>;
     kpis?: Array<{ id: string; name: string; target: number; current?: number; unit: string; status: string }>;
   };
+  calendarEvents?: Array<{ id: string; title: string; event_type: string; starts_at: string; status: string; notes?: string }>;
+  meetingMinutes?: Array<{ id: string; title: string; decisions?: string; meeting_date: string }>;
+  dailyBriefs?: Array<{ id: string; brief_type: string; summary: string; brief_date: string }>;
+  auditLog?: Array<{ id: string; decision_type: string; action: string; approval_status: string; created_at: string }>;
 };
 
 export default function ExecutiveOfficeConsole() {
@@ -107,6 +112,36 @@ export default function ExecutiveOfficeConsole() {
     run("execute", { request: String(form.get("request") || "") }).then(() => event.currentTarget.reset());
   }
 
+  function submitCalendar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    run("calendar-event", {
+      data: {
+        title: String(form.get("title") || ""),
+        eventType: String(form.get("eventType") || "FOLLOW_UP"),
+        startsAt: String(form.get("startsAt") || ""),
+        durationMinutes: Number(form.get("durationMinutes") || 30),
+        notes: String(form.get("notes") || ""),
+      },
+    }).then(() => event.currentTarget.reset());
+  }
+
+  function submitMinutes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    run("meeting-minutes", {
+      data: {
+        title: String(form.get("title") || ""),
+        attendees: String(form.get("attendees") || "CEO Office,CFO,Marketing Director")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        decisions: String(form.get("decisions") || ""),
+        actionItems: [{ title: String(form.get("actionItem") || "Follow up decision"), owner: "Chief of Staff" }],
+      },
+    }).then(() => event.currentTarget.reset());
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -151,6 +186,14 @@ export default function ExecutiveOfficeConsole() {
           {working === "radar" ? <Loader2 className="spin" size={18} /> : <Radar size={18} />}
           تشغيل رادار الفرص
         </button>
+        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "MORNING" })} disabled={Boolean(working)}>
+          {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <ClipboardList size={18} />}
+          ملخص صباحي
+        </button>
+        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "END_OF_DAY" })} disabled={Boolean(working)}>
+          {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <CalendarCheck size={18} />}
+          ملخص نهاية اليوم
+        </button>
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
@@ -160,6 +203,7 @@ export default function ExecutiveOfficeConsole() {
         <Metric icon={CheckCircle2} label="اعتمادات تنتظر قرار" value={brief?.waitingApprovals || 0} />
         <Metric icon={ShieldAlert} label="مخاطر مرتفعة" value={brief?.highRisks || 0} />
         <Metric icon={BriefcaseBusiness} label="مشاريع نشطة" value={brief?.activeProjects || 0} />
+        <Metric icon={ClipboardList} label="مهام متأخرة" value={brief?.lateTasks || 0} />
       </section>
 
       <section className="ops-card executive-brief">
@@ -217,6 +261,65 @@ export default function ExecutiveOfficeConsole() {
             إضافة للمكتب
           </button>
         </form>
+
+        <form className="ops-card" onSubmit={submitCalendar}>
+          <h2>تقويم CEO</h2>
+          <div className="ops-form-grid">
+            <label>
+              العنوان
+              <input className="input" name="title" placeholder="مراجعة أسبوعية للأداء" required />
+            </label>
+            <label>
+              النوع
+              <select className="input" name="eventType" defaultValue="FOLLOW_UP">
+                <option value="FOLLOW_UP">متابعة</option>
+                <option value="APPROVAL_REVIEW">اعتماد</option>
+                <option value="OPPORTUNITY_REVIEW">فرصة</option>
+                <option value="BUSINESS_REVIEW">مراجعة أعمال</option>
+              </select>
+            </label>
+            <label>
+              الموعد
+              <input className="input" name="startsAt" type="datetime-local" />
+            </label>
+            <label>
+              المدة بالدقائق
+              <input className="input" name="durationMinutes" type="number" min="15" max="180" defaultValue="30" />
+            </label>
+          </div>
+          <label>
+            ملاحظات
+            <input className="input" name="notes" placeholder="ما المطلوب في الاجتماع؟" />
+          </label>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            {working === "calendar-event" ? <Loader2 className="spin" size={18} /> : <CalendarCheck size={18} />}
+            إضافة للتقويم
+          </button>
+        </form>
+
+        <form className="ops-card" onSubmit={submitMinutes}>
+          <h2>محضر اجتماع</h2>
+          <label>
+            عنوان الاجتماع
+            <input className="input" name="title" placeholder="محضر مراجعة حملة التسويق" required />
+          </label>
+          <label>
+            الحضور
+            <input className="input" name="attendees" defaultValue="CEO Office,CFO,Marketing Director" />
+          </label>
+          <label>
+            القرارات
+            <textarea className="textarea compact" name="decisions" placeholder="اكتب القرارات التنفيذية..." />
+          </label>
+          <label>
+            إجراء مطلوب
+            <input className="input" name="actionItem" placeholder="إرسال تقرير KPI إلى CEO" />
+          </label>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            {working === "meeting-minutes" ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
+            حفظ المحضر
+          </button>
+        </form>
       </section>
 
       <section className="ops-board">
@@ -262,6 +365,27 @@ export default function ExecutiveOfficeConsole() {
           ))}
         </Panel>
       </section>
+
+      <section className="ops-board">
+        <Panel title="تقويم CEO">
+          {(data?.calendarEvents || []).slice(0, 8).map((event) => (
+            <Statement key={event.id} label={`${event.title} - ${new Date(event.starts_at).toLocaleString("ar-SA")}`} value={event.status} />
+          ))}
+        </Panel>
+        <Panel title="الملخصات والمحاضر">
+          {(data?.dailyBriefs || []).slice(0, 4).map((brief) => (
+            <Statement key={brief.id} label={`${brief.brief_type}: ${brief.summary}`} value={brief.brief_date} />
+          ))}
+          {(data?.meetingMinutes || []).slice(0, 4).map((minutes) => (
+            <Statement key={minutes.id} label={minutes.title} value={minutes.meeting_date} />
+          ))}
+        </Panel>
+        <Panel title="سجل قرارات الحوكمة">
+          {(data?.auditLog || []).slice(0, 8).map((audit) => (
+            <Statement key={audit.id} label={`${audit.decision_type}: ${audit.action}`} value={audit.approval_status} />
+          ))}
+        </Panel>
+      </section>
     </main>
   );
 }
@@ -271,6 +395,9 @@ function successText(action: string) {
   if (action === "execute") return "تم تحويل الأمر التنفيذي إلى مشروع ومهام واعتمادات.";
   if (action === "create-item") return "تمت إضافة التوجيه لمكتب CEO.";
   if (action === "update-item") return "تم تحديث بند المتابعة.";
+  if (action === "calendar-event") return "تمت إضافة الموعد إلى تقويم CEO.";
+  if (action === "meeting-minutes") return "تم حفظ محضر الاجتماع.";
+  if (action === "daily-brief") return "تم توليد الملخص التنفيذي.";
   return "تم تنفيذ العملية.";
 }
 

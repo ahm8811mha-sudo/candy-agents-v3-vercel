@@ -25,6 +25,9 @@ type MarketingCampaign = {
   target_audience?: string;
   offer?: string;
   budget: number;
+  actual_spend?: number;
+  actual_revenue?: number;
+  ltv?: number;
   status: string;
   kpis?: Record<string, any>;
 };
@@ -33,6 +36,9 @@ type MarketingData = {
   marketingBrief?: {
     activeCampaigns: number;
     totalBudget: number;
+    actualSpend: number;
+    actualRevenue: number;
+    blendedRoas: number;
     pilotBudget: number;
     healthScore: number;
     riskLevel: string;
@@ -45,6 +51,12 @@ type MarketingData = {
     opportunityRuns?: Array<{ id: string; status: string; signal_summary: string }>;
     strategy?: { focus?: string; investment_thesis?: string; target_markets?: string[] };
   };
+  products?: Array<{ id: string; name: string; category: string; gross_margin: number; status: string }>;
+  segments?: Array<{ id: string; name: string; persona: string; channels?: string[] }>;
+  offers?: Array<{ id: string; name: string; promise: string; price: number; status: string }>;
+  abTests?: Array<{ id: string; name: string; metric: string; status: string; variant_a: string; variant_b: string }>;
+  contentCalendar?: Array<{ id: string; publish_date: string; channel: string; topic: string; status: string }>;
+  funnelEvents?: Array<{ id: string; stage: string; count: number; cost: number; revenue: number }>;
   playbooks?: Array<{ title: string; owner: string; steps: string[] }>;
 };
 
@@ -76,7 +88,10 @@ export default function MarketingOperatingConsole() {
     }
   }
 
-  async function run(action: "campaign" | "from-radar", payload?: Record<string, unknown>) {
+  async function run(
+    action: "campaign" | "from-radar" | "proactive-plan" | "product" | "segment" | "offer" | "content" | "ab-test" | "funnel-event",
+    payload?: Record<string, unknown>
+  ) {
     setWorking(action);
     setMessage("");
     setError("");
@@ -88,7 +103,7 @@ export default function MarketingOperatingConsole() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ أمر التسويق.");
-      setMessage(action === "from-radar" ? "تم تحويل آخر فرصة إلى حملة تجريبية." : "تم إنشاء الحملة وربطها بالحوكمة.");
+      setMessage(marketingMessage(action));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر التسويق.");
@@ -107,6 +122,42 @@ export default function MarketingOperatingConsole() {
       channelId: String(form.get("channelId") || "google_ads"),
       budget: Number(form.get("budget") || 0),
       objective: String(form.get("objective") || "Pilot campaign"),
+      productId: String(form.get("productId") || ""),
+      segmentId: String(form.get("segmentId") || ""),
+      offerId: String(form.get("offerId") || ""),
+    }).then(() => event.currentTarget.reset());
+  }
+
+  function submitProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    run("product", {
+      name: String(form.get("name") || ""),
+      category: String(form.get("category") || "commerce"),
+      unitCost: Number(form.get("unitCost") || 0),
+      targetPrice: Number(form.get("targetPrice") || 0),
+    }).then(() => event.currentTarget.reset());
+  }
+
+  function submitSegment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    run("segment", {
+      name: String(form.get("name") || ""),
+      persona: String(form.get("persona") || ""),
+      painPoints: String(form.get("painPoints") || "").split(",").map((item) => item.trim()).filter(Boolean),
+      channels: String(form.get("channels") || "seo_content,email_whatsapp").split(",").map((item) => item.trim()).filter(Boolean),
+    }).then(() => event.currentTarget.reset());
+  }
+
+  function submitOffer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    run("offer", {
+      productId: String(form.get("productId") || ""),
+      name: String(form.get("name") || ""),
+      promise: String(form.get("promise") || ""),
+      price: Number(form.get("price") || 0),
     }).then(() => event.currentTarget.reset());
   }
 
@@ -117,6 +168,9 @@ export default function MarketingOperatingConsole() {
   const brief = data?.marketingBrief;
   const channels = data?.enterprise?.marketingChannels || [];
   const campaigns = data?.enterprise?.marketingCampaigns || [];
+  const products = data?.products || [];
+  const segments = data?.segments || [];
+  const offers = data?.offers || [];
 
   return (
     <main className="company-app ops-console">
@@ -156,6 +210,53 @@ export default function MarketingOperatingConsole() {
           {working === "from-radar" ? <Loader2 className="spin" size={18} /> : <Rocket size={18} />}
           تحويل آخر فرصة إلى حملة
         </button>
+        <button className="secondary-btn" onClick={() => run("proactive-plan")} disabled={Boolean(working)}>
+          {working === "proactive-plan" ? <Loader2 className="spin" size={18} /> : <BrainCircuit size={18} />}
+          خطة مبادرة من مدير التسويق
+        </button>
+        <button
+          className="secondary-btn"
+          onClick={() =>
+            run("ab-test", {
+              campaignId: campaigns[0]?.id,
+              name: "Message angle test",
+              variantA: "Offer with faster delivery",
+              variantB: "Offer with higher value bundle",
+              metric: "CVR",
+            })
+          }
+          disabled={Boolean(working) || campaigns.length === 0}
+        >
+          اختبار A/B للحملة الأولى
+        </button>
+        <button
+          className="secondary-btn"
+          onClick={() =>
+            run("content", {
+              campaignId: campaigns[0]?.id,
+              channel: "seo_content",
+              topic: "محتوى يشرح العرض ويقيس الطلب",
+            })
+          }
+          disabled={Boolean(working) || campaigns.length === 0}
+        >
+          جدولة محتوى
+        </button>
+        <button
+          className="secondary-btn"
+          onClick={() =>
+            run("funnel-event", {
+              campaignId: campaigns[0]?.id,
+              stage: "Lead",
+              count: 25,
+              cost: 350,
+              revenue: 1200,
+            })
+          }
+          disabled={Boolean(working) || campaigns.length === 0}
+        >
+          تسجيل Funnel
+        </button>
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
@@ -163,6 +264,9 @@ export default function MarketingOperatingConsole() {
       <section className="ops-metrics">
         <Metric icon={Megaphone} label="حملات نشطة" value={String(brief?.activeCampaigns || 0)} />
         <Metric icon={BadgePercent} label="ميزانية التسويق" value={currency.format(brief?.totalBudget || 0)} />
+        <Metric icon={BadgePercent} label="الإنفاق الفعلي" value={currency.format(brief?.actualSpend || 0)} />
+        <Metric icon={BarChart3} label="الإيراد من الحملات" value={currency.format(brief?.actualRevenue || 0)} />
+        <Metric icon={BarChart3} label="ROAS مدمج" value={`${(brief?.blendedRoas || 0).toFixed(2)}x`} />
         <Metric icon={BarChart3} label="صحة النمو" value={`${brief?.healthScore || 0}/100`} />
         <Metric icon={Users} label="القنوات" value={String(channels.length)} />
       </section>
@@ -206,6 +310,39 @@ export default function MarketingOperatingConsole() {
                 <option value="Retention">احتفاظ وعودة شراء</option>
               </select>
             </label>
+            <label>
+              المنتج المسجل
+              <select className="input" name="productId" defaultValue="">
+                <option value="">بدون ربط</option>
+                {products.map((product) => (
+                  <option value={product.id} key={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              الشريحة
+              <select className="input" name="segmentId" defaultValue="">
+                <option value="">بدون ربط</option>
+                {segments.map((segment) => (
+                  <option value={segment.id} key={segment.id}>
+                    {segment.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              العرض
+              <select className="input" name="offerId" defaultValue="">
+                <option value="">بدون ربط</option>
+                {offers.map((offer) => (
+                  <option value={offer.id} key={offer.id}>
+                    {offer.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <label>
             الجمهور المستهدف
@@ -231,6 +368,85 @@ export default function MarketingOperatingConsole() {
         </section>
       </section>
 
+      <section className="ops-workbench">
+        <form className="ops-card" onSubmit={submitProduct}>
+          <h2>منتج جديد</h2>
+          <div className="ops-form-grid">
+            <label>
+              الاسم
+              <input className="input" name="name" placeholder="باقة هدايا وعناية" required />
+            </label>
+            <label>
+              التصنيف
+              <input className="input" name="category" defaultValue="commerce" />
+            </label>
+            <label>
+              تكلفة الوحدة
+              <input className="input" name="unitCost" type="number" min="0" step="1" placeholder="55" />
+            </label>
+            <label>
+              سعر البيع المستهدف
+              <input className="input" name="targetPrice" type="number" min="0" step="1" placeholder="129" />
+            </label>
+          </div>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            حفظ المنتج
+          </button>
+        </form>
+
+        <form className="ops-card" onSubmit={submitSegment}>
+          <h2>شريحة عملاء</h2>
+          <label>
+            الاسم
+            <input className="input" name="name" placeholder="عملاء الهدايا في السعودية" required />
+          </label>
+          <label>
+            الوصف
+            <textarea className="textarea compact" name="persona" placeholder="من هم؟ ماذا يريدون؟ ما الذي يمنعهم من الشراء؟" required />
+          </label>
+          <label>
+            الألم / الحاجة
+            <input className="input" name="painPoints" placeholder="سرعة التوصيل, الثقة, السعر" />
+          </label>
+          <label>
+            القنوات
+            <input className="input" name="channels" defaultValue="meta_ads,tiktok_ads,email_whatsapp" />
+          </label>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            حفظ الشريحة
+          </button>
+        </form>
+
+        <form className="ops-card" onSubmit={submitOffer}>
+          <h2>عرض تسويقي</h2>
+          <label>
+            المنتج
+            <select className="input" name="productId" defaultValue={products[0]?.id || ""}>
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            اسم العرض
+            <input className="input" name="name" placeholder="عرض تجربة محدود" required />
+          </label>
+          <label>
+            الوعد
+            <input className="input" name="promise" placeholder="اختبر الطلب قبل التوسع" required />
+          </label>
+          <label>
+            السعر
+            <input className="input" name="price" type="number" min="0" step="1" placeholder="129" />
+          </label>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            حفظ العرض
+          </button>
+        </form>
+      </section>
+
       <section className="ops-board">
         <Panel title="الحملات">
           {campaigns.length === 0 && <p className="muted">لا توجد حملات بعد. أنشئ حملة أو حوّل فرصة من الرادار.</p>}
@@ -251,6 +467,33 @@ export default function MarketingOperatingConsole() {
           <p className="muted">{data?.enterprise?.strategy?.focus}</p>
           <Statement label="أطروحة الاستثمار" value={data?.enterprise?.strategy?.investment_thesis || "اختبارات صغيرة ثم توسع مشروط"} />
           <Statement label="الأسواق" value={(data?.enterprise?.strategy?.target_markets || []).join("، ")} />
+        </Panel>
+      </section>
+
+      <section className="ops-board">
+        <Panel title="المنتجات والشرائح">
+          {products.slice(0, 5).map((product) => (
+            <Statement key={product.id} label={`${product.name} - ${product.category}`} value={`${Math.round(Number(product.gross_margin) * 100)}% margin`} />
+          ))}
+          {segments.slice(0, 5).map((segment) => (
+            <Statement key={segment.id} label={segment.name} value={(segment.channels || []).join(", ")} />
+          ))}
+        </Panel>
+        <Panel title="العروض والتقويم">
+          {offers.slice(0, 4).map((offer) => (
+            <Statement key={offer.id} label={`${offer.name}: ${offer.promise}`} value={currency.format(Number(offer.price))} />
+          ))}
+          {(data?.contentCalendar || []).slice(0, 5).map((item) => (
+            <Statement key={item.id} label={`${item.publish_date} - ${item.topic}`} value={item.channel} />
+          ))}
+        </Panel>
+        <Panel title="A/B و Funnel">
+          {(data?.abTests || []).slice(0, 5).map((test) => (
+            <Statement key={test.id} label={`${test.name}: ${test.variant_a} / ${test.variant_b}`} value={test.status} />
+          ))}
+          {(data?.funnelEvents || []).slice(0, 5).map((event) => (
+            <Statement key={event.id} label={`${event.stage}: ${event.count}`} value={`${currency.format(Number(event.cost))} / ${currency.format(Number(event.revenue))}`} />
+          ))}
         </Panel>
       </section>
     </main>
@@ -285,6 +528,18 @@ function Statement({ label, value }: { label: string; value: string | number }) 
       <b>{value}</b>
     </div>
   );
+}
+
+function marketingMessage(action: string) {
+  if (action === "from-radar") return "تم تحويل آخر فرصة إلى حملة تجريبية.";
+  if (action === "proactive-plan") return "تم إنشاء خطة تسويق مبادرة مع اختبار وتقويم محتوى.";
+  if (action === "product") return "تم حفظ المنتج.";
+  if (action === "segment") return "تم حفظ شريحة العملاء.";
+  if (action === "offer") return "تم حفظ العرض التسويقي.";
+  if (action === "content") return "تم حفظ عنصر التقويم.";
+  if (action === "ab-test") return "تم إنشاء اختبار A/B.";
+  if (action === "funnel-event") return "تم تسجيل حدث Funnel.";
+  return "تم إنشاء الحملة وربطها بالحوكمة.";
 }
 
 function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {

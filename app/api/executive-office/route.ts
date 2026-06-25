@@ -1,5 +1,8 @@
 import {
   createExecutiveItem,
+  createExecutiveCalendarEvent,
+  createMeetingMinutes,
+  generateExecutiveBrief,
   getExecutiveOffice,
   runExecutiveRadar,
   runExecutiveRequest,
@@ -38,6 +41,21 @@ export async function POST(req: Request) {
 
     if (action === "execute") {
       const result = await runExecutiveRequest(String(body.request || ""));
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "calendar-event") {
+      const result = await createExecutiveCalendarEvent(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "meeting-minutes") {
+      const result = await createMeetingMinutes(body.data);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "daily-brief") {
+      const result = await generateExecutiveBrief(String(body.briefType || "MORNING"));
       return NextResponse.json({ ok: true, result });
     }
 

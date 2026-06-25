@@ -1,5 +1,6 @@
 import { calculateFinancials } from "./accountingSystem";
 import { evaluateBusiness } from "./businessBrain";
+import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
 
 type AccountSeed = {
@@ -100,7 +101,7 @@ export async function getEnterpriseStatus() {
     };
   }
 
-  const [accountRows, journalRows, ceoRows, channelRows, campaignRows, radarRows, strategyRows] =
+  const [accountRows, journalRows, ceoRows, channelRows, campaignRows, radarRows, strategyRows, auditRows] =
     await Promise.all([
       supabase.from("accounting_accounts").select("*").order("code", { ascending: true }),
       supabase.from("accounting_journal_entries").select("*").order("created_at", { ascending: false }).limit(10),
@@ -109,9 +110,10 @@ export async function getEnterpriseStatus() {
       supabase.from("marketing_campaigns").select("*").order("created_at", { ascending: false }).limit(10),
       supabase.from("opportunity_radar_runs").select("*").order("created_at", { ascending: false }).limit(10),
       supabase.from("company_strategy").select("*").limit(1),
+      supabase.from("decision_audit_log").select("*").order("created_at", { ascending: false }).limit(10),
     ]);
 
-  for (const result of [accountRows, journalRows, ceoRows, channelRows, campaignRows, radarRows, strategyRows]) {
+  for (const result of [accountRows, journalRows, ceoRows, channelRows, campaignRows, radarRows, strategyRows, auditRows]) {
     if (result.error) throw result.error;
   }
 
@@ -125,6 +127,7 @@ export async function getEnterpriseStatus() {
     marketingCampaigns: campaignRows.data || [],
     opportunityRuns: radarRows.data || [],
     strategy: strategyRows.data?.[0] || commercialStrategy,
+    audits: auditRows.data || [],
     configured: true,
   };
 }
@@ -132,6 +135,7 @@ export async function getEnterpriseStatus() {
 export async function seedEnterpriseOperatingSystem() {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured.");
+  await seedGovernanceOS();
 
   const { error: accountError } = await supabase.from("accounting_accounts").upsert(
     accounts.map((account) => ({ ...account, is_system: true })),
@@ -184,15 +188,41 @@ export async function runOpportunityRadar(source = "MANUAL") {
   const requestedBudget = Math.max(5000, Math.round(Math.max(status.financials.profit, 10000) * 0.2));
   const pilotMarketingBudget = Math.max(1500, Math.round(requestedBudget * 0.25));
   const isCashPositive = status.financials.profit > 0;
+  const candidates = [
+    {
+      title: "Lean commerce pilot for gift and care products",
+      profitability: isCashPositive ? 82 : 58,
+      risk: status.intelligence.riskLevel === "HIGH" ? 45 : 22,
+      capacity: isCashPositive ? 75 : 55,
+      channel: "meta_ads",
+    },
+    {
+      title: "AI-enabled service package for small commerce teams",
+      profitability: 74,
+      risk: 30,
+      capacity: 80,
+      channel: "seo_content",
+    },
+    {
+      title: "Organic demand validation sprint before paid expansion",
+      profitability: isCashPositive ? 60 : 72,
+      risk: 18,
+      capacity: 88,
+      channel: "seo_content",
+    },
+  ].map((candidate) => ({
+    ...candidate,
+    score: Math.round(candidate.profitability * 0.45 + (100 - candidate.risk) * 0.3 + candidate.capacity * 0.25),
+  }));
+  const best = candidates.sort((a, b) => b.score - a.score)[0];
   const opportunity = {
-    title: isCashPositive
-      ? "Lean commerce pilot for gift and care products"
-      : "Organic demand validation sprint before paid expansion",
+    title: best.title,
     thesis: status.strategy?.investment_thesis || commercialStrategy.investment_thesis,
     budget: requestedBudget,
     pilot_marketing_budget: pilotMarketingBudget,
     expected_roi: isCashPositive ? 35 : 18,
     risk: status.intelligence.riskLevel,
+    opportunity_score: best.score,
     commercial_fit:
       "Fits the company direction: AI-assisted commerce, small validated tests, and expansion only after margin/CAC/operations are proven.",
     marketing_tests: [
@@ -213,12 +243,38 @@ export async function runOpportunityRadar(source = "MANUAL") {
       status: "PROPOSED",
       signal_summary: "Daily opportunity scan based on financial health, existing operating data, and company thesis.",
       recommended_opportunity: opportunity,
-      cfo_required: requestedBudget > 5000,
-      ceo_required: requestedBudget > 50000 || status.intelligence.riskLevel !== "LOW",
-    })
+    cfo_required: requestedBudget > 5000,
+    ceo_required: requestedBudget > 50000 || status.intelligence.riskLevel !== "LOW",
+  })
     .select()
     .single();
   if (runError) throw runError;
+
+  const scoreRows = candidates.map((candidate) => ({
+    radar_run_id: run.id,
+    opportunity_title: candidate.title,
+    profitability_score: candidate.profitability,
+    risk_score: candidate.risk,
+    capacity_score: candidate.capacity,
+    total_score: candidate.score,
+    recommendation:
+      candidate.title === best.title
+        ? "Recommended for the next pilot cycle."
+        : "Keep in watchlist until better margin or capacity signal appears.",
+    metadata: { channel: candidate.channel, source },
+  }));
+  const { error: scoreError } = await supabase.from("opportunity_scores").insert(scoreRows);
+  if (scoreError) throw scoreError;
+
+  const governance = await evaluateGovernedAction({
+    title: `Opportunity radar pilot: ${opportunity.title}`,
+    entityType: "opportunity_radar_runs",
+    entityId: run.id,
+    amount: requestedBudget,
+    riskLevel: status.intelligence.riskLevel,
+    actorRole: "Opportunity Radar",
+    metadata: { opportunity },
+  });
 
   const { data: campaign, error: campaignError } = await supabase
     .from("marketing_campaigns")
@@ -227,9 +283,10 @@ export async function runOpportunityRadar(source = "MANUAL") {
       product_name: opportunity.title,
       target_audience: "Saudi e-commerce customers interested in practical gifts, care products, and validated offers.",
       offer: "Limited pilot offer designed to validate demand before operational expansion.",
-      channel_id: isCashPositive ? "meta_ads" : "seo_content",
+      channel_id: best.channel,
       budget: pilotMarketingBudget,
-      status: "RADAR_DRAFT",
+      status: governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL",
+      cost_center_id: "cc-radar",
       kpis: {
         cac_target: Math.max(35, Math.round(pilotMarketingBudget / 55)),
         roas_target: isCashPositive ? 2 : 1.3,
@@ -251,7 +308,7 @@ export async function runOpportunityRadar(source = "MANUAL") {
     priority: status.intelligence.riskLevel === "HIGH" ? "URGENT" : "HIGH",
     due_at: new Date(Date.now() + 86400000).toISOString(),
     notes: opportunity.next_step,
-    metadata: { radar_run_id: run.id, campaign_id: campaign.id, opportunity },
+    metadata: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity },
   });
   if (ceoError) throw ceoError;
 
@@ -264,9 +321,21 @@ export async function runOpportunityRadar(source = "MANUAL") {
     provider: "CEO Office + CFO + Marketing",
     requires_approval: true,
     approval_status: "PENDING",
-    payload: { radar_run_id: run.id, campaign_id: campaign.id, opportunity },
+    payload: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity },
   });
   if (actionError) throw actionError;
 
-  return { skipped: false, run, campaign, opportunity };
+  await logDecision({
+    decisionType: "OPPORTUNITY_RADAR_CREATED",
+    entityType: "marketing_campaigns",
+    entityId: campaign.id,
+    actorRole: "Opportunity Radar",
+    action: `Created radar-linked campaign draft for ${opportunity.title}`,
+    amount: pilotMarketingBudget,
+    riskLevel: status.intelligence.riskLevel,
+    approvalStatus: governance.approvalStatus,
+    metadata: { radar_run_id: run.id, campaign_id: campaign.id, opportunity },
+  });
+
+  return { skipped: false, run, campaign, governance, candidates, opportunity };
 }

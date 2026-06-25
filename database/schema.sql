@@ -666,3 +666,306 @@ grant select, insert, update on marketing_channels to anon, authenticated, servi
 grant select, insert, update on marketing_campaigns to anon, authenticated, service_role;
 grant select, insert, update on opportunity_radar_runs to anon, authenticated, service_role;
 grant select, insert, update on company_strategy to anon, authenticated, service_role;
+
+create table if not exists governance_roles (
+  id text primary key,
+  name text not null,
+  description text,
+  permissions jsonb default '{}',
+  spend_limit numeric not null default 0,
+  approval_limit numeric not null default 0,
+  created_at timestamptz default now()
+);
+
+create table if not exists approval_policies (
+  id text primary key,
+  rule_name text not null,
+  min_amount numeric not null default 0,
+  max_amount numeric,
+  risk_level text not null default 'ANY',
+  required_role text not null,
+  auto_approve boolean default false,
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists decision_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  decision_type text not null,
+  entity_type text,
+  entity_id text,
+  actor_role text not null default 'SYSTEM',
+  action text not null,
+  amount numeric not null default 0,
+  risk_level text not null default 'LOW',
+  approval_status text not null default 'NOT_REQUIRED',
+  immutable_note text,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists cost_centers (
+  id text primary key,
+  name text not null,
+  owner_role text not null,
+  monthly_budget numeric not null default 0,
+  status text not null default 'ACTIVE',
+  created_at timestamptz default now()
+);
+
+alter table accounting_journal_entries add column if not exists cost_center_id text references cost_centers(id) on delete set null;
+alter table accounting_invoices add column if not exists tax_rate numeric not null default 0;
+alter table accounting_invoices add column if not exists tax_invoice_number text;
+alter table accounting_invoices add column if not exists cost_center_id text references cost_centers(id) on delete set null;
+alter table marketing_campaigns add column if not exists cost_center_id text references cost_centers(id) on delete set null;
+alter table marketing_campaigns add column if not exists product_id text;
+alter table marketing_campaigns add column if not exists segment_id text;
+alter table marketing_campaigns add column if not exists offer_id text;
+alter table marketing_campaigns add column if not exists actual_spend numeric not null default 0;
+alter table marketing_campaigns add column if not exists actual_revenue numeric not null default 0;
+alter table marketing_campaigns add column if not exists ltv numeric not null default 0;
+
+create table if not exists accounting_period_closes (
+  id text primary key,
+  period text unique not null,
+  status text not null default 'CLOSED',
+  revenue numeric not null default 0,
+  expenses numeric not null default 0,
+  net_income numeric not null default 0,
+  closed_by_role text not null default 'CFO',
+  report jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists cash_flow_forecasts (
+  id uuid primary key default gen_random_uuid(),
+  forecast_date date not null,
+  scenario text not null default 'BASE',
+  inflow numeric not null default 0,
+  outflow numeric not null default 0,
+  net_cash numeric not null default 0,
+  source text not null default 'system',
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists executive_calendar_events (
+  id text primary key,
+  title text not null,
+  event_type text not null default 'FOLLOW_UP',
+  starts_at timestamptz not null,
+  ends_at timestamptz,
+  owner_role text not null default 'CEO Office',
+  status text not null default 'SCHEDULED',
+  linked_entity_type text,
+  linked_entity_id text,
+  notes text,
+  created_at timestamptz default now()
+);
+
+create table if not exists executive_meeting_minutes (
+  id text primary key,
+  title text not null,
+  meeting_date date not null default current_date,
+  attendees text[] default '{}',
+  decisions text,
+  action_items jsonb default '[]',
+  linked_entity_type text,
+  linked_entity_id text,
+  created_at timestamptz default now()
+);
+
+create table if not exists executive_daily_briefs (
+  id text primary key,
+  brief_date date not null default current_date,
+  brief_type text not null default 'MORNING',
+  summary text not null,
+  priorities jsonb default '[]',
+  risks jsonb default '[]',
+  approvals jsonb default '[]',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_products (
+  id text primary key,
+  name text not null,
+  category text not null default 'commerce',
+  unit_cost numeric not null default 0,
+  target_price numeric not null default 0,
+  gross_margin numeric not null default 0,
+  status text not null default 'TESTING',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_segments (
+  id text primary key,
+  name text not null,
+  persona text not null,
+  pain_points text[] default '{}',
+  channels text[] default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_offers (
+  id text primary key,
+  product_id text references marketing_products(id) on delete set null,
+  name text not null,
+  promise text not null,
+  price numeric not null default 0,
+  status text not null default 'DRAFT',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_ab_tests (
+  id text primary key,
+  campaign_id uuid references marketing_campaigns(id) on delete cascade,
+  name text not null,
+  variant_a text not null,
+  variant_b text not null,
+  metric text not null default 'CVR',
+  status text not null default 'RUNNING',
+  result jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_content_calendar (
+  id text primary key,
+  campaign_id uuid references marketing_campaigns(id) on delete set null,
+  publish_date date not null,
+  channel text not null,
+  topic text not null,
+  status text not null default 'PLANNED',
+  owner_role text not null default 'Marketing Director',
+  created_at timestamptz default now()
+);
+
+create table if not exists marketing_funnel_events (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references marketing_campaigns(id) on delete cascade,
+  stage text not null,
+  count numeric not null default 0,
+  cost numeric not null default 0,
+  revenue numeric not null default 0,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create table if not exists opportunity_scores (
+  id uuid primary key default gen_random_uuid(),
+  radar_run_id uuid references opportunity_radar_runs(id) on delete cascade,
+  opportunity_title text not null,
+  profitability_score numeric not null default 0,
+  risk_score numeric not null default 0,
+  capacity_score numeric not null default 0,
+  total_score numeric not null default 0,
+  recommendation text not null,
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_cost_centers_status on cost_centers(status);
+create index if not exists idx_decision_audit_log_created_at on decision_audit_log(created_at desc);
+create index if not exists idx_accounting_period_closes_period on accounting_period_closes(period);
+create index if not exists idx_executive_calendar_events_starts_at on executive_calendar_events(starts_at);
+create index if not exists idx_marketing_products_status on marketing_products(status);
+create index if not exists idx_marketing_funnel_events_campaign_id on marketing_funnel_events(campaign_id);
+
+alter table governance_roles enable row level security;
+alter table approval_policies enable row level security;
+alter table decision_audit_log enable row level security;
+alter table cost_centers enable row level security;
+alter table accounting_period_closes enable row level security;
+alter table cash_flow_forecasts enable row level security;
+alter table executive_calendar_events enable row level security;
+alter table executive_meeting_minutes enable row level security;
+alter table executive_daily_briefs enable row level security;
+alter table marketing_products enable row level security;
+alter table marketing_segments enable row level security;
+alter table marketing_offers enable row level security;
+alter table marketing_ab_tests enable row level security;
+alter table marketing_content_calendar enable row level security;
+alter table marketing_funnel_events enable row level security;
+alter table opportunity_scores enable row level security;
+
+drop policy if exists "app read governance roles" on governance_roles;
+drop policy if exists "app write governance roles" on governance_roles;
+drop policy if exists "app read approval policies" on approval_policies;
+drop policy if exists "app write approval policies" on approval_policies;
+drop policy if exists "app read decision audit log" on decision_audit_log;
+drop policy if exists "app write decision audit log" on decision_audit_log;
+drop policy if exists "app read cost centers" on cost_centers;
+drop policy if exists "app write cost centers" on cost_centers;
+drop policy if exists "app read accounting period closes" on accounting_period_closes;
+drop policy if exists "app write accounting period closes" on accounting_period_closes;
+drop policy if exists "app read cash flow forecasts" on cash_flow_forecasts;
+drop policy if exists "app write cash flow forecasts" on cash_flow_forecasts;
+drop policy if exists "app read executive calendar events" on executive_calendar_events;
+drop policy if exists "app write executive calendar events" on executive_calendar_events;
+drop policy if exists "app read executive meeting minutes" on executive_meeting_minutes;
+drop policy if exists "app write executive meeting minutes" on executive_meeting_minutes;
+drop policy if exists "app read executive daily briefs" on executive_daily_briefs;
+drop policy if exists "app write executive daily briefs" on executive_daily_briefs;
+drop policy if exists "app read marketing products" on marketing_products;
+drop policy if exists "app write marketing products" on marketing_products;
+drop policy if exists "app read marketing segments" on marketing_segments;
+drop policy if exists "app write marketing segments" on marketing_segments;
+drop policy if exists "app read marketing offers" on marketing_offers;
+drop policy if exists "app write marketing offers" on marketing_offers;
+drop policy if exists "app read marketing ab tests" on marketing_ab_tests;
+drop policy if exists "app write marketing ab tests" on marketing_ab_tests;
+drop policy if exists "app read marketing content calendar" on marketing_content_calendar;
+drop policy if exists "app write marketing content calendar" on marketing_content_calendar;
+drop policy if exists "app read marketing funnel events" on marketing_funnel_events;
+drop policy if exists "app write marketing funnel events" on marketing_funnel_events;
+drop policy if exists "app read opportunity scores" on opportunity_scores;
+drop policy if exists "app write opportunity scores" on opportunity_scores;
+
+create policy "app read governance roles" on governance_roles for select to anon, authenticated using (true);
+create policy "app write governance roles" on governance_roles for insert to anon, authenticated with check (length(id) > 0);
+create policy "app read approval policies" on approval_policies for select to anon, authenticated using (true);
+create policy "app write approval policies" on approval_policies for insert to anon, authenticated with check (length(id) > 0);
+create policy "app read decision audit log" on decision_audit_log for select to anon, authenticated using (true);
+create policy "app write decision audit log" on decision_audit_log for insert to anon, authenticated with check (length(action) > 0);
+create policy "app read cost centers" on cost_centers for select to anon, authenticated using (true);
+create policy "app write cost centers" on cost_centers for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read accounting period closes" on accounting_period_closes for select to anon, authenticated using (true);
+create policy "app write accounting period closes" on accounting_period_closes for insert to anon, authenticated with check (length(period) > 0);
+create policy "app read cash flow forecasts" on cash_flow_forecasts for select to anon, authenticated using (true);
+create policy "app write cash flow forecasts" on cash_flow_forecasts for insert to anon, authenticated with check (true);
+create policy "app read executive calendar events" on executive_calendar_events for select to anon, authenticated using (true);
+create policy "app write executive calendar events" on executive_calendar_events for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read executive meeting minutes" on executive_meeting_minutes for select to anon, authenticated using (true);
+create policy "app write executive meeting minutes" on executive_meeting_minutes for insert to anon, authenticated with check (length(title) > 0);
+create policy "app read executive daily briefs" on executive_daily_briefs for select to anon, authenticated using (true);
+create policy "app write executive daily briefs" on executive_daily_briefs for insert to anon, authenticated with check (length(summary) > 0);
+create policy "app read marketing products" on marketing_products for select to anon, authenticated using (true);
+create policy "app write marketing products" on marketing_products for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read marketing segments" on marketing_segments for select to anon, authenticated using (true);
+create policy "app write marketing segments" on marketing_segments for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read marketing offers" on marketing_offers for select to anon, authenticated using (true);
+create policy "app write marketing offers" on marketing_offers for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read marketing ab tests" on marketing_ab_tests for select to anon, authenticated using (true);
+create policy "app write marketing ab tests" on marketing_ab_tests for insert to anon, authenticated with check (length(name) > 0);
+create policy "app read marketing content calendar" on marketing_content_calendar for select to anon, authenticated using (true);
+create policy "app write marketing content calendar" on marketing_content_calendar for insert to anon, authenticated with check (length(topic) > 0);
+create policy "app read marketing funnel events" on marketing_funnel_events for select to anon, authenticated using (true);
+create policy "app write marketing funnel events" on marketing_funnel_events for insert to anon, authenticated with check (length(stage) > 0);
+create policy "app read opportunity scores" on opportunity_scores for select to anon, authenticated using (true);
+create policy "app write opportunity scores" on opportunity_scores for insert to anon, authenticated with check (length(opportunity_title) > 0);
+
+grant select, insert, update on governance_roles to anon, authenticated, service_role;
+grant select, insert, update on approval_policies to anon, authenticated, service_role;
+grant select, insert on decision_audit_log to anon, authenticated, service_role;
+grant select, insert, update on cost_centers to anon, authenticated, service_role;
+grant select, insert, update on accounting_period_closes to anon, authenticated, service_role;
+grant select, insert, update on cash_flow_forecasts to anon, authenticated, service_role;
+grant select, insert, update on executive_calendar_events to anon, authenticated, service_role;
+grant select, insert, update on executive_meeting_minutes to anon, authenticated, service_role;
+grant select, insert, update on executive_daily_briefs to anon, authenticated, service_role;
+grant select, insert, update on marketing_products to anon, authenticated, service_role;
+grant select, insert, update on marketing_segments to anon, authenticated, service_role;
+grant select, insert, update on marketing_offers to anon, authenticated, service_role;
+grant select, insert, update on marketing_ab_tests to anon, authenticated, service_role;
+grant select, insert, update on marketing_content_calendar to anon, authenticated, service_role;
+grant select, insert, update on marketing_funnel_events to anon, authenticated, service_role;
+grant select, insert, update on opportunity_scores to anon, authenticated, service_role;

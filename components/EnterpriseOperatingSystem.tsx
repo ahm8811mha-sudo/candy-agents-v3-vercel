@@ -14,6 +14,7 @@ import {
   Radar,
   RefreshCw,
   ShieldCheck,
+  LockKeyhole,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,19 @@ type EnterpriseStatus = {
   marketingCampaigns?: Array<{ id: string; name: string; status: string; budget?: number }>;
   opportunityRuns?: Array<{ id: string; status: string; signal_summary: string; recommended_opportunity?: Record<string, unknown> }>;
   strategy?: { focus?: string; investment_thesis?: string; target_markets?: string[] };
+  audits?: Array<{ id: string; decision_type: string; action: string; approval_status: string }>;
+  governance?: {
+    roles?: Array<{ id: string; name: string; approval_limit: number }>;
+    policies?: Array<{ id: string; rule_name: string; required_role: string }>;
+    integrations?: Array<{ id: string; provider: string; status: string }>;
+    controlSummary?: {
+      pendingApprovals: number;
+      blockedActions: number;
+      auditEventsToday: number;
+      connectedIntegrations: number;
+      readyIntegrations: number;
+    };
+  };
 };
 
 const currency = new Intl.NumberFormat("ar-SA", {
@@ -51,7 +65,9 @@ export default function EnterpriseOperatingSystem() {
       const res = await fetch("/api/enterprise-os", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل Enterprise OS.");
-      setData(json);
+      const governanceRes = await fetch("/api/governance", { cache: "no-store" });
+      const governanceJson = await governanceRes.json();
+      setData({ ...json, governance: governanceJson.ok ? governanceJson : undefined });
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل Enterprise OS.");
     } finally {
@@ -175,6 +191,17 @@ export default function EnterpriseOperatingSystem() {
             ["المبادرة", "يومية"],
           ]}
         />
+        <SystemCard
+          icon={LockKeyhole}
+          title="الحوكمة والصلاحيات"
+          status="Approval gates active"
+          body="النظام يفرق بين الاقتراح والتنفيذ، ويمنع الإنفاق أو التوسع عالي المخاطر بدون اعتماد CFO أو CEO، مع سجل قرارات محفوظ."
+          metrics={[
+            ["الأدوار", data?.governance?.roles?.length || 0],
+            ["سياسات الاعتماد", data?.governance?.policies?.length || 0],
+            ["سجل اليوم", data?.governance?.controlSummary?.auditEventsToday || 0],
+          ]}
+        />
       </section>
 
       <section className="delivery-panel">
@@ -208,6 +235,10 @@ export default function EnterpriseOperatingSystem() {
         <ListPanel
           title="آخر رادار فرص"
           items={(data?.opportunityRuns || []).map((item) => `${item.status}: ${item.signal_summary}`)}
+        />
+        <ListPanel
+          title="التكاملات والحوكمة"
+          items={(data?.governance?.integrations || []).map((item) => `${item.provider} - ${item.status}`)}
         />
       </section>
     </main>

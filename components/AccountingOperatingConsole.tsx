@@ -27,6 +27,11 @@ type AccountingData = {
     receivables?: number;
     payables?: number;
   };
+  taxSummary?: { taxCollected: number; taxPaid: number; netTaxPayable: number; nextVatReview: string };
+  reconciliation?: { unmatchedBank: number; matchedBank: number; bankTransactions: number };
+  costCenters?: Array<{ id: string; name: string; owner_role: string; monthly_budget: number; status: string }>;
+  monthlyCloses?: Array<{ id: string; period: string; status: string; revenue: number; expenses: number; net_income: number }>;
+  cashForecasts?: Array<{ id?: string; forecast_date: string; scenario: string; inflow: number; outflow: number; net_cash: number }>;
   cfoSummary?: {
     status: string;
     message: string;
@@ -66,7 +71,10 @@ export default function AccountingOperatingConsole() {
     }
   }
 
-  async function submit(action: "seed" | "journal" | "invoice" | "bank", payload?: Record<string, unknown>) {
+  async function submit(
+    action: "seed" | "journal" | "invoice" | "bank" | "cost-center" | "close-period" | "cash-forecast" | "reconcile",
+    payload?: Record<string, unknown>
+  ) {
     setWorking(action);
     setMessage("");
     setError("");
@@ -74,7 +82,7 @@ export default function AccountingOperatingConsole() {
       const res = await fetch("/api/accounting-pro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, data: payload }),
+        body: JSON.stringify(action === "close-period" ? { action, period: payload?.period } : { action, data: payload }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ العملية.");
@@ -95,6 +103,7 @@ export default function AccountingOperatingConsole() {
       debitCode: String(form.get("debitCode") || "5100"),
       creditCode: String(form.get("creditCode") || "1000"),
       amount: Number(form.get("amount") || 0),
+      costCenterId: String(form.get("costCenterId") || ""),
     }).then(() => event.currentTarget.reset());
   }
 
@@ -106,6 +115,8 @@ export default function AccountingOperatingConsole() {
       contactName: String(form.get("contactName") || ""),
       subtotal: Number(form.get("subtotal") || 0),
       tax: Number(form.get("tax") || 0),
+      taxRate: Number(form.get("taxRate") || 0),
+      costCenterId: String(form.get("costCenterId") || ""),
       notes: String(form.get("notes") || ""),
     }).then(() => event.currentTarget.reset());
   }
@@ -117,6 +128,16 @@ export default function AccountingOperatingConsole() {
       description: String(form.get("description") || ""),
       amount: Number(form.get("amount") || 0),
       bankName: String(form.get("bankName") || "Main operating bank"),
+    }).then(() => event.currentTarget.reset());
+  }
+
+  function submitCostCenter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    submit("cost-center", {
+      name: String(form.get("name") || ""),
+      ownerRole: String(form.get("ownerRole") || "CFO"),
+      monthlyBudget: Number(form.get("monthlyBudget") || 0),
     }).then(() => event.currentTarget.reset());
   }
 
@@ -165,6 +186,14 @@ export default function AccountingOperatingConsole() {
           {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
           تحديث المالية
         </button>
+        <button className="secondary-btn" onClick={() => submit("close-period", { period: new Date().toISOString().slice(0, 7) })} disabled={Boolean(working)}>
+          {working === "close-period" ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+          إقفال الشهر
+        </button>
+        <button className="secondary-btn" onClick={() => submit("cash-forecast")} disabled={Boolean(working)}>
+          {working === "cash-forecast" ? <Loader2 className="spin" size={18} /> : <Banknote size={18} />}
+          توقع التدفق النقدي
+        </button>
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
@@ -176,6 +205,8 @@ export default function AccountingOperatingConsole() {
         <Metric icon={Landmark} label="الأصول" value={currency.format(balance?.assets || 0)} />
         <Metric icon={FileText} label="الذمم المدينة" value={currency.format(data?.statements?.receivables || 0)} />
         <Metric icon={FileText} label="الذمم الدائنة" value={currency.format(data?.statements?.payables || 0)} />
+        <Metric icon={ReceiptText} label="صافي الضريبة" value={currency.format(data?.taxSummary?.netTaxPayable || 0)} />
+        <Metric icon={ShieldCheck} label="بنك غير مطابق" value={String(data?.reconciliation?.unmatchedBank || 0)} />
       </section>
 
       <section className="ops-workbench">
@@ -200,6 +231,20 @@ export default function AccountingOperatingConsole() {
             <label>
               الضريبة
               <input className="input" name="tax" type="number" min="0" step="1" placeholder="0" />
+            </label>
+            <label>
+              نسبة الضريبة
+              <input className="input" name="taxRate" type="number" min="0" step="0.01" placeholder="0.15" />
+            </label>
+            <label>
+              مركز التكلفة
+              <select className="input" name="costCenterId" defaultValue="cc-marketing">
+                {(data?.costCenters || []).map((center) => (
+                  <option value={center.id} key={center.id}>
+                    {center.name}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           <label>
@@ -243,6 +288,16 @@ export default function AccountingOperatingConsole() {
               الوصف
               <input className="input" name="memo" placeholder="مثال: مصروف حملة تسويق" required />
             </label>
+            <label>
+              مركز التكلفة
+              <select className="input" name="costCenterId" defaultValue="cc-marketing">
+                {(data?.costCenters || []).map((center) => (
+                  <option value={center.id} key={center.id}>
+                    {center.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <button className="primary-btn" disabled={Boolean(working)}>
             {working === "journal" ? <Loader2 className="spin" size={18} /> : <BookOpenCheck size={18} />}
@@ -271,6 +326,28 @@ export default function AccountingOperatingConsole() {
             إضافة حركة بنك
           </button>
         </form>
+
+        <form className="ops-card" onSubmit={submitCostCenter}>
+          <h2>مركز تكلفة جديد</h2>
+          <div className="ops-form-grid">
+            <label>
+              الاسم
+              <input className="input" name="name" placeholder="مثال: حملة منتج الهدايا" required />
+            </label>
+            <label>
+              المسؤول
+              <input className="input" name="ownerRole" defaultValue="CFO" />
+            </label>
+            <label>
+              الميزانية الشهرية
+              <input className="input" name="monthlyBudget" type="number" min="0" step="1" placeholder="10000" />
+            </label>
+          </div>
+          <button className="secondary-btn" disabled={Boolean(working)}>
+            {working === "cost-center" ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
+            إضافة مركز تكلفة
+          </button>
+        </form>
       </section>
 
       <section className="ops-board">
@@ -289,6 +366,13 @@ export default function AccountingOperatingConsole() {
           {(data?.cfoSummary?.controls || []).map((control) => (
             <Statement key={control} label={control} value="فعال" />
           ))}
+        </Panel>
+        <Panel title="الضريبة والمطابقة">
+          <Statement label="ضريبة المخرجات" value={currency.format(data?.taxSummary?.taxCollected || 0)} />
+          <Statement label="ضريبة المدخلات" value={currency.format(data?.taxSummary?.taxPaid || 0)} />
+          <Statement label="صافي الضريبة المستحقة" value={currency.format(data?.taxSummary?.netTaxPayable || 0)} strong />
+          <Statement label="موعد مراجعة VAT" value={data?.taxSummary?.nextVatReview || "-"} />
+          <Statement label="حركات بنك غير مطابقة" value={String(data?.reconciliation?.unmatchedBank || 0)} />
         </Panel>
       </section>
 
@@ -309,6 +393,14 @@ export default function AccountingOperatingConsole() {
             <Statement key={transaction.id} label={transaction.description} value={`${transaction.status} ${currency.format(Number(transaction.amount))}`} />
           ))}
         </Panel>
+        <Panel title="الإقفال والتدفق النقدي">
+          {(data?.monthlyCloses || []).slice(0, 4).map((close) => (
+            <Statement key={close.id} label={`${close.period} - ${close.status}`} value={currency.format(Number(close.net_income))} />
+          ))}
+          {(data?.cashForecasts || []).slice(0, 6).map((row) => (
+            <Statement key={`${row.forecast_date}-${row.scenario}`} label={`${row.forecast_date} ${row.scenario}`} value={currency.format(Number(row.net_cash))} />
+          ))}
+        </Panel>
       </section>
     </main>
   );
@@ -319,6 +411,10 @@ function operationMessage(action: string) {
   if (action === "journal") return "تم ترحيل القيد المحاسبي.";
   if (action === "invoice") return "تم حفظ الفاتورة وترحيل أثرها المالي.";
   if (action === "bank") return "تمت إضافة حركة البنك للمطابقة.";
+  if (action === "cost-center") return "تم حفظ مركز التكلفة وربطه بالميزانية.";
+  if (action === "close-period") return "تم إنشاء إقفال شهري مع حوكمة CFO.";
+  if (action === "cash-forecast") return "تم توليد توقع التدفق النقدي.";
+  if (action === "reconcile") return "تمت مطابقة حركة البنك.";
   return "تم تنفيذ العملية.";
 }
 
