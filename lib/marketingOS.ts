@@ -323,10 +323,19 @@ export async function createCampaignFromRadar() {
 
   return createMarketingCampaign({
     productName: opportunity.title,
-    targetAudience: "Saudi e-commerce customers interested in practical gifts, care products, and validated offers",
-    offer: "Limited pilot offer designed to validate demand before scaling.",
-    channelId: "meta_ads",
-    budget: Math.max(1500, Math.round(number(opportunity.budget) * 0.25)),
+    targetAudience:
+      opportunity.marketing_review?.target_audience || "Saudi e-commerce customers interested in practical gifts, care products, and validated offers",
+    offer: opportunity.marketing_review?.offer || "Limited pilot offer designed to validate demand before scaling.",
+    channelId: opportunity.marketing_review?.channel || "meta_ads",
+    budget: Math.max(
+      1500,
+      Math.round(
+        number(opportunity.marketing_review?.pilot_budget) ||
+          number(opportunity.pilot_marketing_budget) ||
+          number(opportunity.budget_breakdown?.marketing) ||
+          number(opportunity.budget) * 0.25
+      )
+    ),
     objective: "Radar opportunity pilot",
     costCenterId: "cc-radar",
   });

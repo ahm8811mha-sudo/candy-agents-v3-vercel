@@ -32,7 +32,18 @@ type EnterpriseStatus = {
   ceoItems?: Array<{ id: string; title: string; item_type: string; status: string; priority: string; notes?: string }>;
   marketingChannels?: Array<{ id: string; name: string; funnel_stage: string; status: string }>;
   marketingCampaigns?: Array<{ id: string; name: string; status: string; budget?: number }>;
-  opportunityRuns?: Array<{ id: string; status: string; signal_summary: string; recommended_opportunity?: Record<string, unknown> }>;
+  opportunityRuns?: Array<{
+    id: string;
+    status: string;
+    signal_summary: string;
+    allocated_budget?: number;
+    opportunity_window_days?: number;
+    execution_duration_days?: number;
+    finance_review?: Record<string, any>;
+    marketing_review?: Record<string, any>;
+    ceo_decision?: Record<string, any>;
+    recommended_opportunity?: Record<string, any>;
+  }>;
   strategy?: { focus?: string; investment_thesis?: string; target_markets?: string[] };
   audits?: Array<{ id: string; decision_type: string; action: string; approval_status: string }>;
   governance?: {
@@ -77,6 +88,7 @@ export default function EnterpriseOperatingSystem() {
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [opportunityRequest, setOpportunityRequest] = useState("");
 
   async function load() {
     setLoading(true);
@@ -118,7 +130,7 @@ export default function EnterpriseOperatingSystem() {
       const res = await fetch("/api/enterprise-os", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, request: opportunityRequest }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تشغيل العملية.");
@@ -134,6 +146,12 @@ export default function EnterpriseOperatingSystem() {
   useEffect(() => {
     load();
   }, []);
+
+  const latestOpportunityRun = data?.opportunityRuns?.[0];
+  const latestOpportunity = latestOpportunityRun?.recommended_opportunity || {};
+  const financeReview = latestOpportunity.finance_review || latestOpportunityRun?.finance_review || {};
+  const marketingReview = latestOpportunity.marketing_review || latestOpportunityRun?.marketing_review || {};
+  const ceoDecision = latestOpportunity.ceo_decision || latestOpportunityRun?.ceo_decision || {};
 
   return (
     <main className="company-app enterprise-os">
@@ -165,6 +183,12 @@ export default function EnterpriseOperatingSystem() {
       </section>
 
       <section className="enterprise-actions">
+        <input
+          className="input"
+          value={opportunityRequest}
+          onChange={(event) => setOpportunityRequest(event.target.value)}
+          placeholder="اكتب طلب الفرصة: مثال، ابحث عن فرصة تجارية قابلة للتنفيذ بميزانية محددة"
+        />
         <button className="primary-btn" onClick={() => run("seed")} disabled={Boolean(working)}>
           {working === "seed" ? <Loader2 className="spin" size={18} /> : <CheckCircle2 size={18} />}
           تهيئة النظام المؤسسي
@@ -180,6 +204,54 @@ export default function EnterpriseOperatingSystem() {
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
+
+      {latestOpportunity?.title && (
+        <section className="delivery-panel">
+          <div className="delivery-header">
+            <div>
+              <span className="eyebrow">
+                <Radar size={16} /> ملف الفرصة قبل قرار CEO
+              </span>
+              <h2>{String(latestOpportunity.title)}</h2>
+            </div>
+            <span className="status-pill">{String(ceoDecision.final_decision || latestOpportunityRun?.status || "PENDING")}</span>
+          </div>
+          <div className="enterprise-thesis">
+            <article>
+              <strong>الفرصة</strong>
+              <p>{String(latestOpportunity.commercial_fit || latestOpportunity.thesis || "فرصة تحتاج تحقق مالي وتسويقي.")}</p>
+            </article>
+            <article>
+              <strong>الميزانية المخصصة</strong>
+              <p>{currency.format(Number(latestOpportunity.allocated_budget || latestOpportunity.budget || latestOpportunityRun?.allocated_budget || 0))}</p>
+              <small>تسويق: {currency.format(Number(latestOpportunity.pilot_marketing_budget || marketingReview.pilot_budget || 0))}</small>
+            </article>
+            <article>
+              <strong>مدة الفرصة والتنفيذ</strong>
+              <p>
+                نافذة الفرصة: {Number(latestOpportunity.opportunity_window_days || latestOpportunityRun?.opportunity_window_days || 0)} يوم، التنفيذ:{" "}
+                {Number(latestOpportunity.execution_duration_days || latestOpportunityRun?.execution_duration_days || 0)} يوم.
+              </p>
+              <small>تاريخ التسليم: {String(latestOpportunity.execution_due_date || "-")}</small>
+            </article>
+            <article>
+              <strong>دراسة المركز المالي</strong>
+              <p>{String(financeReview.decision || "بانتظار مراجعة CFO")}</p>
+              <small>المخاطر: {String(financeReview.financial_risk || latestOpportunity.risk || "-")}</small>
+            </article>
+            <article>
+              <strong>دراسة مركز التسويق</strong>
+              <p>{String(marketingReview.recommendation || "بانتظار خطة التسويق")}</p>
+              <small>القناة: {String(marketingReview.channel || "-")}</small>
+            </article>
+            <article>
+              <strong>قرار المدير التنفيذي</strong>
+              <p>{String(ceoDecision.next_ceo_action || "يعود القرار للمدير التنفيذي بعد دراسة المالي والتسويق.")}</p>
+              <small>الموعد: {String(ceoDecision.decision_due_date || "-")}</small>
+            </article>
+          </div>
+        </section>
+      )}
 
       <section className="enterprise-grid">
         <SystemCard
@@ -313,7 +385,13 @@ export default function EnterpriseOperatingSystem() {
         <ListPanel title="قنوات التسويق" items={(data?.marketingChannels || []).map((item) => `${item.name} - ${item.funnel_stage}`)} />
         <ListPanel
           title="آخر رادار فرص"
-          items={(data?.opportunityRuns || []).map((item) => `${item.status}: ${item.signal_summary}`)}
+          items={(data?.opportunityRuns || []).map((item) => {
+            const opportunity = item.recommended_opportunity || {};
+            const decision = opportunity.ceo_decision || item.ceo_decision || {};
+            return `${opportunity.title || item.status}: ${currency.format(
+              Number(opportunity.allocated_budget || item.allocated_budget || 0)
+            )} - ${opportunity.opportunity_window_days || item.opportunity_window_days || 0} يوم - ${decision.final_decision || item.status}`;
+          })}
         />
         <ListPanel
           title="التكاملات والحوكمة"

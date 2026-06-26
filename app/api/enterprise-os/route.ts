@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const action = String(body.action || "seed");
 
     if (action === "radar") {
-      const result = await runOpportunityRadar("MANUAL");
+      const result = await runOpportunityRadar("MANUAL", String(body.request || ""));
       return NextResponse.json({ ok: true, result });
     }
 

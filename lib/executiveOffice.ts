@@ -251,7 +251,9 @@ export async function runExecutiveRadar() {
     title: "CEO review for latest opportunity radar",
     eventType: "OPPORTUNITY_REVIEW",
     durationMinutes: 30,
-    notes: result.skipped ? "Radar already ran today." : "Review radar candidate, CFO gate, and campaign draft.",
+    notes: result.skipped
+      ? "Radar already ran today."
+      : "Review opportunity package after Financial Center/CFO and Marketing Center feasibility review.",
     linkedEntityType: "opportunity_radar_runs",
     linkedEntityId: result.run?.id,
   });

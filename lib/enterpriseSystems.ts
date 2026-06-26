@@ -78,6 +78,12 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function dateAfterDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function newId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -169,7 +175,7 @@ export async function seedEnterpriseOperatingSystem() {
   return getEnterpriseStatus();
 }
 
-export async function runOpportunityRadar(source = "MANUAL") {
+export async function runOpportunityRadar(source = "MANUAL", request = "") {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured.");
   await seedEnterpriseOperatingSystem();
@@ -187,6 +193,7 @@ export async function runOpportunityRadar(source = "MANUAL") {
   }
 
   const status = await getEnterpriseStatus();
+  const requestText = request.trim() || "Proactive opportunity request from the company opportunity radar.";
   const requestedBudget = Math.max(5000, Math.round(Math.max(status.financials.profit, 10000) * 0.2));
   const pilotMarketingBudget = Math.max(1500, Math.round(requestedBudget * 0.25));
   const isCashPositive = status.financials.profit > 0;
@@ -217,14 +224,85 @@ export async function runOpportunityRadar(source = "MANUAL") {
     score: Math.round(candidate.profitability * 0.45 + (100 - candidate.risk) * 0.3 + candidate.capacity * 0.25),
   }));
   const best = candidates.sort((a, b) => b.score - a.score)[0];
+  const opportunityWindowDays = best.channel === "seo_content" ? 21 : 14;
+  const executionDurationDays = best.channel === "seo_content" ? 30 : 21;
+  const operationsBudget = Math.max(1000, Math.round(requestedBudget * 0.2));
+  const procurementBudget = Math.max(1000, Math.round(requestedBudget * 0.3));
+  const creativeBudget = Math.max(750, Math.round(requestedBudget * 0.15));
+  const contingencyBudget = Math.max(0, requestedBudget - pilotMarketingBudget - operationsBudget - procurementBudget - creativeBudget);
+  const budgetBreakdown = {
+    marketing: pilotMarketingBudget,
+    operations: operationsBudget,
+    procurement_or_fulfillment: procurementBudget,
+    creative_and_technology: creativeBudget,
+    contingency: contingencyBudget,
+    total: requestedBudget,
+  };
+  const financeReview = {
+    department: "Financial Center / CFO",
+    reviewer_role: "CFO",
+    budget_available: isCashPositive || requestedBudget <= 10000,
+    allocated_budget: requestedBudget,
+    budget_breakdown: budgetBreakdown,
+    budget_to_current_profit_ratio: status.financials.profit > 0 ? requestedBudget / status.financials.profit : null,
+    expected_roi_percent: isCashPositive ? 35 : 18,
+    financial_risk: status.intelligence.riskLevel,
+    decision:
+      !isCashPositive && requestedBudget > 8000
+        ? "ADJUST_BUDGET_BEFORE_APPROVAL"
+        : requestedBudget > 5000
+          ? "CONDITIONAL_CFO_APPROVAL_REQUIRED"
+          : "APPROVE_LIMITED_PILOT",
+    conditions: [
+      "Do not spend beyond the allocated pilot budget.",
+      "Stop spend if CAC exceeds target by 25%.",
+      "Return to CEO if actual spend reaches 70% before clear demand evidence.",
+    ],
+  };
+  const marketingReview = {
+    department: "Marketing Center",
+    reviewer_role: "Marketing Director",
+    channel: best.channel,
+    target_audience: "Saudi e-commerce customers interested in practical gifts, care products, and validated offers.",
+    offer: "Limited pilot offer designed to validate demand before operational expansion.",
+    pilot_budget: pilotMarketingBudget,
+    opportunity_window_days: opportunityWindowDays,
+    execution_duration_days: executionDurationDays,
+    kpis: {
+      cac_target: Math.max(35, Math.round(pilotMarketingBudget / 55)),
+      roas_target: isCashPositive ? 2 : 1.3,
+      conversion_rate_target: isCashPositive ? 0.03 : 0.018,
+      first_review_after_hours: 72,
+    },
+    recommendation: "Run a controlled validation campaign, measure demand, then send evidence back to CEO.",
+  };
+  const ceoDecision = {
+    department: "CEO Office",
+    final_decision_owner: "CEO",
+    final_decision: "PENDING_CEO_REVIEW",
+    required_reviews: ["Financial Center / CFO", "Marketing Center"],
+    decision_rule: "CEO approves, modifies, or rejects only after CFO budget review and Marketing feasibility review.",
+    next_ceo_action: "Review the opportunity package, CFO conditions, and marketing validation plan before authorizing execution.",
+    decision_due_date: dateAfterDays(1),
+  };
   const opportunity = {
+    request: requestText,
     title: best.title,
+    opportunity_name: best.title,
     thesis: status.strategy?.investment_thesis || commercialStrategy.investment_thesis,
     budget: requestedBudget,
+    allocated_budget: requestedBudget,
+    budget_breakdown: budgetBreakdown,
     pilot_marketing_budget: pilotMarketingBudget,
     expected_roi: isCashPositive ? 35 : 18,
     risk: status.intelligence.riskLevel,
     opportunity_score: best.score,
+    opportunity_window_days: opportunityWindowDays,
+    execution_duration_days: executionDurationDays,
+    opportunity_window: `${opportunityWindowDays} days to validate demand and timing.`,
+    execution_duration: `${executionDurationDays} days to complete pilot execution and produce CEO evidence.`,
+    starts_at: todayIso(),
+    execution_due_date: dateAfterDays(executionDurationDays),
     commercial_fit:
       "Fits the company direction: AI-assisted commerce, small validated tests, and expansion only after margin/CAC/operations are proven.",
     marketing_tests: [
@@ -234,20 +312,30 @@ export async function runOpportunityRadar(source = "MANUAL") {
       "CEO review after 7 days",
     ],
     financial_gate: requestedBudget > 5000 ? "CFO approval required before spend" : "Pilot spend allowed",
-    decision_path: "CFO budget check -> Marketing pilot -> CEO review -> scale, modify, or stop",
-    next_step: "CFO validates pilot budget, Marketing launches a limited test, CEO Office reviews evidence after 7 days.",
+    finance_review: financeReview,
+    marketing_review: marketingReview,
+    ceo_decision: ceoDecision,
+    decision_path: "Financial Center/CFO review -> Marketing Center feasibility review -> CEO final decision",
+    next_step: "CFO validates pilot budget, Marketing confirms feasibility, then CEO Office makes the final approval, modification, or rejection.",
   };
 
   const { data: run, error: runError } = await supabase
     .from("opportunity_radar_runs")
     .insert({
       source,
-      status: "PROPOSED",
-      signal_summary: "Daily opportunity scan based on financial health, existing operating data, and company thesis.",
+      status: "PENDING_CEO_REVIEW",
+      signal_summary: `${best.title}: allocated budget ${requestedBudget} SAR, opportunity window ${opportunityWindowDays} days, execution ${executionDurationDays} days. Awaiting CEO after CFO and Marketing review.`,
       recommended_opportunity: opportunity,
-    cfo_required: requestedBudget > 5000,
-    ceo_required: requestedBudget > 50000 || status.intelligence.riskLevel !== "LOW",
-  })
+      request_text: requestText,
+      allocated_budget: requestedBudget,
+      opportunity_window_days: opportunityWindowDays,
+      execution_duration_days: executionDurationDays,
+      finance_review: financeReview,
+      marketing_review: marketingReview,
+      ceo_decision: ceoDecision,
+      cfo_required: requestedBudget > 5000,
+      ceo_required: true,
+    })
     .select()
     .single();
   if (runError) throw runError;
@@ -283,8 +371,8 @@ export async function runOpportunityRadar(source = "MANUAL") {
     .insert({
       name: `${opportunity.title} - Radar draft`,
       product_name: opportunity.title,
-      target_audience: "Saudi e-commerce customers interested in practical gifts, care products, and validated offers.",
-      offer: "Limited pilot offer designed to validate demand before operational expansion.",
+      target_audience: marketingReview.target_audience,
+      offer: marketingReview.offer,
       channel_id: best.channel,
       budget: pilotMarketingBudget,
       status: governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL",
@@ -293,7 +381,9 @@ export async function runOpportunityRadar(source = "MANUAL") {
         cac_target: Math.max(35, Math.round(pilotMarketingBudget / 55)),
         roas_target: isCashPositive ? 2 : 1.3,
         conversion_rate_target: isCashPositive ? 0.03 : 0.018,
-        test_duration_days: 7,
+        opportunity_window_days: opportunityWindowDays,
+        execution_duration_days: executionDurationDays,
+        test_duration_days: Math.min(7, opportunityWindowDays),
         stop_loss: "Pause if CAC exceeds target by 25% or ROAS stays below target after 72 hours.",
       },
     })
@@ -309,21 +399,21 @@ export async function runOpportunityRadar(source = "MANUAL") {
     status: "PENDING",
     priority: status.intelligence.riskLevel === "HIGH" ? "URGENT" : "HIGH",
     due_at: new Date(Date.now() + 86400000).toISOString(),
-    notes: opportunity.next_step,
-    metadata: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity },
+    notes: `${opportunity.next_step} Budget: ${requestedBudget} SAR. Window: ${opportunityWindowDays} days. Execution: ${executionDurationDays} days.`,
+    metadata: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity, financeReview, marketingReview, ceoDecision },
   });
   if (ceoError) throw ceoError;
 
   const { error: actionError } = await supabase.from("business_actions").insert({
     action_type: "PROACTIVE_OPPORTUNITY_REVIEW",
     title: "Review proactive opportunity radar proposal",
-    description: opportunity.next_step,
+    description: `${opportunity.next_step} CEO final decision is pending after finance and marketing review.`,
     status: "WAITING_APPROVAL",
     execution_mode: "INTERNAL",
     provider: "CEO Office + CFO + Marketing",
     requires_approval: true,
     approval_status: "PENDING",
-    payload: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity },
+    payload: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity, financeReview, marketingReview, ceoDecision },
   });
   if (actionError) throw actionError;
 
@@ -336,8 +426,8 @@ export async function runOpportunityRadar(source = "MANUAL") {
     amount: pilotMarketingBudget,
     riskLevel: status.intelligence.riskLevel,
     approvalStatus: governance.approvalStatus,
-    metadata: { radar_run_id: run.id, campaign_id: campaign.id, opportunity },
+    metadata: { radar_run_id: run.id, campaign_id: campaign.id, opportunity, financeReview, marketingReview, ceoDecision },
   });
 
-  return { skipped: false, run, campaign, governance, candidates, opportunity };
+  return { skipped: false, run, campaign, governance, candidates, opportunity, financeReview, marketingReview, ceoDecision };
 }

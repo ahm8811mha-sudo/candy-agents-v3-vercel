@@ -527,7 +527,14 @@ create table if not exists opportunity_radar_runs (
   source text not null default 'MANUAL',
   status text not null default 'PROPOSED',
   signal_summary text not null,
+  request_text text,
   recommended_opportunity jsonb not null default '{}',
+  allocated_budget numeric not null default 0,
+  opportunity_window_days integer not null default 0,
+  execution_duration_days integer not null default 0,
+  finance_review jsonb not null default '{}',
+  marketing_review jsonb not null default '{}',
+  ceo_decision jsonb not null default '{}',
   cfo_required boolean default true,
   ceo_required boolean default false,
   created_at timestamptz default now()
@@ -541,6 +548,14 @@ create table if not exists company_strategy (
   target_markets text[] default '{}',
   updated_at timestamptz default now()
 );
+
+alter table opportunity_radar_runs add column if not exists request_text text;
+alter table opportunity_radar_runs add column if not exists allocated_budget numeric not null default 0;
+alter table opportunity_radar_runs add column if not exists opportunity_window_days integer not null default 0;
+alter table opportunity_radar_runs add column if not exists execution_duration_days integer not null default 0;
+alter table opportunity_radar_runs add column if not exists finance_review jsonb not null default '{}';
+alter table opportunity_radar_runs add column if not exists marketing_review jsonb not null default '{}';
+alter table opportunity_radar_runs add column if not exists ceo_decision jsonb not null default '{}';
 
 create index if not exists idx_business_kpis_project_id on business_kpis(project_id);
 create index if not exists idx_business_actions_project_id on business_actions(project_id);
