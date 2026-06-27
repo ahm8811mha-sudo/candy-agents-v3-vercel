@@ -519,24 +519,42 @@ async function analyzeDocument(input: GovernmentDocumentInput) {
 
 async function fetchOfficialText(url: string) {
   const officialUrl = requireOfficialUrl(url);
-  const res = await fetch(officialUrl, {
-    headers: {
-      "User-Agent": "CandyAgentsGovernmentRelations/1.0",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-    signal: AbortSignal.timeout(15000),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Official source returned ${res.status}`);
-  requireOfficialUrl(res.url);
-  const html = await res.text();
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 9000);
+  const parsed = new URL(officialUrl);
+  const candidates = [officialUrl];
+  if (!parsed.hostname.startsWith("www.") && ["business.sa", "balady.gov.sa"].includes(parsed.hostname)) {
+    const alternate = new URL(officialUrl);
+    alternate.hostname = `www.${parsed.hostname}`;
+    candidates.push(alternate.toString());
+  }
+
+  let lastError = "Official source fetch failed.";
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; CandyAgentsGovernmentRelations/1.0; +https://candy-agents-v3-vercel.vercel.app)",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.7",
+        },
+        signal: AbortSignal.timeout(12000),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`Official source returned ${res.status}`);
+      requireOfficialUrl(res.url);
+      const html = await res.text();
+      return html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 9000);
+    } catch (err) {
+      const cause = err instanceof Error && err.cause instanceof Error ? `: ${err.cause.message}` : "";
+      lastError = `${err instanceof Error ? err.message : "Fetch failed"}${cause}`;
+    }
+  }
+  throw new Error(lastError);
 }
 
 function estimateFeeFromText(text: string) {
