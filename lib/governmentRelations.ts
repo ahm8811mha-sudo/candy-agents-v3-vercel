@@ -1,16 +1,37 @@
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
+import { createHash } from "node:crypto";
 
 type GovernmentDocumentInput = {
+  documentId?: string;
   documentType?: string;
   title?: string;
   issuer?: string;
+  documentNumber?: string;
+  ownerName?: string;
+  taxNumber?: string;
+  startDate?: string;
+  expiryDate?: string;
+  renewalDate?: string;
+  city?: string;
+  activity?: string;
+  changeReason?: string;
+  actorRole?: string;
   fileName?: string;
   mimeType?: string;
   fileBase64?: string;
   fileText?: string;
   notes?: string;
   category?: string;
+};
+
+type RegulatorySourceInput = {
+  id?: string;
+  documentType: string;
+  issuer: string;
+  title: string;
+  officialUrl: string;
+  sourceKind?: string;
 };
 
 type FeeSourceInput = {
@@ -119,6 +140,60 @@ const portalIntegrations = [
   { id: "gov-nafath", provider: "National Single Sign-On / Nafath", status: "REQUIRED_FOR_AUTOMATION", config: { scope: "authorized_government_portal_login" } },
 ];
 
+const regulatorySources: RegulatorySourceInput[] = [
+  {
+    id: "reg-commercial-registration",
+    documentType: "COMMERCIAL_REGISTRATION",
+    issuer: "Saudi Business Center / Ministry of Commerce",
+    title: "متطلبات وخدمات السجل التجاري",
+    officialUrl: "https://business.sa/ar/servicesprocedures/details/3f37df76-a853-4616-ef34-08dced12ee80",
+  },
+  {
+    id: "reg-vat",
+    documentType: "VAT_CERTIFICATE",
+    issuer: "Zakat, Tax and Customs Authority",
+    title: "أنظمة ولوائح ضريبة القيمة المضافة",
+    officialUrl: "https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/default.aspx",
+    sourceKind: "REGULATIONS",
+  },
+  {
+    id: "reg-zakat-tax",
+    documentType: "ZAKAT_TAX_CERTIFICATE",
+    issuer: "Zakat, Tax and Customs Authority",
+    title: "الأنظمة واللوائح الزكوية والضريبية",
+    officialUrl: "https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/default.aspx",
+    sourceKind: "REGULATIONS",
+  },
+  {
+    id: "reg-chamber",
+    documentType: "CHAMBER_SUBSCRIPTION",
+    issuer: "Saudi Business Center / Chambers of Commerce",
+    title: "متطلبات تجديد اشتراك الغرفة التجارية",
+    officialUrl: "https://business.sa/en/eservices/details/e95ddf0f-41c3-4a72-d307-08dd92bf74b8",
+  },
+  {
+    id: "reg-municipal-license",
+    documentType: "MUNICIPAL_LICENSE",
+    issuer: "Balady Platform",
+    title: "متطلبات تجديد الرخصة التجارية",
+    officialUrl: "https://balady.gov.sa/en/services/renewing-commercial-license",
+  },
+  {
+    id: "reg-work-permit",
+    documentType: "WORK_PERMIT",
+    issuer: "Qiwa",
+    title: "متطلبات ورسوم تجديد رخص العمل",
+    officialUrl: "https://www.qiwa.sa/en/tools-and-calculators/work-permit-calculator",
+  },
+  {
+    id: "reg-investment-license",
+    documentType: "INVESTMENT_LICENSE",
+    issuer: "Ministry of Investment",
+    title: "متطلبات خدمات وترخيص المستثمر",
+    officialUrl: "https://misa.gov.sa/activities/e-services/",
+  },
+];
+
 const requiredFieldsByType: Record<string, string[]> = {
   COMMERCIAL_REGISTRATION: ["documentNumber", "issuer", "startDate", "expiryDate", "ownerName"],
   VAT_CERTIFICATE: ["taxNumber", "issuer", "startDate", "ownerName"],
@@ -151,6 +226,39 @@ function newId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function sourceId(input: RegulatorySourceInput) {
+  if (input.id) return input.id;
+  const slug = `${input.documentType}-${input.issuer}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 70);
+  return `reg-${slug || Date.now()}`;
+}
+
+function requireOfficialUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:") throw new Error("Official source URL must use HTTPS.");
+  const host = url.hostname.toLowerCase();
+  const trustedHost = host.endsWith(".gov.sa") || host === "gov.sa" ||
+    host === "business.sa" || host.endsWith(".business.sa") ||
+    host === "qiwa.sa" || host.endsWith(".qiwa.sa");
+  if (!trustedHost) throw new Error("استخدم رابطًا رسميًا تابعًا لجهة حكومية سعودية أو منصة حكومية معتمدة.");
+  return url.toString();
+}
+
+function contentHash(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function normalizedOfficialText(value: string) {
+  return value
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 12000);
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -158,6 +266,35 @@ function todayIso() {
 function storagePathFor(documentId: string, fileName?: string) {
   const safeName = (fileName || "government-document").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-|-$/g, "");
   return `${documentId}/${Date.now()}-${safeName || "document"}`;
+}
+
+function documentSnapshot(document: Record<string, unknown>) {
+  const fields = [
+    "id",
+    "document_type",
+    "title",
+    "document_number",
+    "issuer",
+    "owner_name",
+    "tax_number",
+    "start_date",
+    "expiry_date",
+    "renewal_date",
+    "city",
+    "activity",
+    "status",
+    "official_url",
+    "renewal_url",
+    "fee_amount",
+    "fee_currency",
+    "fee_text",
+    "missing_fields",
+    "extraction_confidence",
+    "notes",
+    "revision_no",
+    "regulatory_status",
+  ];
+  return Object.fromEntries(fields.map((field) => [field, document[field] ?? null]));
 }
 
 function base64ToBuffer(value: string) {
@@ -381,7 +518,8 @@ async function analyzeDocument(input: GovernmentDocumentInput) {
 }
 
 async function fetchOfficialText(url: string) {
-  const res = await fetch(url, {
+  const officialUrl = requireOfficialUrl(url);
+  const res = await fetch(officialUrl, {
     headers: {
       "User-Agent": "CandyAgentsGovernmentRelations/1.0",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -390,6 +528,7 @@ async function fetchOfficialText(url: string) {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Official source returned ${res.status}`);
+  requireOfficialUrl(res.url);
   const html = await res.text();
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -436,6 +575,21 @@ export async function seedGovernmentRelationsOS() {
   );
   if (departmentError) throw departmentError;
 
+  const { error: employeeError } = await supabase.from("employees").upsert(
+    {
+      id: "e-government-manager",
+      full_name: "مدير العلاقات الحكومية",
+      email: "government.relations@company.ai",
+      role: "MANAGER",
+      department_id: "government-relations",
+      manager_id: "e-ceo",
+      job_title: "مدير العلاقات الحكومية والامتثال",
+      status: "ACTIVE",
+    },
+    { onConflict: "id" }
+  );
+  if (employeeError) throw employeeError;
+
   const { error: typeError } = await supabase.from("gov_document_types").upsert(
     catalog.map((item) => ({
       id: item.documentType,
@@ -450,6 +604,22 @@ export async function seedGovernmentRelationsOS() {
     { onConflict: "id" }
   );
   if (typeError) throw typeError;
+
+  const { error: regulatorySourceError } = await supabase.from("gov_regulatory_sources").upsert(
+    regulatorySources.map((item) => ({
+      id: sourceId(item),
+      document_type: item.documentType,
+      issuer: item.issuer,
+      title: item.title,
+      official_url: item.officialUrl,
+      source_kind: item.sourceKind || "SERVICE_REQUIREMENTS",
+      active: true,
+      check_frequency_days: 1,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: "id" }
+  );
+  if (regulatorySourceError) throw regulatorySourceError;
 
   const { error: feeError } = await supabase.from("gov_fee_sources").upsert(
     catalog.map((item) => ({
@@ -480,7 +650,7 @@ export async function seedGovernmentRelationsOS() {
 export async function getGovernmentRelationsOS() {
   await seedGovernmentRelationsOS();
   const supabase = requireSupabase();
-  const [types, documents, files, fees, tasks, integrations, auditRows, accessRows] = await Promise.all([
+  const [types, documents, files, fees, tasks, integrations, auditRows, accessRows, sources, updates, companyTasks, revisions] = await Promise.all([
     supabase.from("gov_document_types").select("*").order("name", { ascending: true }),
     supabase.from("gov_documents").select("*").order("created_at", { ascending: false }).limit(80),
     supabase
@@ -493,9 +663,13 @@ export async function getGovernmentRelationsOS() {
     supabase.from("business_integrations").select("*").like("id", "gov-%").order("provider", { ascending: true }),
     supabase.from("decision_audit_log").select("*").eq("entity_type", "gov_documents").order("created_at", { ascending: false }).limit(30),
     supabase.from("gov_document_access_logs").select("*").order("created_at", { ascending: false }).limit(50),
+    supabase.from("gov_regulatory_sources").select("*").order("title", { ascending: true }),
+    supabase.from("gov_regulatory_updates").select("*").order("detected_at", { ascending: false }).limit(50),
+    supabase.from("tasks").select("*").eq("source_table", "gov_documents").order("due_date", { ascending: true }).limit(100),
+    supabase.from("gov_document_revisions").select("id, document_id, revision_no, change_type, changed_fields, change_reason, actor_role, created_at").order("created_at", { ascending: false }).limit(50),
   ]);
 
-  for (const result of [types, documents, files, fees, tasks, integrations, auditRows, accessRows]) {
+  for (const result of [types, documents, files, fees, tasks, integrations, auditRows, accessRows, sources, updates, companyTasks, revisions]) {
     if (result.error) throw result.error;
   }
 
@@ -515,6 +689,10 @@ export async function getGovernmentRelationsOS() {
     integrations: integrations.data || [],
     audits: auditRows.data || [],
     accessLogs: accessRows.data || [],
+    regulatorySources: sources.data || [],
+    regulatoryUpdates: updates.data || [],
+    companyTasks: companyTasks.data || [],
+    revisions: revisions.data || [],
     metrics: {
       totalDocuments: documentRows.length,
       activeDocuments: documentRows.filter((doc: any) => doc.status === "ACTIVE").length,
@@ -525,6 +703,9 @@ export async function getGovernmentRelationsOS() {
       readyPortals,
       lastCheckedSources: (fees.data || []).filter((item: any) => item.last_checked_at).length,
       storedFiles: (files.data || []).length,
+      openRegulatoryUpdates: (updates.data || []).filter((item: any) => item.status === "OPEN").length,
+      monitoredSources: (sources.data || []).filter((item: any) => item.active).length,
+      openCompanyTasks: (companyTasks.data || []).filter((item: any) => !["DONE", "BLOCKED"].includes(item.status)).length,
     },
   };
 }
@@ -536,21 +717,109 @@ async function findFeeSource(documentType: string) {
   return data?.[0] || null;
 }
 
+async function ensureCompanyDocumentTask(
+  document: any,
+  options: {
+    taskType?: "GOVERNMENT_RENEWAL" | "GOVERNMENT_REGULATORY_CHANGE";
+    regulatoryUpdateId?: string;
+    title?: string;
+    description?: string;
+    dueDate?: string | null;
+    priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+    forceOpen?: boolean;
+  } = {}
+) {
+  const supabase = requireSupabase();
+  const taskType = options.taskType || "GOVERNMENT_RENEWAL";
+  const taskId = taskType === "GOVERNMENT_REGULATORY_CHANGE"
+    ? `task-gov-reg-${options.regulatoryUpdateId}-${document.id}`
+    : `task-gov-renew-${document.id}`;
+  const shouldOpen = options.forceOpen || taskType === "GOVERNMENT_REGULATORY_CHANGE" ||
+    ["EXPIRED", "RENEWAL_URGENT", "RENEWAL_SOON", "NEEDS_REVIEW"].includes(document.status) ||
+    (Array.isArray(document.missing_fields) && document.missing_fields.length > 0);
+  const { data: existing, error: existingError } = await supabase.from("tasks").select("*").eq("id", taskId).maybeSingle();
+  if (existingError) throw existingError;
+
+  if (!shouldOpen) {
+    if (existing && !["DONE", "BLOCKED"].includes(existing.status)) {
+      const { error } = await supabase.from("tasks").update({
+        status: "DONE",
+        progress_percent: 100,
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", taskId);
+      if (error) throw error;
+    }
+    return existing || null;
+  }
+
+  const priority = options.priority || (document.status === "EXPIRED" || document.status === "RENEWAL_URGENT" ? "URGENT" : "HIGH");
+  const dueDate = options.dueDate || document.renewal_date || document.expiry_date || todayIso();
+  const preservedStatus = existing && ["IN_PROGRESS", "REVIEW"].includes(existing.status) ? existing.status : "TODO";
+  const payload = {
+    id: taskId,
+    title: options.title || `متابعة وتجديد ${document.title}`,
+    description: options.description || `مراجعة الوثيقة الحكومية ${document.title} وإكمال متطلبات التجديد قبل ${dueDate}.`,
+    content: options.description || `متابعة حالة الوثيقة والرسوم والرابط الرسمي وإنجاز التجديد ضمن المهلة.`,
+    status: preservedStatus,
+    priority,
+    assigned_to: "e-government-manager",
+    created_by: "e-ceo",
+    department_id: "government-relations",
+    due_date: dueDate,
+    progress_percent: existing?.progress_percent || 0,
+    owner_role: "Government Relations Manager",
+    source_table: "gov_documents",
+    source_id: document.id,
+    task_type: taskType,
+    metadata: {
+      document_id: document.id,
+      document_type: document.document_type,
+      regulatory_update_id: options.regulatoryUpdateId || null,
+      official_url: document.official_url || null,
+      renewal_url: document.renewal_url || null,
+    },
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from("tasks").upsert(payload, { onConflict: "id" }).select().single();
+  if (error) throw error;
+
+  if (!existing) {
+    await supabase.from("notifications").insert({
+      id: newId("notif-gov"),
+      employee_id: "e-government-manager",
+      title: taskType === "GOVERNMENT_REGULATORY_CHANGE" ? "تحديث حكومي يحتاج مراجعة" : "وثيقة حكومية تحتاج متابعة",
+      message: payload.title,
+      type: "TASK",
+    });
+  }
+  return data;
+}
+
 async function createRenewalTask(document: any, feeSource: any) {
   const supabase = requireSupabase();
   const dueDate = document.renewal_date || renewalDateFor(document.expiry_date) || document.expiry_date || todayIso();
   const priority = document.status === "EXPIRED" || document.status === "RENEWAL_URGENT" ? "URGENT" : document.status === "RENEWAL_SOON" ? "HIGH" : "MEDIUM";
+  const taskId = `renew-${document.id}`;
+  const { data: existing, error: existingError } = await supabase.from("gov_renewal_tasks").select("*").eq("id", taskId).maybeSingle();
+  if (existingError) throw existingError;
+  const desiredStatus = document.status === "ACTIVE" ? "SCHEDULED" : "OPEN";
+  const status = existing && ["IN_PROGRESS", "READY_FOR_AUTOMATED_SUBMISSION", "PENDING_PORTAL_AUTHORIZATION"].includes(existing.status)
+    ? existing.status
+    : existing?.status === "DONE" && desiredStatus === "SCHEDULED"
+      ? "DONE"
+      : desiredStatus;
   const { data, error } = await supabase
     .from("gov_renewal_tasks")
     .upsert(
       {
-        id: `renew-${document.id}`,
+        id: taskId,
         document_id: document.id,
         task_type: "RENEWAL_PREPARATION",
         title: `تجهيز تجديد ${document.title || titleForDocumentType(document.document_type)}`,
         due_date: dueDate,
         priority,
-        status: document.status === "ACTIVE" ? "SCHEDULED" : "OPEN",
+        status,
         fee_amount: feeSource?.fee_amount ?? null,
         fee_currency: feeSource?.fee_currency || "SAR",
         official_url: feeSource?.official_url || document.official_url,
@@ -567,6 +836,46 @@ async function createRenewalTask(document: any, feeSource: any) {
     .select()
     .single();
   if (error) throw error;
+  const companyTask = await ensureCompanyDocumentTask(document, { dueDate, priority });
+  if (companyTask?.id && data.company_task_id !== companyTask.id) {
+    const linked = await supabase.from("gov_renewal_tasks").update({ company_task_id: companyTask.id, updated_at: new Date().toISOString() }).eq("id", data.id).select().single();
+    if (linked.error) throw linked.error;
+    return linked.data;
+  }
+  return data;
+}
+
+async function storeGovernmentDocumentFile(documentId: string, input: GovernmentDocumentInput, fileCategory: string) {
+  if (!input.fileName && !input.fileBase64 && !input.fileText) return null;
+  const supabase = requireSupabase();
+  const existingFiles = await supabase.from("gov_document_files").select("version_no").eq("document_id", documentId);
+  if (existingFiles.error) throw existingFiles.error;
+  const versionNo = Math.max(0, ...(existingFiles.data || []).map((file: any) => number(file.version_no))) + 1;
+  const storagePath = storagePathFor(documentId, input.fileName);
+  const fileBody = input.fileBase64 ? base64ToBuffer(input.fileBase64) : Buffer.from(input.fileText || "", "utf8");
+  const uploaded = await supabase.storage.from("government-documents").upload(storagePath, fileBody, {
+    contentType: input.mimeType || (input.fileText ? "text/plain" : "application/octet-stream"),
+    upsert: false,
+  });
+  if (uploaded.error) throw uploaded.error;
+
+  await supabase.from("gov_document_files").update({ is_current: false }).eq("document_id", documentId);
+  const { data, error } = await supabase.from("gov_document_files").insert({
+    document_id: documentId,
+    file_name: input.fileName || "government-document",
+    mime_type: input.mimeType || "application/octet-stream",
+    file_size: fileBody.length,
+    storage_bucket: "government-documents",
+    storage_path: storagePath,
+    file_category: input.category || fileCategory,
+    version_no: versionNo,
+    is_current: true,
+    text_payload: input.fileText || null,
+  }).select().single();
+  if (error) {
+    await supabase.storage.from("government-documents").remove([storagePath]);
+    throw error;
+  }
   return data;
 }
 
@@ -602,38 +911,13 @@ export async function uploadGovernmentDocument(input: GovernmentDocumentInput) {
       missing_fields: extracted.missingFields,
       extraction_confidence: extracted.confidence,
       notes: input.notes || null,
+      last_verified_at: new Date().toISOString(),
     })
     .select()
     .single();
   if (documentError) throw documentError;
 
-  if (input.fileName || input.fileBase64 || input.fileText) {
-    const existingFiles = await supabase.from("gov_document_files").select("version_no").eq("document_id", document.id);
-    if (existingFiles.error) throw existingFiles.error;
-    const versionNo = Math.max(0, ...(existingFiles.data || []).map((file: any) => number(file.version_no))) + 1;
-    const storagePath = storagePathFor(document.id, input.fileName);
-    const fileBody = input.fileBase64 ? base64ToBuffer(input.fileBase64) : Buffer.from(input.fileText || "", "utf8");
-    const uploaded = await supabase.storage.from("government-documents").upload(storagePath, fileBody, {
-      contentType: input.mimeType || (input.fileText ? "text/plain" : "application/octet-stream"),
-      upsert: false,
-    });
-    if (uploaded.error) throw uploaded.error;
-
-    await supabase.from("gov_document_files").update({ is_current: false }).eq("document_id", document.id);
-    const { error: fileError } = await supabase.from("gov_document_files").insert({
-      document_id: document.id,
-      file_name: input.fileName || "government-document",
-      mime_type: input.mimeType || "application/octet-stream",
-      file_size: fileBody.length,
-      storage_bucket: "government-documents",
-      storage_path: storagePath,
-      file_category: input.category || extracted.documentType,
-      version_no: versionNo,
-      is_current: true,
-      text_payload: input.fileText || null,
-    });
-    if (fileError) throw fileError;
-  }
+  const file = await storeGovernmentDocumentFile(document.id, input, extracted.documentType);
 
   const { error: extractionError } = await supabase.from("gov_document_extractions").insert({
     document_id: document.id,
@@ -682,7 +966,217 @@ export async function uploadGovernmentDocument(input: GovernmentDocumentInput) {
     metadata: { extracted, task, feeSource },
   });
 
-  return { document, extraction: extracted, task, feeSource, governance };
+  return { document, extraction: extracted, file, task, feeSource, governance };
+}
+
+export async function updateGovernmentDocument(documentId: string, input: GovernmentDocumentInput) {
+  if (!documentId) throw new Error("Document id is required.");
+  await seedGovernmentRelationsOS();
+  const supabase = requireSupabase();
+  const { data: existing, error: existingError } = await supabase.from("gov_documents").select("*").eq("id", documentId).single();
+  if (existingError) throw existingError;
+
+  const replacementExtraction = input.fileName || input.fileBase64 || input.fileText ? await analyzeDocument(input) : null;
+  const documentType = input.documentType && knownDocumentTypes.has(input.documentType) ? input.documentType : existing.document_type;
+  const feeSource = await findFeeSource(documentType);
+  const value = (manual: string | undefined, extracted: string | undefined, current: unknown) => {
+    if (manual !== undefined) return cleanText(manual) || null;
+    if (cleanText(extracted)) return cleanText(extracted);
+    return current ?? null;
+  };
+  const startDate = input.startDate !== undefined
+    ? dateOnly(input.startDate)
+    : replacementExtraction?.startDate || existing.start_date;
+  const expiryDate = input.expiryDate !== undefined
+    ? dateOnly(input.expiryDate)
+    : replacementExtraction?.expiryDate || existing.expiry_date;
+  const renewalDate = input.renewalDate !== undefined
+    ? dateOnly(input.renewalDate) || renewalDateFor(expiryDate)
+    : replacementExtraction?.renewalDate || existing.renewal_date || renewalDateFor(expiryDate);
+  const title = cleanText(input.title !== undefined ? input.title : replacementExtraction?.title || existing.title);
+  if (!title) throw new Error("Document title is required.");
+
+  const merged = {
+    document_type: documentType,
+    title,
+    document_number: value(input.documentNumber, replacementExtraction?.documentNumber, existing.document_number),
+    issuer: value(input.issuer, replacementExtraction?.issuer, existing.issuer || feeSource?.issuer),
+    owner_name: value(input.ownerName, replacementExtraction?.ownerName, existing.owner_name),
+    tax_number: value(input.taxNumber, replacementExtraction?.taxNumber, existing.tax_number),
+    start_date: startDate,
+    expiry_date: expiryDate,
+    renewal_date: renewalDate,
+    city: value(input.city, replacementExtraction?.city, existing.city),
+    activity: value(input.activity, replacementExtraction?.activity, existing.activity),
+    notes: input.notes !== undefined ? cleanText(input.notes) || null : existing.notes,
+  };
+  const required = requiredFieldsByType[documentType] || requiredFieldsByType.OTHER_GOVERNMENT_DOCUMENT;
+  const fieldAliases: Record<string, keyof typeof merged> = {
+    documentNumber: "document_number",
+    issuer: "issuer",
+    ownerName: "owner_name",
+    taxNumber: "tax_number",
+    startDate: "start_date",
+    expiryDate: "expiry_date",
+    city: "city",
+    activity: "activity",
+  };
+  const missingFields = required.filter((field) => {
+    const key = fieldAliases[field];
+    return !key || !cleanText(merged[key]);
+  });
+  const status = documentStatus(expiryDate);
+  const revisionNo = number(existing.revision_no) + 1;
+  const patch = {
+    ...merged,
+    status,
+    official_url: feeSource?.official_url || existing.official_url,
+    renewal_url: feeSource?.renewal_url || existing.renewal_url,
+    fee_amount: feeSource?.fee_amount ?? existing.fee_amount,
+    fee_currency: feeSource?.fee_currency || existing.fee_currency || "SAR",
+    fee_text: feeSource?.fee_text || existing.fee_text,
+    extracted_data: replacementExtraction || existing.extracted_data || {},
+    missing_fields: missingFields,
+    extraction_confidence: replacementExtraction?.confidence ?? existing.extraction_confidence,
+    revision_no: revisionNo,
+    last_verified_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: updated, error: updateError } = await supabase.from("gov_documents").update(patch).eq("id", documentId).select().single();
+  if (updateError) throw updateError;
+  const before = documentSnapshot(existing);
+  const after = documentSnapshot(updated);
+  const changedFields = Object.keys(after).filter((field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]));
+  const { error: revisionError } = await supabase.from("gov_document_revisions").insert({
+    document_id: documentId,
+    revision_no: revisionNo,
+    change_type: input.fileName ? "EDIT_AND_NEW_FILE_VERSION" : "EDIT",
+    changed_fields: changedFields,
+    before_data: before,
+    after_data: after,
+    change_reason: cleanText(input.changeReason) || "تحديث بيانات الوثيقة",
+    actor_role: cleanText(input.actorRole) || "Government Relations Manager",
+  });
+  if (revisionError) throw revisionError;
+
+  const file = await storeGovernmentDocumentFile(documentId, input, documentType);
+  if (replacementExtraction) {
+    const { error: extractionError } = await supabase.from("gov_document_extractions").insert({
+      document_id: documentId,
+      extraction_engine: process.env.OPENAI_API_KEY ? "openai_gpt_4o_mini" : "rules_fallback",
+      raw_text: input.fileText || input.notes || "",
+      extracted_json: replacementExtraction,
+      confidence: replacementExtraction.confidence,
+      status: replacementExtraction.missingFields.length ? "NEEDS_REVIEW" : "EXTRACTED",
+    });
+    if (extractionError) throw extractionError;
+  }
+
+  const task = await createRenewalTask(updated, feeSource);
+  await supabase.from("gov_document_access_logs").insert({
+    document_id: documentId,
+    file_id: file?.id || null,
+    actor_role: cleanText(input.actorRole) || "Government Relations Manager",
+    action: file ? "EDIT_AND_UPLOAD_VERSION" : "EDIT",
+    metadata: { revision_no: revisionNo, changed_fields: changedFields, change_reason: input.changeReason || null },
+  });
+  await logDecision({
+    decisionType: "GOVERNMENT_DOCUMENT_UPDATED",
+    entityType: "gov_documents",
+    entityId: documentId,
+    actorRole: cleanText(input.actorRole) || "Government Relations Manager",
+    action: `Updated ${updated.title} to revision ${revisionNo}`,
+    riskLevel: status === "EXPIRED" || missingFields.length ? "HIGH" : "LOW",
+    approvalStatus: "COMPLETED",
+    metadata: { changedFields, revisionNo, taskId: task.id, fileId: file?.id || null },
+  });
+  return { document: updated, file, task, revisionNo, changedFields };
+}
+
+export async function deleteGovernmentDocument(documentId: string, confirmationTitle: string, actorRole = "Government Relations Manager") {
+  if (!documentId) throw new Error("Document id is required.");
+  const supabase = requireSupabase();
+  const { data: document, error: documentError } = await supabase.from("gov_documents").select("*").eq("id", documentId).single();
+  if (documentError) throw documentError;
+  if (cleanText(confirmationTitle) !== cleanText(document.title)) {
+    throw new Error("اكتب اسم الوثيقة كما هو لتأكيد الحذف.");
+  }
+  const { data: files, error: filesError } = await supabase.from("gov_document_files").select("id, storage_bucket, storage_path, file_name").eq("document_id", documentId);
+  if (filesError) throw filesError;
+  const groupedPaths = new Map<string, string[]>();
+  for (const file of files || []) {
+    if (!file.storage_path) continue;
+    const bucket = file.storage_bucket || "government-documents";
+    groupedPaths.set(bucket, [...(groupedPaths.get(bucket) || []), file.storage_path]);
+  }
+  for (const [bucket, paths] of groupedPaths) {
+    const removed = await supabase.storage.from(bucket).remove(paths);
+    if (removed.error) throw removed.error;
+  }
+
+  const taskDelete = await supabase.from("tasks").delete().eq("source_table", "gov_documents").eq("source_id", documentId);
+  if (taskDelete.error) throw taskDelete.error;
+  const deleted = await supabase.from("gov_documents").delete().eq("id", documentId).select("id").single();
+  if (deleted.error) throw deleted.error;
+  await logDecision({
+    decisionType: "GOVERNMENT_DOCUMENT_DELETED",
+    entityType: "gov_documents_deleted",
+    entityId: documentId,
+    actorRole,
+    action: `Permanently deleted ${document.title} and ${files?.length || 0} stored file(s)`,
+    riskLevel: "HIGH",
+    approvalStatus: "COMPLETED",
+    metadata: { deletedDocument: documentSnapshot(document), deletedFiles: files || [] },
+  });
+  return { id: documentId, title: document.title, deletedFiles: files?.length || 0 };
+}
+
+export async function updateGovernmentRenewalTask(taskId: string, status: string) {
+  if (!taskId) throw new Error("Renewal task id is required.");
+  const allowed = new Set(["OPEN", "SCHEDULED", "IN_PROGRESS", "DONE", "BLOCKED"]);
+  if (!allowed.has(status)) throw new Error("Invalid renewal task status.");
+  const supabase = requireSupabase();
+  const { data: task, error } = await supabase.from("gov_renewal_tasks").update({ status, updated_at: new Date().toISOString() }).eq("id", taskId).select().single();
+  if (error) throw error;
+  if (task.company_task_id) {
+    const companyStatus = status === "DONE" ? "DONE" : status === "IN_PROGRESS" ? "IN_PROGRESS" : status === "BLOCKED" ? "BLOCKED" : "TODO";
+    const companyPatch: Record<string, unknown> = {
+      status: companyStatus,
+      progress_percent: status === "DONE" ? 100 : status === "IN_PROGRESS" ? 50 : 0,
+      updated_at: new Date().toISOString(),
+    };
+    if (status === "DONE") companyPatch.completed_at = new Date().toISOString();
+    const companyUpdate = await supabase.from("tasks").update(companyPatch).eq("id", task.company_task_id);
+    if (companyUpdate.error) throw companyUpdate.error;
+  }
+  return task;
+}
+
+export async function syncGovernmentDocumentCompliance() {
+  await seedGovernmentRelationsOS();
+  const supabase = requireSupabase();
+  const { data: documents, error } = await supabase.from("gov_documents").select("*").order("expiry_date", { ascending: true });
+  if (error) throw error;
+  let opened = 0;
+  let closed = 0;
+  for (const document of documents || []) {
+    const status = documentStatus(document.expiry_date);
+    const renewalDate = document.renewal_date || renewalDateFor(document.expiry_date);
+    let current = document;
+    if (status !== document.status || renewalDate !== document.renewal_date) {
+      const updated = await supabase.from("gov_documents").update({ status, renewal_date: renewalDate, updated_at: new Date().toISOString() }).eq("id", document.id).select().single();
+      if (updated.error) throw updated.error;
+      current = updated.data;
+    }
+    const feeSource = await findFeeSource(current.document_type);
+    const renewalTask = await createRenewalTask(current, feeSource);
+    if (renewalTask.company_task_id) {
+      if (["OPEN", "IN_PROGRESS"].includes(renewalTask.status)) opened += 1;
+      if (renewalTask.status === "DONE") closed += 1;
+    }
+  }
+  return { documents: documents?.length || 0, opened, closed };
 }
 
 export async function refreshGovernmentFees() {
@@ -727,6 +1221,257 @@ export async function refreshGovernmentFees() {
   });
 
   return refreshed;
+}
+
+async function analyzeRegulatoryChange(source: any, previousExcerpt: string, currentExcerpt: string) {
+  const fallback = {
+    title: `تغير في المصدر الرسمي: ${source.title}`,
+    summary: "تم رصد اختلاف في محتوى الصفحة الرسمية. يجب مراجعة المتطلبات والرسوم والمواعيد قبل تنفيذ أي إجراء حكومي جديد.",
+    changeType: "OFFICIAL_PAGE_CHANGED",
+    impactLevel: "MEDIUM",
+  };
+  if (!process.env.OPENAI_API_KEY) return fallback;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: "You analyze changes in official Saudi government service and regulation pages. Do not invent legal conclusions. Return concise JSON only.",
+          },
+          {
+            role: "user",
+            content: `Compare the previous and current official source text for ${source.title}.
+Return JSON: {"title":"Arabic title","summary":"Arabic actionable summary","changeType":"FEE|REQUIREMENT|DEADLINE|PORTAL_PROCESS|REGULATION|TECHNICAL_PAGE_CHANGE","impactLevel":"LOW|MEDIUM|HIGH|CRITICAL"}.
+Use TECHNICAL_PAGE_CHANGE and LOW if the difference appears cosmetic or unclear.
+Previous:
+${previousExcerpt.slice(0, 6000)}
+
+Current:
+${currentExcerpt.slice(0, 6000)}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return fallback;
+    const data = await res.json();
+    const parsed = JSON.parse(extractJson(data.choices?.[0]?.message?.content || "{}"));
+    const impact = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(parsed.impactLevel) ? parsed.impactLevel : "MEDIUM";
+    return {
+      title: cleanText(parsed.title) || fallback.title,
+      summary: cleanText(parsed.summary) || fallback.summary,
+      changeType: cleanText(parsed.changeType) || fallback.changeType,
+      impactLevel: impact,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+async function createRegulatoryFollowUp(update: any, source: any) {
+  const supabase = requireSupabase();
+  const { data: documents, error } = await supabase.from("gov_documents").select("*").eq("document_type", source.document_type);
+  if (error) throw error;
+  const affectedIds: string[] = [];
+
+  for (const document of documents || []) {
+    affectedIds.push(document.id);
+    const documentUpdate = await supabase.from("gov_documents").update({
+      regulatory_status: "ACTION_REQUIRED",
+      latest_regulatory_update_id: update.id,
+      updated_at: new Date().toISOString(),
+    }).eq("id", document.id).select().single();
+    if (documentUpdate.error) throw documentUpdate.error;
+    const current = documentUpdate.data;
+    const priority = update.impact_level === "CRITICAL" ? "URGENT" : update.impact_level === "HIGH" ? "HIGH" : "MEDIUM";
+    const dueDate = new Date(Date.now() + (priority === "URGENT" ? 86400000 : priority === "HIGH" ? 3 * 86400000 : 7 * 86400000)).toISOString();
+    const companyTask = await ensureCompanyDocumentTask(current, {
+      taskType: "GOVERNMENT_REGULATORY_CHANGE",
+      regulatoryUpdateId: update.id,
+      title: `مراجعة أثر تحديث حكومي على ${document.title}`,
+      description: `${update.summary}\nالمصدر الرسمي: ${source.official_url}`,
+      dueDate,
+      priority,
+      forceOpen: true,
+    });
+    const regulatoryTask = await supabase.from("gov_renewal_tasks").upsert({
+      id: `reg-${update.id}-${document.id}`,
+      document_id: document.id,
+      task_type: "REGULATORY_CHANGE_REVIEW",
+      title: `مراجعة تحديث ${source.title}`,
+      due_date: dueDate.slice(0, 10),
+      priority,
+      status: "OPEN",
+      official_url: source.official_url,
+      renewal_url: document.renewal_url,
+      checklist: [
+        "فتح المصدر الرسمي والتحقق من نص التغيير",
+        "تحديد أثر التغيير على الوثيقة والإجراء التشغيلي",
+        "تحديث بيانات الوثيقة أو خطة التجديد عند الحاجة",
+        "توثيق المراجعة وإغلاق المهمة",
+      ],
+      company_task_id: companyTask?.id || null,
+      regulatory_update_id: update.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+    if (regulatoryTask.error) throw regulatoryTask.error;
+  }
+
+  const updateResult = await supabase.from("gov_regulatory_updates").update({
+    affected_document_ids: affectedIds,
+    affected_document_count: affectedIds.length,
+  }).eq("id", update.id);
+  if (updateResult.error) throw updateResult.error;
+  const alert = await supabase.from("operational_alerts").upsert({
+    alert_key: `gov-regulatory-${update.id}`,
+    department: "government_relations",
+    severity: update.impact_level === "CRITICAL" ? "CRITICAL" : update.impact_level === "HIGH" ? "HIGH" : "MEDIUM",
+    title: update.title,
+    message: `${update.summary} الوثائق المتأثرة: ${affectedIds.length}.`,
+    source_table: "gov_regulatory_updates",
+    source_id: update.id,
+    action_url: "/departments/government-relations",
+    status: "OPEN",
+    last_seen_at: new Date().toISOString(),
+    metadata: { source_id: source.id, document_type: source.document_type, official_url: source.official_url },
+  }, { onConflict: "alert_key" });
+  if (alert.error) throw alert.error;
+  return affectedIds;
+}
+
+export async function addGovernmentRegulatorySource(input: RegulatorySourceInput) {
+  await seedGovernmentRelationsOS();
+  if (!knownDocumentTypes.has(input.documentType)) throw new Error("Select a valid government document type.");
+  if (!cleanText(input.title) || !cleanText(input.issuer)) throw new Error("Source title and issuer are required.");
+  const supabase = requireSupabase();
+  const payload = {
+    id: sourceId(input),
+    document_type: input.documentType,
+    issuer: cleanText(input.issuer),
+    title: cleanText(input.title),
+    official_url: requireOfficialUrl(input.officialUrl),
+    source_kind: cleanText(input.sourceKind) || "SERVICE_REQUIREMENTS",
+    active: true,
+    check_frequency_days: 1,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from("gov_regulatory_sources").upsert(payload, { onConflict: "id" }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function refreshGovernmentRegulations() {
+  await seedGovernmentRelationsOS();
+  const supabase = requireSupabase();
+  const sync = await syncGovernmentDocumentCompliance();
+  const { data: sources, error } = await supabase.from("gov_regulatory_sources").select("*").eq("active", true).order("title", { ascending: true });
+  if (error) throw error;
+  const results: Array<Record<string, unknown>> = [];
+
+  for (const source of sources || []) {
+    try {
+      const officialText = normalizedOfficialText(await fetchOfficialText(source.official_url));
+      if (!officialText) throw new Error("Official page returned no readable content.");
+      const hash = contentHash(officialText);
+      const previousHash = source.last_hash || "";
+      const changed = Boolean(previousHash && previousHash !== hash);
+      let update = null;
+      let createdUpdate = false;
+      if (changed) {
+        const existingUpdate = await supabase.from("gov_regulatory_updates").select("*").eq("source_id", source.id).eq("new_hash", hash).maybeSingle();
+        if (existingUpdate.error) throw existingUpdate.error;
+        if (existingUpdate.data) {
+          update = existingUpdate.data;
+        } else {
+          const analysis = await analyzeRegulatoryChange(source, source.last_excerpt || "", officialText);
+          const inserted = await supabase.from("gov_regulatory_updates").insert({
+            source_id: source.id,
+            document_type: source.document_type,
+            title: analysis.title,
+            summary: analysis.summary,
+            change_type: analysis.changeType,
+            impact_level: analysis.impactLevel,
+            status: analysis.changeType === "TECHNICAL_PAGE_CHANGE" && analysis.impactLevel === "LOW" ? "MONITORING" : "OPEN",
+            official_url: source.official_url,
+            old_hash: previousHash,
+            new_hash: hash,
+            previous_excerpt: source.last_excerpt || "",
+            current_excerpt: officialText.slice(0, 9000),
+          }).select().single();
+          if (inserted.error) throw inserted.error;
+          update = inserted.data;
+          createdUpdate = true;
+          if (update.status === "OPEN") await createRegulatoryFollowUp(update, source);
+        }
+      }
+      const sourceUpdate = await supabase.from("gov_regulatory_sources").update({
+        last_hash: hash,
+        last_excerpt: officialText.slice(0, 9000),
+        last_checked_at: new Date().toISOString(),
+        last_checked_status: changed ? "CHANGE_DETECTED" : previousHash ? "UNCHANGED" : "BASELINE_CREATED",
+        change_count: number(source.change_count) + (createdUpdate ? 1 : 0),
+        updated_at: new Date().toISOString(),
+      }).eq("id", source.id);
+      if (sourceUpdate.error) throw sourceUpdate.error;
+      results.push({ sourceId: source.id, status: changed ? "CHANGE_DETECTED" : previousHash ? "UNCHANGED" : "BASELINE_CREATED", updateId: update?.id || null });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to fetch official source.";
+      await supabase.from("gov_regulatory_sources").update({
+        last_checked_at: new Date().toISOString(),
+        last_checked_status: "FAILED",
+        updated_at: new Date().toISOString(),
+      }).eq("id", source.id);
+      results.push({ sourceId: source.id, status: "FAILED", error: message });
+    }
+  }
+
+  await logDecision({
+    decisionType: "GOVERNMENT_REGULATIONS_MONITORED",
+    entityType: "gov_regulatory_sources",
+    actorRole: "Government Relations Manager",
+    action: `Checked ${results.length} official government sources`,
+    approvalStatus: "COMPLETED",
+    metadata: { results, sync },
+  });
+  return { sync, results, changes: results.filter((item) => item.status === "CHANGE_DETECTED").length };
+}
+
+export async function reviewGovernmentRegulatoryUpdate(updateId: string, status: "RESOLVED" | "MONITORING") {
+  if (!updateId) throw new Error("Regulatory update id is required.");
+  const supabase = requireSupabase();
+  const { data: update, error } = await supabase.from("gov_regulatory_updates").update({
+    status,
+    reviewed_at: new Date().toISOString(),
+  }).eq("id", updateId).select().single();
+  if (error) throw error;
+  if (status === "RESOLVED") {
+    const companyTasks = await supabase.from("tasks").update({
+      status: "DONE",
+      progress_percent: 100,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("task_type", "GOVERNMENT_REGULATORY_CHANGE").contains("metadata", { regulatory_update_id: updateId });
+    if (companyTasks.error) throw companyTasks.error;
+    const renewalTasks = await supabase.from("gov_renewal_tasks").update({ status: "DONE", updated_at: new Date().toISOString() }).eq("regulatory_update_id", updateId);
+    if (renewalTasks.error) throw renewalTasks.error;
+    const alerts = await supabase.from("operational_alerts").update({ status: "RESOLVED", resolved_at: new Date().toISOString() }).eq("source_table", "gov_regulatory_updates").eq("source_id", updateId);
+    if (alerts.error) throw alerts.error;
+    const openUpdates = await supabase.from("gov_regulatory_updates").select("id", { count: "exact", head: true }).eq("document_type", update.document_type).eq("status", "OPEN");
+    if (openUpdates.error) throw openUpdates.error;
+    if ((openUpdates.count || 0) === 0) {
+      const documents = await supabase.from("gov_documents").update({ regulatory_status: "CURRENT", updated_at: new Date().toISOString() }).eq("document_type", update.document_type);
+      if (documents.error) throw documents.error;
+    }
+  }
+  return update;
 }
 
 export async function createGovernmentRenewalPlan(documentId: string) {

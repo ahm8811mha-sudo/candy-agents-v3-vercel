@@ -1081,11 +1081,81 @@ create table if not exists gov_renewal_tasks (
   updated_at timestamptz default now()
 );
 
+alter table gov_documents add column if not exists revision_no integer not null default 1;
+alter table gov_documents add column if not exists last_verified_at timestamptz;
+alter table gov_documents add column if not exists regulatory_status text not null default 'CURRENT';
+alter table gov_documents add column if not exists latest_regulatory_update_id uuid;
+
+alter table tasks add column if not exists source_table text;
+alter table tasks add column if not exists source_id text;
+alter table tasks add column if not exists task_type text;
+alter table tasks add column if not exists metadata jsonb not null default '{}';
+
+alter table gov_renewal_tasks add column if not exists company_task_id text;
+alter table gov_renewal_tasks add column if not exists regulatory_update_id uuid;
+
+create table if not exists gov_document_revisions (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references gov_documents(id) on delete cascade,
+  revision_no integer not null,
+  change_type text not null default 'EDIT',
+  changed_fields text[] not null default '{}',
+  before_data jsonb not null default '{}',
+  after_data jsonb not null default '{}',
+  change_reason text,
+  actor_role text not null default 'Government Relations Manager',
+  created_at timestamptz not null default now(),
+  unique(document_id, revision_no)
+);
+
+create table if not exists gov_regulatory_sources (
+  id text primary key,
+  document_type text not null references gov_document_types(id) on delete cascade,
+  issuer text not null,
+  title text not null,
+  official_url text not null,
+  source_kind text not null default 'SERVICE_REQUIREMENTS',
+  active boolean not null default true,
+  check_frequency_days integer not null default 1,
+  last_hash text,
+  last_excerpt text,
+  last_checked_at timestamptz,
+  last_checked_status text,
+  change_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists gov_regulatory_updates (
+  id uuid primary key default gen_random_uuid(),
+  source_id text not null references gov_regulatory_sources(id) on delete cascade,
+  document_type text not null references gov_document_types(id) on delete cascade,
+  title text not null,
+  summary text not null,
+  change_type text not null default 'OFFICIAL_PAGE_CHANGED',
+  impact_level text not null default 'MEDIUM',
+  status text not null default 'OPEN',
+  official_url text not null,
+  old_hash text,
+  new_hash text not null,
+  previous_excerpt text,
+  current_excerpt text,
+  affected_document_ids jsonb not null default '[]',
+  affected_document_count integer not null default 0,
+  detected_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  unique(source_id, new_hash)
+);
+
 create index if not exists idx_gov_documents_status on gov_documents(status);
 create index if not exists idx_gov_documents_expiry_date on gov_documents(expiry_date);
 create index if not exists idx_gov_documents_document_type on gov_documents(document_type);
 create index if not exists idx_gov_renewal_tasks_due_date on gov_renewal_tasks(due_date);
 create index if not exists idx_gov_fee_sources_document_type on gov_fee_sources(document_type);
+create index if not exists idx_gov_document_revisions_document_id on gov_document_revisions(document_id, revision_no desc);
+create index if not exists idx_gov_regulatory_sources_active on gov_regulatory_sources(active, document_type);
+create index if not exists idx_gov_regulatory_updates_status on gov_regulatory_updates(status, impact_level, detected_at desc);
+create index if not exists idx_tasks_source on tasks(source_table, source_id, task_type);
 
 alter table gov_document_types enable row level security;
 alter table gov_fee_sources enable row level security;
@@ -1093,6 +1163,9 @@ alter table gov_documents enable row level security;
 alter table gov_document_files enable row level security;
 alter table gov_document_extractions enable row level security;
 alter table gov_renewal_tasks enable row level security;
+alter table gov_document_revisions enable row level security;
+alter table gov_regulatory_sources enable row level security;
+alter table gov_regulatory_updates enable row level security;
 
 drop policy if exists "app read gov document types" on gov_document_types;
 drop policy if exists "app write gov document types" on gov_document_types;
@@ -1132,6 +1205,14 @@ grant select, insert, update on gov_documents to anon, authenticated, service_ro
 grant select, insert on gov_document_files to anon, authenticated, service_role;
 grant select, insert on gov_document_extractions to anon, authenticated, service_role;
 grant select, insert, update on gov_renewal_tasks to anon, authenticated, service_role;
+grant select, insert on gov_document_revisions to service_role;
+grant select, insert, update, delete on gov_regulatory_sources to service_role;
+grant select, insert, update, delete on gov_regulatory_updates to service_role;
+grant select, insert, update, delete on gov_documents to service_role;
+grant select, insert, update, delete on gov_document_files to service_role;
+grant select, insert, update, delete on gov_document_extractions to service_role;
+grant select, insert, update, delete on gov_renewal_tasks to service_role;
+grant select, insert, update, delete on tasks to service_role;
 
 alter table gov_document_files add column if not exists storage_bucket text not null default 'government-documents';
 alter table gov_document_files add column if not exists storage_path text;

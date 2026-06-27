@@ -1,10 +1,17 @@
 import {
+  addGovernmentRegulatorySource,
   createGovernmentRenewalPlan,
   createGovernmentDocumentPreview,
+  deleteGovernmentDocument,
   getGovernmentRelationsOS,
   prepareDigitalRenewal,
   refreshGovernmentFees,
+  refreshGovernmentRegulations,
+  reviewGovernmentRegulatoryUpdate,
   seedGovernmentRelationsOS,
+  syncGovernmentDocumentCompliance,
+  updateGovernmentDocument,
+  updateGovernmentRenewalTask,
   uploadGovernmentDocument,
 } from "@/lib/governmentRelations";
 import { NextResponse } from "next/server";
@@ -39,8 +46,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, result });
     }
 
+    if (action === "update-document") {
+      const result = await updateGovernmentDocument(String(body.documentId || ""), body.data || {});
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "delete-document") {
+      const result = await deleteGovernmentDocument(
+        String(body.documentId || ""),
+        String(body.confirmationTitle || ""),
+        String(body.actorRole || "Government Relations Manager")
+      );
+      return NextResponse.json({ ok: true, result });
+    }
+
     if (action === "refresh-fees") {
       const result = await refreshGovernmentFees();
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "refresh-regulations") {
+      const result = await refreshGovernmentRegulations();
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "sync-compliance") {
+      const result = await syncGovernmentDocumentCompliance();
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "add-regulatory-source") {
+      const result = await addGovernmentRegulatorySource(body.data || {});
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "review-regulatory-update") {
+      const status = body.status === "MONITORING" ? "MONITORING" : "RESOLVED";
+      const result = await reviewGovernmentRegulatoryUpdate(String(body.updateId || ""), status);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "update-renewal-task") {
+      const result = await updateGovernmentRenewalTask(String(body.taskId || ""), String(body.status || "OPEN"));
       return NextResponse.json({ ok: true, result });
     }
 
