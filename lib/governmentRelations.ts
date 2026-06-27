@@ -524,7 +524,7 @@ async function fetchOfficialText(url: string) {
       "User-Agent": "CandyAgentsGovernmentRelations/1.0",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
-    signal: AbortSignal.timeout(7000),
+    signal: AbortSignal.timeout(15000),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Official source returned ${res.status}`);
@@ -1429,6 +1429,7 @@ export async function refreshGovernmentRegulations() {
         last_excerpt: officialText.slice(0, 9000),
         last_checked_at: new Date().toISOString(),
         last_checked_status: changed ? "CHANGE_DETECTED" : previousHash ? "UNCHANGED" : "BASELINE_CREATED",
+        last_error: null,
         change_count: number(source.change_count) + (createdUpdate ? 1 : 0),
         updated_at: new Date().toISOString(),
       }).eq("id", source.id);
@@ -1439,6 +1440,7 @@ export async function refreshGovernmentRegulations() {
       await supabase.from("gov_regulatory_sources").update({
         last_checked_at: new Date().toISOString(),
         last_checked_status: "FAILED",
+        last_error: message.slice(0, 500),
         updated_at: new Date().toISOString(),
       }).eq("id", source.id);
       results.push({ sourceId: source.id, status: "FAILED", error: message });

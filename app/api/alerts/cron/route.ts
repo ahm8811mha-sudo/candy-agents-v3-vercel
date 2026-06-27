@@ -8,7 +8,10 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   try {
     const secret = process.env.CRON_SECRET;
-    if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+    if (!secret) {
+      return NextResponse.json({ ok: false, error: "CRON_SECRET is not configured" }, { status: 503 });
+    }
+    if (request.headers.get("authorization") !== `Bearer ${secret}`) {
       return NextResponse.json({ ok: false, error: "Unauthorized cron request" }, { status: 401 });
     }
     const government = await refreshGovernmentRegulations();

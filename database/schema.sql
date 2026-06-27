@@ -1121,10 +1121,13 @@ create table if not exists gov_regulatory_sources (
   last_excerpt text,
   last_checked_at timestamptz,
   last_checked_status text,
+  last_error text,
   change_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table gov_regulatory_sources add column if not exists last_error text;
 
 create table if not exists gov_regulatory_updates (
   id uuid primary key default gen_random_uuid(),

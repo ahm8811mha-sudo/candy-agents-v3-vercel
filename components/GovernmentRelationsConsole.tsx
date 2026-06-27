@@ -65,6 +65,7 @@ type FeeSource = {
   fee_text: string;
   last_checked_at?: string | null;
   last_checked_status?: string | null;
+  last_error?: string | null;
   source_confidence?: string | null;
 };
 
@@ -478,7 +479,6 @@ export default function GovernmentRelationsConsole() {
         <Metric title="وثائق نشطة" value={data.metrics.activeDocuments} tone="green" />
         <Metric title="تجديد قريب" value={data.metrics.expiringSoon} tone="amber" />
         <Metric title="منتهية" value={data.metrics.expired} tone="red" />
-        <Metric title="بيانات ناقصة" value={data.metrics.missingData} tone="amber" />
         <Metric title="مهام مفتوحة" value={data.metrics.openCompanyTasks} tone="amber" />
         <Metric title="تغييرات رسمية" value={data.metrics.openRegulatoryUpdates} tone="amber" />
       </section>
@@ -732,6 +732,7 @@ export default function GovernmentRelationsConsole() {
                 <strong>{source.title}</strong>
                 <p>{source.issuer} · {source.source_kind}</p>
                 <small>آخر فحص {formatDate(source.last_checked_at)} · تغييرات {source.change_count || 0}</small>
+                {source.last_error && <small className="danger-text">{source.last_error}</small>}
               </div>
               <a className="icon-command" href={source.official_url} target="_blank" rel="noreferrer" title="فتح المصدر">
                 <ExternalLink size={15} />
