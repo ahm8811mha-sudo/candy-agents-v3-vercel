@@ -1380,7 +1380,7 @@ export async function addGovernmentRegulatorySource(input: RegulatorySourceInput
   return data;
 }
 
-export async function refreshGovernmentRegulations() {
+export async function refreshGovernmentRegulations(options: { force?: boolean } = {}) {
   await seedGovernmentRelationsOS();
   const supabase = requireSupabase();
   const sync = await syncGovernmentDocumentCompliance();
@@ -1389,6 +1389,12 @@ export async function refreshGovernmentRegulations() {
   const results: Array<Record<string, unknown>> = [];
 
   for (const source of sources || []) {
+    const lastChecked = source.last_checked_at ? new Date(source.last_checked_at).getTime() : 0;
+    const checkInterval = Math.max(1, number(source.check_frequency_days)) * 86400000;
+    if (!options.force && lastChecked && Date.now() - lastChecked < checkInterval) {
+      results.push({ sourceId: source.id, status: "SKIPPED_RECENTLY", updateId: null });
+      continue;
+    }
     try {
       const officialText = normalizedOfficialText(await fetchOfficialText(source.official_url));
       if (!officialText) throw new Error("Official page returned no readable content.");

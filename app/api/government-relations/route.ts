@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     }
 
     if (action === "refresh-regulations") {
-      const result = await refreshGovernmentRegulations();
+      const result = await refreshGovernmentRegulations({ force: true });
       return NextResponse.json({ ok: true, result });
     }
 
