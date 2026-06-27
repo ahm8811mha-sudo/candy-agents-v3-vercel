@@ -65,7 +65,6 @@ type FeeSource = {
   fee_text: string;
   last_checked_at?: string | null;
   last_checked_status?: string | null;
-  last_error?: string | null;
   source_confidence?: string | null;
 };
 
@@ -93,6 +92,7 @@ type RegulatorySource = {
   active: boolean;
   last_checked_at?: string | null;
   last_checked_status?: string | null;
+  last_error?: string | null;
   change_count?: number;
 };
 
