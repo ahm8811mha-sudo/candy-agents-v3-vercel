@@ -591,16 +591,28 @@ export async function seedGovernmentRelationsOS() {
   if (employeeError) throw employeeError;
 
   const { error: typeError } = await supabase.from("gov_document_types").upsert(
-    catalog.map((item) => ({
-      id: item.documentType,
-      name: titleForDocumentType(item.documentType),
-      issuer: item.issuer,
-      official_url: item.officialUrl,
-      renewal_url: item.renewalUrl,
-      required_fields: requiredFieldsByType[item.documentType] || requiredFieldsByType.OTHER_GOVERNMENT_DOCUMENT,
-      automation_level: item.documentType === "VAT_CERTIFICATE" ? "PORTAL_READY" : "PORTAL_PREPARATION",
-      active: true,
-    })),
+    [
+      ...catalog.map((item) => ({
+        id: item.documentType,
+        name: titleForDocumentType(item.documentType),
+        issuer: item.issuer,
+        official_url: item.officialUrl,
+        renewal_url: item.renewalUrl,
+        required_fields: requiredFieldsByType[item.documentType] || requiredFieldsByType.OTHER_GOVERNMENT_DOCUMENT,
+        automation_level: item.documentType === "VAT_CERTIFICATE" ? "PORTAL_READY" : "PORTAL_PREPARATION",
+        active: true,
+      })),
+      {
+        id: "OTHER_GOVERNMENT_DOCUMENT",
+        name: titleForDocumentType("OTHER_GOVERNMENT_DOCUMENT"),
+        issuer: "جهة حكومية",
+        official_url: null,
+        renewal_url: null,
+        required_fields: requiredFieldsByType.OTHER_GOVERNMENT_DOCUMENT,
+        automation_level: "MANUAL_SOURCE_REQUIRED",
+        active: true,
+      },
+    ],
     { onConflict: "id" }
   );
   if (typeError) throw typeError;
