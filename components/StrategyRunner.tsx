@@ -4,6 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Landmark, Loader2, PackageSearch, Send, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import BIForm from "./BIForm";
+import NotificationCenter from "./NotificationCenter";
+import LoadingSteps from "./LoadingSteps";
+import ExecutiveReport from "./ExecutiveReport";
+import AgentMemoryPanel from "./AgentMemoryPanel";
+import IntegrationsPanel from "./IntegrationsPanel";
 
 type ExecutionResult = {
   ok: true;
@@ -171,13 +176,7 @@ export default function StrategyRunner() {
           </div>
         )}
 
-        {loading && (
-          <div className="empty-state">
-            <Loader2 className="spin" size={34} />
-            <strong>الشركة تعمل الآن</strong>
-            <span>يتم إصدار القرار المالي والتنفيذي ثم تحويله إلى مشروع ومهمة متابعة.</span>
-          </div>
-        )}
+        {loading && <LoadingSteps active={loading} />}
 
         {result && (
           <div className="report-stack">
@@ -210,6 +209,7 @@ export default function StrategyRunner() {
             <h2>لوحة متابعة الشركة</h2>
           </div>
           <div className="dashboard-actions">
+            <NotificationCenter />
             <Link className="secondary-btn" href="/dashboard">فتح Dashboard</Link>
             <Link className="secondary-btn" href="/enterprise-os">Enterprise OS</Link>
             <Link className="secondary-btn" href="/departments/finance">Accounting OS</Link>
@@ -239,6 +239,12 @@ export default function StrategyRunner() {
       </section>
 
       <BIForm />
+
+      <ExecutiveReport />
+
+      <AgentMemoryPanel />
+
+      <IntegrationsPanel />
     </main>
   );
 }

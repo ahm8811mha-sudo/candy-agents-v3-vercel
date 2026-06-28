@@ -1601,6 +1601,10 @@ label {
   .editor-header { align-items: flex-start; }
 }
 
+@media (max-width: 1100px) {
+  .report-analytics-grid { grid-template-columns: 1fr 1fr !important; }
+}
+
 @media (max-width: 560px) {
   .company-app { width: min(100% - 18px, 1120px); padding-top: 10px; }
   .request-panel, .request-form, .delivery-panel { padding: 14px; }

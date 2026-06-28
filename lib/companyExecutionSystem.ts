@@ -1,6 +1,8 @@
 import { calculateFinancials, type Financials } from "./accountingSystem";
 import { buildExecutionBlueprint, evaluateBusiness, type BusinessAlert, type BusinessIntelligence, type ExecutionBlueprint, type RecommendedAction } from "./businessBrain";
 import { getSupabaseAdmin } from "./supabase";
+import { getMemoryContext } from "./agentMemory";
+import { invalidateCache } from "./cache";
 
 type ExecutionProject = {
   id: string;
@@ -421,7 +423,8 @@ export async function runCompanyExecution(request: string): Promise<CompanyExecu
 
   const financials = await calculateFinancials();
   const intelligence = evaluateBusiness(request.trim(), financials);
-  const cfo = await CFO(request.trim(), financials);
+  const memoryContext = await getMemoryContext(request.trim());
+  const cfo = await CFO(request.trim() + memoryContext, financials);
   const ceo = await CEO(cfo);
   await saveFinancialDecision(request.trim(), financials, cfo, ceo);
   const tasks = await generateTasks(ceo);
@@ -433,6 +436,8 @@ export async function runCompanyExecution(request: string): Promise<CompanyExecu
     blueprint,
     ceo
   );
+
+  invalidateCache("dashboard-data");
 
   return {
     financials,

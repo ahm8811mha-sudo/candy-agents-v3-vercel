@@ -1,9 +1,10 @@
 import { getDashboardData } from "@/lib/companyExecutionSystem";
 import { NextResponse } from "next/server";
+import { withCache } from "@/lib/cache";
 
 export async function GET() {
   try {
-    const data = await getDashboardData();
+    const data = await withCache("dashboard-data", 30_000, getDashboardData);
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
