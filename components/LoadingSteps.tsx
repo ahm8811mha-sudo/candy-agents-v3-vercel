@@ -58,31 +58,16 @@ export default function LoadingSteps({
   if (!active) return null;
 
   return (
-    <div
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: 10,
-        background: "var(--panel)",
-        padding: 18,
-        display: "grid",
-        gap: 4,
-      }}
-    >
+    <div className="loading-steps fade-in">
       {steps.map((step, index) => {
         const isCompleted = completedSteps.has(index);
         const isCurrent = index === currentStep && !isCompleted;
+        const isPending = index > currentStep;
 
         return (
           <div
             key={step.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "10px 0",
-              opacity: index > currentStep ? 0.4 : 1,
-              transition: "opacity 0.3s ease",
-            }}
+            className={`loading-step ${isPending ? "loading-step-pending" : ""}`}
           >
             <div style={{ flexShrink: 0 }}>
               {isCompleted ? (
@@ -90,53 +75,22 @@ export default function LoadingSteps({
               ) : isCurrent ? (
                 <Loader2 className="spin" size={22} style={{ color: "var(--amber)" }} />
               ) : (
-                <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: "50%",
-                    border: "2px solid var(--line)",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "0.7rem",
-                    fontWeight: 900,
-                    color: "var(--muted)",
-                  }}
-                >
-                  {index + 1}
-                </div>
+                <div className="loading-step-circle">{index + 1}</div>
               )}
             </div>
             <div>
               <strong
+                className="loading-step-label"
                 style={{
-                  fontSize: "0.9rem",
-                  color: isCompleted
-                    ? "var(--green)"
-                    : isCurrent
-                      ? "var(--amber)"
-                      : "var(--text)",
+                  color: isCompleted ? "var(--green)" : isCurrent ? "var(--amber)" : "var(--text)",
                 }}
               >
                 {step.label}
               </strong>
               <br />
-              <small style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-                {step.description}
-              </small>
+              <small className="loading-step-desc">{step.description}</small>
             </div>
-            {isCompleted && (
-              <span
-                style={{
-                  marginRight: "auto",
-                  color: "var(--green)",
-                  fontSize: "0.75rem",
-                  fontWeight: 900,
-                }}
-              >
-                اكتمل
-              </span>
-            )}
+            {isCompleted && <span className="loading-step-done-text">اكتمل</span>}
           </div>
         );
       })}

@@ -66,80 +66,35 @@ export default function NotificationCenter() {
           if (!open) loadNotifications();
         }}
         style={{ position: "relative" }}
+        aria-label={`الإشعارات ${unreadCount > 0 ? `(${unreadCount} جديد)` : ""}`}
+        aria-expanded={open}
       >
         <Bell size={18} />
-        الإشعارات
+        <span className="hide-mobile">الإشعارات</span>
         {unreadCount > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: -4,
-              left: -4,
-              width: 20,
-              height: 20,
-              borderRadius: "50%",
-              background: "var(--red)",
-              color: "white",
-              fontSize: "0.7rem",
-              fontWeight: 900,
-              display: "grid",
-              placeItems: "center",
-            }}
-          >
-            {unreadCount}
-          </span>
+          <span className="notification-badge">{unreadCount}</span>
         )}
       </button>
 
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            left: 0,
-            width: 380,
-            maxHeight: 480,
-            overflowY: "auto",
-            background: "var(--panel)",
-            border: "1px solid var(--line)",
-            borderRadius: 12,
-            boxShadow: "var(--shadow)",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "14px 16px",
-              borderBottom: "1px solid var(--line)",
-            }}
-          >
+        <div className="notification-dropdown">
+          <div className="notification-dropdown-header">
             <strong>الإشعارات ({unreadCount} جديد)</strong>
             <button
+              className="notification-close"
               onClick={() => setOpen(false)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--muted)",
-                cursor: "pointer",
-              }}
+              aria-label="إغلاق الإشعارات"
             >
               <X size={18} />
             </button>
           </div>
 
           {loading && notifications.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
-              جاري التحميل...
-            </div>
+            <div className="notification-empty">جاري التحميل...</div>
           )}
 
           {!loading && notifications.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
-              لا توجد إشعارات
-            </div>
+            <div className="notification-empty">لا توجد إشعارات</div>
           )}
 
           {notifications.map((n) => {
@@ -147,21 +102,13 @@ export default function NotificationCenter() {
             return (
               <div
                 key={n.id}
-                style={{
-                  padding: "12px 16px",
-                  borderBottom: "1px solid var(--line)",
-                  background: n.readAt ? "transparent" : "rgba(47, 128, 237, 0.06)",
-                  display: "grid",
-                  gap: 4,
-                }}
+                className={`notification-item ${!n.readAt ? "unread" : ""}`}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div className="notification-item-title">
                   <Icon size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
                   <strong style={{ fontSize: "0.9rem" }}>{n.title}</strong>
                 </div>
-                <span style={{ color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.7 }}>
-                  {n.message}
-                </span>
+                <span className="notification-item-message">{n.message}</span>
               </div>
             );
           })}

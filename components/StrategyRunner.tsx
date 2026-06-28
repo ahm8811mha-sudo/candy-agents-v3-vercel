@@ -1,10 +1,28 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { BarChart3, Building2, Calculator, CheckCircle2, ClipboardList, FolderKanban, Landmark, Loader2, PackageSearch, Send, ShieldCheck, Users } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  Calculator,
+  CheckCircle2,
+  ClipboardList,
+  FolderKanban,
+  Landmark,
+  LayoutDashboard,
+  Loader2,
+  Megaphone,
+  PackageSearch,
+  Send,
+  ShieldCheck,
+  Users,
+  Brain,
+  FileText,
+  Plug,
+  Briefcase,
+} from "lucide-react";
 import Link from "next/link";
 import BIForm from "./BIForm";
-import NotificationCenter from "./NotificationCenter";
 import LoadingSteps from "./LoadingSteps";
 import ExecutiveReport from "./ExecutiveReport";
 import AgentMemoryPanel from "./AgentMemoryPanel";
@@ -52,17 +70,40 @@ const currency = new Intl.NumberFormat("ar-SA", {
 
 const stages = [
   { key: "financials", title: "البيانات المالية", role: "قراءة الإيرادات والمصروفات والربح", icon: Calculator, href: "/departments/finance" },
-  { key: "cfo", title: "المدير المالي CFO", role: "اعتماد الميزانية وتحليل المخاطر", icon: Calculator, href: "/departments/finance" },
+  { key: "cfo", title: "المدير المالي CFO", role: "اعتماد الميزانية وتحليل المخاطر", icon: Briefcase, href: "/departments/finance" },
   { key: "ceo", title: "الرئيس التنفيذي CEO", role: "إصدار القرار النهائي", icon: ShieldCheck, href: "/departments/executive" },
   { key: "tasks", title: "خطة التنفيذ", role: "تحويل القرار إلى مهام وأدوار وجدول", icon: ClipboardList, href: "/departments/operations" },
   { key: "project", title: "المشروع", role: "حفظ مشروع ومهمة تنفيذية للمتابعة", icon: FolderKanban, href: "/departments/executive" },
 ] as const;
+
+const quickNavItems = [
+  { href: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard },
+  { href: "/enterprise-os", label: "Enterprise OS", icon: Building2 },
+  { href: "/departments/finance", label: "المالية", icon: Calculator },
+  { href: "/departments/executive", label: "CEO Office", icon: ShieldCheck },
+  { href: "/departments/marketing", label: "التسويق", icon: Megaphone },
+  { href: "/departments/sales", label: "CRM", icon: Users },
+  { href: "/departments/procurement", label: "المشتريات", icon: PackageSearch },
+  { href: "/departments/government-relations", label: "العلاقات الحكومية", icon: Landmark },
+  { href: "/bi-center", label: "BI موحد", icon: BarChart3 },
+];
+
+type TabKey = "execution" | "dashboard" | "reports" | "memory" | "integrations";
+
+const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
+  { key: "execution", label: "التنفيذ", icon: Send },
+  { key: "dashboard", label: "لوحة المتابعة", icon: LayoutDashboard },
+  { key: "reports", label: "التقارير", icon: FileText },
+  { key: "memory", label: "الذاكرة", icon: Brain },
+  { key: "integrations", label: "التكاملات", icon: Plug },
+];
 
 export default function StrategyRunner() {
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("execution");
 
   async function loadDashboard() {
     try {
@@ -112,12 +153,13 @@ export default function StrategyRunner() {
 
   return (
     <main className="company-app">
+      {/* Hero Section */}
       <section className="request-panel">
         <div className="request-copy">
           <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي تنفيذية</span>
           <h1>اكتب الطلب، والشركة تقرر ثم تنشئ مشروع التنفيذ</h1>
           <p>
-            هذا المسار يوحد الشركة: يقرأ البيانات المالية، يراجعها المدير المالي، يعتمد الرئيس التنفيذي القرار، ثم تتحول النتيجة إلى مهام ومشروع محفوظين للمتابعة.
+            يقرأ البيانات المالية، يراجعها المدير المالي، يعتمد الرئيس التنفيذي القرار، ثم تتحول النتيجة إلى مهام ومشروع محفوظين.
           </p>
         </div>
 
@@ -141,6 +183,7 @@ export default function StrategyRunner() {
         </form>
       </section>
 
+      {/* Stages Strip */}
       <section className="employee-strip" aria-label="مراحل تنفيذ الشركة">
         {stages.map((stage, index) => {
           const Icon = stage.icon;
@@ -157,94 +200,117 @@ export default function StrategyRunner() {
         })}
       </section>
 
-      <section className="delivery-panel">
-        <div className="delivery-header">
-          <div>
-            <span className="eyebrow"><BarChart3 size={16} /> التسليم النهائي</span>
-            <h2>نتيجة الشركة</h2>
-          </div>
-          <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
-            {loading ? "قيد التنفيذ" : result ? "تم إنشاء المشروع" : "بانتظار الطلب"}
-          </span>
-        </div>
+      {/* Section Tabs */}
+      <div className="section-tabs" role="tablist" aria-label="أقسام التطبيق">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              className={`section-tab ${activeTab === tab.key ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.key)}
+              role="tab"
+              aria-selected={activeTab === tab.key}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
-        {!result && !loading && (
-          <div className="empty-state">
-            <Building2 size={34} />
-            <strong>لا توجد نتيجة بعد</strong>
-            <span>اكتب الطلب واضغط تشغيل الشركة. ستظهر نتيجة CFO وCEO والمهام والمشروع هنا.</span>
-          </div>
-        )}
-
-        {loading && <LoadingSteps active={loading} />}
-
-        {result && (
-          <div className="report-stack">
-            <div className="finance-summary">
-              <Metric title="الإيرادات" value={result.financials.income} />
-              <Metric title="المصروفات" value={result.financials.expenses} />
-              <Metric title="صافي الربح" value={result.financials.profit} />
+      {/* Tab: Execution Results */}
+      {activeTab === "execution" && (
+        <>
+          <section className="delivery-panel fade-in">
+            <div className="delivery-header">
+              <div>
+                <span className="eyebrow"><BarChart3 size={16} /> التسليم النهائي</span>
+                <h2>نتيجة الشركة</h2>
+              </div>
+              <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
+                {loading ? "قيد التنفيذ" : result ? "تم إنشاء المشروع" : "بانتظار الطلب"}
+              </span>
             </div>
 
-            <article className="report-card featured">
-              <h3>المشروع الذي تم إنشاؤه</h3>
-              <pre>{`اسم المشروع: ${result.project.name}
+            {!result && !loading && (
+              <div className="empty-state">
+                <Building2 size={34} />
+                <strong>لا توجد نتيجة بعد</strong>
+                <span>اكتب الطلب واضغط تشغيل الشركة. ستظهر نتيجة CFO وCEO والمهام والمشروع هنا.</span>
+              </div>
+            )}
+
+            {loading && <LoadingSteps active={loading} />}
+
+            {result && (
+              <div className="report-stack fade-in">
+                <div className="finance-summary">
+                  <Metric title="الإيرادات" value={result.financials.income} />
+                  <Metric title="المصروفات" value={result.financials.expenses} />
+                  <Metric title="صافي الربح" value={result.financials.profit} />
+                </div>
+
+                <article className="report-card featured">
+                  <h3>المشروع الذي تم إنشاؤه</h3>
+                  <pre>{`اسم المشروع: ${result.project.name}
 الحالة: ${result.project.status || "ACTIVE"}
 المهمة: ${result.task.title}
 حالة المهمة: ${result.task.status}
 الحفظ في قاعدة البيانات: ${result.saved ? "تم" : "غير متصل بقاعدة البيانات"}`}</pre>
-            </article>
+                </article>
 
-            <Report title="قرار الرئيس التنفيذي CEO" content={result.ceo} featured />
-            <Report title="تقرير المدير المالي CFO" content={result.cfo} />
-            <Report title="المهام التنفيذية" content={result.tasks} />
-          </div>
-        )}
-      </section>
+                <Report title="قرار الرئيس التنفيذي CEO" content={result.ceo} featured />
+                <Report title="تقرير المدير المالي CFO" content={result.cfo} />
+                <Report title="المهام التنفيذية" content={result.tasks} />
+              </div>
+            )}
+          </section>
 
-      <section className="delivery-panel">
-        <div className="delivery-header">
-          <div>
-            <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
-            <h2>لوحة متابعة الشركة</h2>
-          </div>
-          <div className="dashboard-actions">
-            <NotificationCenter />
-            <Link className="secondary-btn" href="/dashboard">فتح Dashboard</Link>
-            <Link className="secondary-btn" href="/enterprise-os">Enterprise OS</Link>
-            <Link className="secondary-btn" href="/departments/finance">Accounting OS</Link>
-            <Link className="secondary-btn" href="/departments/executive">CEO Office</Link>
-            <Link className="secondary-btn" href="/departments/marketing">Marketing OS</Link>
-            <Link className="secondary-btn" href="/departments/sales">
-              <Users size={16} /> CRM
-            </Link>
-            <Link className="secondary-btn" href="/departments/procurement">
-              <PackageSearch size={16} /> المشتريات والمخزون
-            </Link>
-            <Link className="secondary-btn" href="/departments/government-relations">
-              <Landmark size={16} /> العلاقات الحكومية
-            </Link>
-            <Link className="secondary-btn" href="/bi-center">
-              <BarChart3 size={16} /> BI موحد
-            </Link>
+          <BIForm />
+        </>
+      )}
+
+      {/* Tab: Dashboard */}
+      {activeTab === "dashboard" && (
+        <section className="delivery-panel fade-in">
+          <div className="delivery-header">
+            <div>
+              <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
+              <h2>لوحة متابعة الشركة</h2>
+            </div>
             <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
           </div>
-        </div>
 
-        <div className="finance-summary">
-          <DashboardMetric title="المشاريع" value={dashboard?.projects.length ?? 0} />
-          <DashboardMetric title="المهام" value={dashboard?.tasks.length ?? 0} />
-          <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
-        </div>
-      </section>
+          <div className="finance-summary" style={{ marginBottom: 16 }}>
+            <DashboardMetric title="المشاريع" value={dashboard?.projects.length ?? 0} />
+            <DashboardMetric title="المهام" value={dashboard?.tasks.length ?? 0} />
+            <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
+          </div>
 
-      <BIForm />
+          <h3 style={{ margin: "0 0 12px", fontSize: "1.1rem" }}>الانتقال السريع</h3>
+          <div className="quick-nav">
+            {quickNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link key={item.href} href={item.href} className="quick-nav-card">
+                  <span><Icon size={18} /></span>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-      <ExecutiveReport />
+      {/* Tab: Reports */}
+      {activeTab === "reports" && <ExecutiveReport />}
 
-      <AgentMemoryPanel />
+      {/* Tab: Memory */}
+      {activeTab === "memory" && <AgentMemoryPanel />}
 
-      <IntegrationsPanel />
+      {/* Tab: Integrations */}
+      {activeTab === "integrations" && <IntegrationsPanel />}
     </main>
   );
 }

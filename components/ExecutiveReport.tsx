@@ -85,18 +85,19 @@ export default function ExecutiveReport() {
   }
 
   return (
-    <div className="delivery-panel" style={{ display: "grid", gap: 16 }}>
+    <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
           <span className="eyebrow"><FileText size={16} /> التقارير التنفيذية</span>
           <h2>مركز التقارير</h2>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select
             className="input"
             style={{ width: "auto", minWidth: 120 }}
             value={reportType}
             onChange={(e) => setReportType(e.target.value)}
+            aria-label="نوع التقرير"
           >
             <option value="DAILY">يومي</option>
             <option value="WEEKLY">أسبوعي</option>
@@ -125,8 +126,8 @@ export default function ExecutiveReport() {
       )}
 
       {report && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+        <div className="fade-in">
+          <div className="report-analytics-grid">
             <HealthGauge score={report.financialSummary.healthScore} label="مؤشر الصحة المالية" />
             <ProgressRing progress={report.operationalSummary.completionRate} label="نسبة إنجاز المهام" />
             <div className="metric-card green">
@@ -139,7 +140,7 @@ export default function ExecutiveReport() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="report-two-col" style={{ marginTop: 14 }}>
             <HorizontalBar
               title="الأداء المالي"
               data={[
@@ -160,19 +161,17 @@ export default function ExecutiveReport() {
           </div>
 
           {report.kpiHighlights.length > 0 && (
-            <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel)", padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div className="report-section-box" style={{ marginTop: 14 }}>
+              <div className="report-section-header">
                 <Target size={18} style={{ color: "var(--primary)" }} />
                 <strong>مؤشرات الأداء الرئيسية</strong>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              <div className="report-kpi-grid">
                 {report.kpiHighlights.map((kpi) => (
-                  <div key={kpi.name} className="department-signal-grid" style={{ display: "block" }}>
-                    <div style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 10, background: "#0f1520" }}>
-                      <small style={{ color: "var(--muted)", fontWeight: 800, display: "block" }}>{kpi.name}</small>
-                      <strong style={{ fontSize: "1.15rem" }}>{kpi.current}/{kpi.target} {kpi.unit}</strong>
-                      <span className={`mini-pill ${kpi.status.toLowerCase()}`} style={{ marginTop: 6, display: "inline-block" }}>{kpi.status}</span>
-                    </div>
+                  <div key={kpi.name} className="kpi-card-inner">
+                    <small>{kpi.name}</small>
+                    <strong>{kpi.current}/{kpi.target} {kpi.unit}</strong>
+                    <span className={`mini-pill ${kpi.status.toLowerCase()}`} style={{ marginTop: 6, display: "inline-block" }}>{kpi.status}</span>
                   </div>
                 ))}
               </div>
@@ -180,8 +179,8 @@ export default function ExecutiveReport() {
           )}
 
           {report.recommendations.length > 0 && (
-            <div style={{ border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel)", padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div className="report-section-box" style={{ marginTop: 14 }}>
+              <div className="report-section-header">
                 <AlertTriangle size={18} style={{ color: "var(--amber)" }} />
                 <strong>التوصيات</strong>
               </div>
@@ -195,7 +194,7 @@ export default function ExecutiveReport() {
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

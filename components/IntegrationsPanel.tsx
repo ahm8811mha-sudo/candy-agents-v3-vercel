@@ -38,7 +38,7 @@ export default function IntegrationsPanel() {
   }
 
   return (
-    <div className="delivery-panel" style={{ display: "grid", gap: 16 }}>
+    <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
           <span className="eyebrow"><Plug size={16} /> التكاملات الخارجية</span>
@@ -49,7 +49,7 @@ export default function IntegrationsPanel() {
         </span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+      <div className="integrations-grid">
         {integrations.map((integration) => (
           <div
             key={integration.type}

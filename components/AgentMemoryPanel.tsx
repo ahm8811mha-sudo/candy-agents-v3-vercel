@@ -87,7 +87,7 @@ export default function AgentMemoryPanel() {
   }
 
   return (
-    <div className="delivery-panel" style={{ display: "grid", gap: 16 }}>
+    <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
           <span className="eyebrow"><Brain size={16} /> ذاكرة الوكلاء</span>
@@ -111,15 +111,16 @@ export default function AgentMemoryPanel() {
 
       {activeTab === "memories" && (
         <>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="memory-search-bar">
             <input
               className="input"
               placeholder="بحث في القرارات السابقة..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
+              aria-label="بحث في القرارات"
             />
-            <button className="secondary-btn" onClick={search} disabled={loading}>
+            <button className="secondary-btn" onClick={search} disabled={loading} aria-label="بحث">
               {loading ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
             </button>
           </div>
@@ -132,7 +133,7 @@ export default function AgentMemoryPanel() {
             </div>
           )}
 
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="memory-list">
             {memories.map((m) => (
               <div key={m.id} className="report-card">
                 <h3 style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -144,7 +145,7 @@ export default function AgentMemoryPanel() {
                     {qualityLabels[m.decision_quality] || m.decision_quality}
                   </span>
                 </h3>
-                <pre style={{ fontSize: "0.88rem" }}>{m.summary.slice(0, 300)}</pre>
+                <pre>{m.summary.slice(0, 300)}</pre>
               </div>
             ))}
           </div>
@@ -152,7 +153,7 @@ export default function AgentMemoryPanel() {
       )}
 
       {activeTab === "patterns" && (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div className="memory-list">
           {patterns.length === 0 && (
             <div className="empty-state" style={{ minHeight: 160 }}>
               <TrendingUp size={28} />
@@ -169,23 +170,23 @@ export default function AgentMemoryPanel() {
                 </span>
               </h3>
               <div style={{ padding: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 12 }}>
-                  <div style={{ textAlign: "center" }}>
+                <div className="pattern-stats">
+                  <div className="pattern-stat">
                     <strong style={{ color: p.successRate >= 60 ? "var(--green)" : "var(--amber)", fontSize: "1.4rem" }}>
                       {p.successRate}%
                     </strong>
                     <br />
-                    <small style={{ color: "var(--muted)" }}>نسبة النجاح</small>
+                    <small>نسبة النجاح</small>
                   </div>
-                  <div style={{ textAlign: "center" }}>
+                  <div className="pattern-stat">
                     <strong style={{ fontSize: "1.4rem" }}>{p.avgHealthScore}</strong>
                     <br />
-                    <small style={{ color: "var(--muted)" }}>متوسط الصحة</small>
+                    <small>متوسط الصحة</small>
                   </div>
-                  <div style={{ textAlign: "center" }}>
+                  <div className="pattern-stat">
                     <strong style={{ fontSize: "1.4rem" }}>{p.totalDecisions}</strong>
                     <br />
-                    <small style={{ color: "var(--muted)" }}>إجمالي القرارات</small>
+                    <small>إجمالي القرارات</small>
                   </div>
                 </div>
                 <div className="statement-row" style={{ background: "rgba(124, 199, 255, 0.06)" }}>
