@@ -22,6 +22,7 @@ import {
   Briefcase,
   ShoppingBag,
   Activity,
+  CircleDollarSign,
 } from "lucide-react";
 import Link from "next/link";
 import BIForm from "./BIForm";
@@ -31,6 +32,7 @@ import AgentMemoryPanel from "./AgentMemoryPanel";
 import IntegrationsPanel from "./IntegrationsPanel";
 import ShopifyPanel from "./ShopifyPanel";
 import MonitoringPanel from "./MonitoringPanel";
+import TradingDeskPanel from "./TradingDeskPanel";
 
 type ExecutionResult = {
   ok: true;
@@ -92,11 +94,12 @@ const quickNavItems = [
   { href: "/bi-center", label: "BI موحد", icon: BarChart3 },
 ];
 
-type TabKey = "execution" | "dashboard" | "store" | "monitoring" | "reports" | "memory" | "integrations";
+type TabKey = "execution" | "dashboard" | "trading" | "store" | "monitoring" | "reports" | "memory" | "integrations";
 
 const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "execution", label: "التنفيذ", icon: Send },
   { key: "dashboard", label: "لوحة المتابعة", icon: LayoutDashboard },
+  { key: "trading", label: "التداول", icon: CircleDollarSign },
   { key: "store", label: "المتجر", icon: ShoppingBag },
   { key: "monitoring", label: "المراقبة", icon: Activity },
   { key: "reports", label: "التقارير", icon: FileText },
@@ -308,6 +311,9 @@ export default function StrategyRunner() {
           </div>
         </section>
       )}
+
+      {/* Tab: Trading Desk */}
+      {activeTab === "trading" && <TradingDeskPanel />}
 
       {/* Tab: Store */}
       {activeTab === "store" && <ShopifyPanel />}
