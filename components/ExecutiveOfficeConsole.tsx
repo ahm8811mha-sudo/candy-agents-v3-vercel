@@ -413,7 +413,12 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       label: "بنود متابعة CEO",
       value: brief?.pendingItems || ceoItems.length,
       sourceType: "ceo-item",
-      items: ceoItems.map((c) => ({ id: c.id, title: c.title, subtitle: `${c.item_type || "بند"} · ${c.status}${c.notes ? ` · ${c.notes}` : ""}` })),
+      items: ceoItems.map((c) => ({
+        id: c.id,
+        title: c.title,
+        subtitle: `${c.item_type || "بند"} · ${c.status}`,
+        context: { requestedBy: "مكتب الرئيس التنفيذي", relatedTo: c.item_type || "بند متابعة", origin: c.notes },
+      })),
     },
     {
       key: "approvals",
@@ -421,7 +426,12 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       label: "اعتمادات تنتظر قرار",
       value: brief?.waitingApprovals || approvals.length,
       sourceType: "approval",
-      items: approvals.map((a) => ({ id: a.id, title: a.entity_type, subtitle: `${a.status}${a.notes ? ` · ${a.notes}` : ""}` })),
+      items: approvals.map((a) => ({
+        id: a.id,
+        title: a.entity_type,
+        subtitle: a.status,
+        context: { requestedBy: "النظام / القسم المعني", relatedTo: a.entity_type, origin: a.notes || "طلب اعتماد بانتظار قرار الرئيس التنفيذي" },
+      })),
     },
     {
       key: "risks",
@@ -429,7 +439,12 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       label: "مخاطر مرتفعة",
       value: brief?.highRisks || highRisks.length,
       sourceType: "alert",
-      items: highRisks.map((a) => ({ id: a.id, title: a.title, subtitle: `${a.severity} · ${a.message}` })),
+      items: highRisks.map((a) => ({
+        id: a.id,
+        title: a.title,
+        subtitle: a.severity,
+        context: { requestedBy: "محرّك التنبيهات", relatedTo: "إدارة المخاطر", origin: a.message },
+      })),
     },
     {
       key: "projects",
@@ -437,7 +452,12 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       label: "مشاريع نشطة",
       value: brief?.activeProjects || projects.length,
       sourceType: "project",
-      items: projects.map((p) => ({ id: p.id, title: p.name, subtitle: `${p.status || "ACTIVE"}${p.risk_level ? ` · مخاطر ${p.risk_level}` : ""}` })),
+      items: projects.map((p) => ({
+        id: p.id,
+        title: p.name,
+        subtitle: p.status || "ACTIVE",
+        context: { requestedBy: "إدارة المشاريع", relatedTo: p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
+      })),
     },
     {
       key: "late-tasks",
@@ -445,7 +465,12 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       label: "مهام متأخرة",
       value: brief?.lateTasks || lateTasks.length,
       sourceType: "task",
-      items: lateTasks.map((t) => ({ id: t.id, title: t.title || t.content || "مهمة", subtitle: `${t.status}${t.owner_role ? ` · ${t.owner_role}` : ""}` })),
+      items: lateTasks.map((t) => ({
+        id: t.id,
+        title: t.title || t.content || "مهمة",
+        subtitle: t.status,
+        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
+      })),
     },
   ];
 }

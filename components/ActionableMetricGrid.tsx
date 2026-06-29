@@ -4,10 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Check, X, MessageSquarePlus, Share2, Loader2, ChevronDown, Inbox } from "lucide-react";
 
+export type ItemContext = {
+  requestedBy?: string; // who raised it, e.g. "المدير المالي (CFO)"
+  relatedTo?: string; // the project/initiative it belongs to
+  origin?: string; // background / prior direction that produced it
+};
+
 export type DrillItem = {
   id: string;
   title: string;
   subtitle?: string;
+  context?: ItemContext;
 };
 
 export type ActionableMetric = {
@@ -25,7 +32,7 @@ type DecisionRecord = {
   forwardedTo?: string;
 };
 
-const DEFAULT_DEPARTMENTS = ["المالية", "التسويق", "المبيعات", "العمليات", "المشتريات", "التنفيذي"];
+const DEFAULT_DEPARTMENTS = ["دراسة الجدوى", "المالية", "التسويق", "المبيعات", "العمليات", "المشتريات", "المدير المالي", "التنفيذي"];
 
 const actionMeta: Record<string, { label: string; pill: string }> = {
   APPROVED: { label: "تم الاعتماد", pill: "done" },
@@ -145,6 +152,14 @@ export default function ActionableMetricGrid({
                       </span>
                     )}
                   </div>
+
+                  {item.context && (item.context.requestedBy || item.context.relatedTo || item.context.origin) && (
+                    <div className="statement-row" style={{ background: "rgba(56,211,159,0.05)", display: "grid", gap: 3 }}>
+                      {item.context.requestedBy && <small style={{ color: "var(--muted)" }}>📌 مصدر الطلب: <b style={{ color: "var(--text)" }}>{item.context.requestedBy}</b></small>}
+                      {item.context.relatedTo && <small style={{ color: "var(--muted)" }}>🔗 متعلّق بـ: <b style={{ color: "var(--text)" }}>{item.context.relatedTo}</b></small>}
+                      {item.context.origin && <small style={{ color: "var(--muted)" }}>🧭 الخلفية: {item.context.origin}</small>}
+                    </div>
+                  )}
 
                   {decision?.note && (
                     <div className="statement-row" style={{ background: "rgba(124,199,255,0.06)" }}>

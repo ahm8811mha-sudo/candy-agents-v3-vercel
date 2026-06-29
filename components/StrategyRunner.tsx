@@ -35,6 +35,7 @@ import MonitoringPanel from "./MonitoringPanel";
 import TradingDeskPanel from "./TradingDeskPanel";
 import ScalpingSignalPanel from "./ScalpingSignalPanel";
 import ApprovalCenter from "./ApprovalCenter";
+import AccountPanel from "./AccountPanel";
 
 type ExecutionResult = {
   ok: true;
@@ -326,6 +327,7 @@ export default function StrategyRunner() {
       {/* Tab: Trading Desk */}
       {activeTab === "trading" && (
         <>
+          <AccountPanel />
           <ScalpingSignalPanel />
           <TradingDeskPanel />
           <ApprovalCenter />
