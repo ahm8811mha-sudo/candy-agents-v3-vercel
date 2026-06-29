@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Loader2, Download, TrendingUp, AlertTriangle, Target } from "lucide-react";
+import { FileText, Loader2, Download, TrendingUp, AlertTriangle, Target, Image } from "lucide-react";
 import { HealthGauge, HorizontalBar, ProgressRing, StatusDistribution } from "./AnalyticsCharts";
 
 type ReportData = {
@@ -84,6 +84,11 @@ export default function ExecutiveReport() {
     }
   }
 
+  function openDesign() {
+    // Branded, print-ready HTML design (also Adobe Express import-compatible).
+    window.open(`/api/reports?type=${reportType}&format=design`, "_blank", "noopener");
+  }
+
   return (
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
@@ -108,9 +113,14 @@ export default function ExecutiveReport() {
             إنشاء التقرير
           </button>
           {report && (
-            <button className="secondary-btn" onClick={downloadText}>
-              <Download size={16} /> تحميل
-            </button>
+            <>
+              <button className="secondary-btn" onClick={downloadText}>
+                <Download size={16} /> نص
+              </button>
+              <button className="secondary-btn" onClick={openDesign}>
+                <Image size={16} /> تصميم احترافي
+              </button>
+            </>
           )}
         </div>
       </div>

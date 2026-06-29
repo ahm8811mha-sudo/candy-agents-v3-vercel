@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateExecutiveReport, formatReportAsText, type ReportType } from "@/lib/reportGenerator";
+import { renderReportHtml } from "@/lib/designExport";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +19,12 @@ export async function GET(req: NextRequest) {
     if (format === "text") {
       return new NextResponse(formatReportAsText(report), {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    if (format === "design" || format === "html") {
+      return new NextResponse(renderReportHtml(report), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     }
 

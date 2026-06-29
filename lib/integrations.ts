@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 
-export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL";
+export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL";
 
 export type IntegrationConfig = {
   type: IntegrationType;
@@ -40,8 +40,8 @@ const integrationRegistry: IntegrationConfig[] = [
   {
     type: "SHOPIFY",
     name: "Shopify Store",
-    enabled: Boolean(process.env.SHOPIFY_ACCESS_TOKEN),
-    metadata: { description: "ربط مع متجر شوبيفاي" },
+    enabled: Boolean(process.env.SHOPIFY_ACCESS_TOKEN && process.env.SHOPIFY_STORE_DOMAIN),
+    metadata: { description: "متجر شوبيفاي: المنتجات والطلبات والمخزون والمبيعات" },
   },
   {
     type: "WEBHOOK",
@@ -55,6 +55,12 @@ const integrationRegistry: IntegrationConfig[] = [
     name: "Email Notifications",
     enabled: Boolean(process.env.SMTP_HOST),
     metadata: { description: "إرسال تقارير بالبريد الإلكتروني" },
+  },
+  {
+    type: "VERCEL",
+    name: "Vercel Monitoring",
+    enabled: Boolean(process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID),
+    metadata: { description: "مراقبة حالة النشر والأخطاء والإصدارات" },
   },
 ];
 
