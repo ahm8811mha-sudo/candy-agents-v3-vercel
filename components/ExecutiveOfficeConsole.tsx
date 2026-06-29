@@ -15,8 +15,8 @@ import {
   ShieldAlert,
   Target,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import ActionableMetricGrid, { type ActionableMetric } from "./ActionableMetricGrid";
 
 type OfficeData = {
   operatingBrief?: {
@@ -198,13 +198,7 @@ export default function ExecutiveOfficeConsole() {
         {error && <p className="notice error">{error}</p>}
       </section>
 
-      <section className="ops-metrics">
-        <Metric icon={CalendarCheck} label="بنود متابعة CEO" value={brief?.pendingItems || 0} />
-        <Metric icon={CheckCircle2} label="اعتمادات تنتظر قرار" value={brief?.waitingApprovals || 0} href="/?tab=trading#approval-center" />
-        <Metric icon={ShieldAlert} label="مخاطر مرتفعة" value={brief?.highRisks || 0} />
-        <Metric icon={BriefcaseBusiness} label="مشاريع نشطة" value={brief?.activeProjects || 0} />
-        <Metric icon={ClipboardList} label="مهام متأخرة" value={brief?.lateTasks || 0} />
-      </section>
+      <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
 
       <section className="ops-card executive-brief">
         <span className="eyebrow">
@@ -401,27 +395,59 @@ function successText(action: string) {
   return "تم تنفيذ العملية.";
 }
 
-function Metric({ icon: Icon, label, value, href }: { icon: LucideIcon; label: string; value: number; href?: string }) {
-  const body = (
-    <>
-      <span>
-        <Icon size={20} />
-      </span>
-      <small>{label}</small>
-      <strong>{value}</strong>
-      {href && <em style={{ color: "#7cc7ff", fontSize: "0.74rem", fontWeight: 900 }}>عرض التفاصيل ←</em>}
-    </>
-  );
+function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatingBrief"]): ActionableMetric[] {
+  const dashboard = data?.dashboard;
+  const ceoItems = data?.enterprise?.ceoItems || [];
+  const tasks = dashboard?.tasks || [];
+  const projects = dashboard?.projects || [];
+  const approvals = dashboard?.approvals || [];
+  const alerts = dashboard?.alerts || [];
 
-  if (href) {
-    return (
-      <Link href={href} className="metric-card green department-link" style={{ cursor: "pointer" }}>
-        {body}
-      </Link>
-    );
-  }
+  const lateTasks = tasks.filter((t) => t.status !== "DONE" && t.status !== "COMPLETED");
+  const highRisks = alerts.filter((a) => ["HIGH", "CRITICAL"].includes((a.severity || "").toUpperCase()));
 
-  return <article className="metric-card green">{body}</article>;
+  return [
+    {
+      key: "ceo-items",
+      icon: CalendarCheck,
+      label: "بنود متابعة CEO",
+      value: brief?.pendingItems || ceoItems.length,
+      sourceType: "ceo-item",
+      items: ceoItems.map((c) => ({ id: c.id, title: c.title, subtitle: `${c.item_type || "بند"} · ${c.status}${c.notes ? ` · ${c.notes}` : ""}` })),
+    },
+    {
+      key: "approvals",
+      icon: CheckCircle2,
+      label: "اعتمادات تنتظر قرار",
+      value: brief?.waitingApprovals || approvals.length,
+      sourceType: "approval",
+      items: approvals.map((a) => ({ id: a.id, title: a.entity_type, subtitle: `${a.status}${a.notes ? ` · ${a.notes}` : ""}` })),
+    },
+    {
+      key: "risks",
+      icon: ShieldAlert,
+      label: "مخاطر مرتفعة",
+      value: brief?.highRisks || highRisks.length,
+      sourceType: "alert",
+      items: highRisks.map((a) => ({ id: a.id, title: a.title, subtitle: `${a.severity} · ${a.message}` })),
+    },
+    {
+      key: "projects",
+      icon: BriefcaseBusiness,
+      label: "مشاريع نشطة",
+      value: brief?.activeProjects || projects.length,
+      sourceType: "project",
+      items: projects.map((p) => ({ id: p.id, title: p.name, subtitle: `${p.status || "ACTIVE"}${p.risk_level ? ` · مخاطر ${p.risk_level}` : ""}` })),
+    },
+    {
+      key: "late-tasks",
+      icon: ClipboardList,
+      label: "مهام متأخرة",
+      value: brief?.lateTasks || lateTasks.length,
+      sourceType: "task",
+      items: lateTasks.map((t) => ({ id: t.id, title: t.title || t.content || "مهمة", subtitle: `${t.status}${t.owner_role ? ` · ${t.owner_role}` : ""}` })),
+    },
+  ];
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
