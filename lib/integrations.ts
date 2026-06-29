@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 
-export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL";
+export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL" | "ALPACA" | "FINNHUB";
 
 export type IntegrationConfig = {
   type: IntegrationType;
@@ -61,6 +61,18 @@ const integrationRegistry: IntegrationConfig[] = [
     name: "Vercel Monitoring",
     enabled: Boolean(process.env.VERCEL_API_TOKEN && process.env.VERCEL_PROJECT_ID),
     metadata: { description: "مراقبة حالة النشر والأخطاء والإصدارات" },
+  },
+  {
+    type: "ALPACA",
+    name: "Alpaca Trading",
+    enabled: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
+    metadata: { description: `تنفيذ التداول (${process.env.ALPACA_LIVE === "true" ? "حقيقي" : "ورقي/Paper"})` },
+  },
+  {
+    type: "FINNHUB",
+    name: "Finnhub Market Data",
+    enabled: Boolean(process.env.FINNHUB_API_KEY),
+    metadata: { description: "ماسح الأخبار والتقويم الاقتصادي" },
   },
 ];
 

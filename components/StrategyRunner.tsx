@@ -33,6 +33,7 @@ import IntegrationsPanel from "./IntegrationsPanel";
 import ShopifyPanel from "./ShopifyPanel";
 import MonitoringPanel from "./MonitoringPanel";
 import TradingDeskPanel from "./TradingDeskPanel";
+import ScalpingSignalPanel from "./ScalpingSignalPanel";
 
 type ExecutionResult = {
   ok: true;
@@ -313,7 +314,12 @@ export default function StrategyRunner() {
       )}
 
       {/* Tab: Trading Desk */}
-      {activeTab === "trading" && <TradingDeskPanel />}
+      {activeTab === "trading" && (
+        <>
+          <ScalpingSignalPanel />
+          <TradingDeskPanel />
+        </>
+      )}
 
       {/* Tab: Store */}
       {activeTab === "store" && <ShopifyPanel />}
