@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listApprovals, decideApproval, approvalStats, type ApprovalStatus } from "@/lib/approvals";
+import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, item: result, stats: approvalStats() });
+    // On approval of a trade, route it to the broker (Alpaca paper by default).
+    let execution = null;
+    if (decision === "APPROVED" && result.type === "TRADE") {
+      execution = await executeApprovedTrade(result.metadata || {});
+    }
+
+    return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Approval action failed" },

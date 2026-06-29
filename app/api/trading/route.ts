@@ -46,7 +46,16 @@ export async function POST(req: NextRequest) {
           amount: d.allocation,
           requestedRole: "CFO",
           dedupeKey: `trade-${d.opportunity.id}-${d.allocation}`,
-          metadata: { opportunityId: d.opportunity.id, score: d.score, mode: result.mode },
+          metadata: {
+            opportunityId: d.opportunity.id,
+            symbol: d.opportunity.symbol,
+            assetClass: d.opportunity.assetClass,
+            entryPrice: d.opportunity.entryPrice,
+            expectedReturn: d.opportunity.expectedReturn,
+            allocation: d.allocation,
+            score: d.score,
+            mode: result.mode,
+          },
         })
       );
 

@@ -30,6 +30,7 @@ export default function ApprovalCenter() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [deciding, setDeciding] = useState<string | null>(null);
+  const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +67,9 @@ export default function ApprovalCenter() {
       if (json.ok) {
         setItems((prev) => prev.map((it) => (it.id === id ? json.item : it)));
         setStats(json.stats);
+        if (json.execution) {
+          setExecMsg({ text: json.execution.reason, ok: json.execution.executed });
+        }
       }
     } catch {
       // silent
@@ -90,6 +94,12 @@ export default function ApprovalCenter() {
           </span>
         )}
       </div>
+
+      {execMsg && (
+        <p className={`notice ${execMsg.ok ? "done" : ""}`} style={{ color: execMsg.ok ? "var(--green)" : "var(--amber)" }}>
+          {execMsg.ok ? "✅ " : "ℹ️ "}{execMsg.text}
+        </p>
+      )}
 
       {loading && (
         <div style={{ padding: 24, textAlign: "center" }}>
