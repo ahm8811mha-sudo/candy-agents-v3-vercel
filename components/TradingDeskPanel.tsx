@@ -50,6 +50,7 @@ const classLabel: Record<string, string> = {
   EQUITY: "أسهم",
   CRYPTO: "كريبتو",
   FOREX: "عملات",
+  TADAWUL: "السوق السعودي",
 };
 
 export default function TradingDeskPanel() {

@@ -10,7 +10,7 @@
  * disabled unless explicitly configured by the operator (see executionEngine).
  */
 
-export type AssetClass = "BUSINESS" | "EQUITY" | "CRYPTO" | "FOREX";
+export type AssetClass = "BUSINESS" | "EQUITY" | "CRYPTO" | "FOREX" | "TADAWUL";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 

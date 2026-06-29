@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "./supabase";
 
-export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL" | "ALPACA" | "FINNHUB";
+export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL" | "ALPACA" | "FINNHUB" | "SAUDI_BROKER";
 
 export type IntegrationConfig = {
   type: IntegrationType;
@@ -73,6 +73,12 @@ const integrationRegistry: IntegrationConfig[] = [
     name: "Finnhub Market Data",
     enabled: Boolean(process.env.FINNHUB_API_KEY),
     metadata: { description: "ماسح الأخبار والتقويم الاقتصادي" },
+  },
+  {
+    type: "SAUDI_BROKER",
+    name: "وسيط سعودي (تداول)",
+    enabled: Boolean(process.env.SAUDI_BROKER_API_URL && process.env.SAUDI_BROKER_API_KEY),
+    metadata: { description: "تنفيذ أوامر السوق السعودي عبر وسيط مرخّص" },
   },
 ];
 

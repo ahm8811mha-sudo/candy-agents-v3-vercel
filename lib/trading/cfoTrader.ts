@@ -22,6 +22,7 @@ import type {
 import { defaultRiskLimits, passesRiskChecks, positionSize, requiresApproval, drawdownBreached } from "./riskEngine";
 import { rankOpportunities, scoreOpportunity } from "./opportunityScorer";
 import { openPosition, resolveMode } from "./executionEngine";
+import { sampleTadawulOpportunities } from "./markets/tadawul";
 
 export type RunCycleInput = {
   budget: number;
@@ -123,5 +124,6 @@ export function sampleOpportunities(): MarketOpportunity[] {
     { id: "opp-fx-1", symbol: "EUR/USD", assetClass: "FOREX", title: "يورو/دولار — نطاق سعري", expectedReturn: 0.04, risk: "MEDIUM", confidence: 0.5, entryPrice: 1.08, horizonDays: 7, source: "market-scan" },
     { id: "opp-bz-1", symbol: "INV-RESTOCK", assetClass: "BUSINESS", title: "إعادة تخزين منتج عالي الطلب", expectedReturn: 0.18, risk: "MEDIUM", confidence: 0.78, entryPrice: 1, horizonDays: 21, source: "opportunity-radar" },
     { id: "opp-bz-2", symbol: "AD-CAMPAIGN", assetClass: "BUSINESS", title: "حملة تسويقية بعائد مرتفع", expectedReturn: 0.31, risk: "HIGH", confidence: 0.66, entryPrice: 1, horizonDays: 30, source: "opportunity-radar" },
+    ...sampleTadawulOpportunities(),
   ];
 }

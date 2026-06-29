@@ -8,6 +8,7 @@
  */
 
 import { isAlpacaConfigured, submitBracketOrder, alpacaMode } from "./brokers/alpaca";
+import { submitSaudiOrder, saudiBrokerName } from "./brokers/saudiBroker";
 
 export type TradeApprovalMeta = {
   symbol?: string;
@@ -33,6 +34,27 @@ function round2(value: number): number {
 
 export async function executeApprovedTrade(meta: TradeApprovalMeta): Promise<ExecutionResult> {
   const assetClass = (meta.assetClass || "").toUpperCase();
+
+  const entryEarly = Number(meta.entryPrice) || 0;
+  const allocationEarly = Number(meta.allocation) || 0;
+
+  // Saudi market (Tadawul) routes through the configurable Saudi broker adapter.
+  if (assetClass === "TADAWUL") {
+    if (entryEarly <= 0 || allocationEarly <= 0) {
+      return { executed: false, simulated: true, reason: "بيانات السعر/التخصيص غير صالحة — اعتماد محاكاة فقط" };
+    }
+    const qty = Math.max(1, Math.floor(allocationEarly / entryEarly));
+    const result = await submitSaudiOrder({ symbol: String(meta.symbol || ""), qty, side: "buy" });
+    return {
+      executed: result.submitted,
+      simulated: result.simulated,
+      reason: result.submitted ? `${result.reason} (${saudiBrokerName()})` : result.reason,
+      orderId: result.orderId,
+      symbol: String(meta.symbol || ""),
+      qty,
+    };
+  }
+
   const tradable = assetClass === "EQUITY" || assetClass === "CRYPTO";
 
   if (!tradable) {
