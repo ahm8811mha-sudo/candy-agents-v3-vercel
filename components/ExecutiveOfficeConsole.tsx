@@ -200,7 +200,7 @@ export default function ExecutiveOfficeConsole() {
 
       <section className="ops-metrics">
         <Metric icon={CalendarCheck} label="بنود متابعة CEO" value={brief?.pendingItems || 0} />
-        <Metric icon={CheckCircle2} label="اعتمادات تنتظر قرار" value={brief?.waitingApprovals || 0} />
+        <Metric icon={CheckCircle2} label="اعتمادات تنتظر قرار" value={brief?.waitingApprovals || 0} href="/?tab=trading#approval-center" />
         <Metric icon={ShieldAlert} label="مخاطر مرتفعة" value={brief?.highRisks || 0} />
         <Metric icon={BriefcaseBusiness} label="مشاريع نشطة" value={brief?.activeProjects || 0} />
         <Metric icon={ClipboardList} label="مهام متأخرة" value={brief?.lateTasks || 0} />
@@ -401,16 +401,27 @@ function successText(action: string) {
   return "تم تنفيذ العملية.";
 }
 
-function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number }) {
-  return (
-    <article className="metric-card green">
+function Metric({ icon: Icon, label, value, href }: { icon: LucideIcon; label: string; value: number; href?: string }) {
+  const body = (
+    <>
       <span>
         <Icon size={20} />
       </span>
       <small>{label}</small>
       <strong>{value}</strong>
-    </article>
+      {href && <em style={{ color: "#7cc7ff", fontSize: "0.74rem", fontWeight: 900 }}>عرض التفاصيل ←</em>}
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="metric-card green department-link" style={{ cursor: "pointer" }}>
+        {body}
+      </Link>
+    );
+  }
+
+  return <article className="metric-card green">{body}</article>;
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {

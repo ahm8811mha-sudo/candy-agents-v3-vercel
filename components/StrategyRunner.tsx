@@ -34,6 +34,7 @@ import ShopifyPanel from "./ShopifyPanel";
 import MonitoringPanel from "./MonitoringPanel";
 import TradingDeskPanel from "./TradingDeskPanel";
 import ScalpingSignalPanel from "./ScalpingSignalPanel";
+import ApprovalCenter from "./ApprovalCenter";
 
 type ExecutionResult = {
   ok: true;
@@ -159,6 +160,15 @@ export default function StrategyRunner() {
 
   useEffect(() => {
     loadDashboard();
+  }, []);
+
+  // Allow deep-linking to a specific tab, e.g. /?tab=trading from the CEO office.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("tab") as TabKey | null;
+    if (requested && tabs.some((t) => t.key === requested)) {
+      setActiveTab(requested);
+    }
   }, []);
 
   return (
@@ -318,6 +328,7 @@ export default function StrategyRunner() {
         <>
           <ScalpingSignalPanel />
           <TradingDeskPanel />
+          <ApprovalCenter />
         </>
       )}
 

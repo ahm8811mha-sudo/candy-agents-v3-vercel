@@ -82,7 +82,13 @@ export default function TradingDeskPanel() {
         body: JSON.stringify({ budget, mode }),
       });
       const json = await res.json();
-      if (json.ok) setResult(json);
+      if (json.ok) {
+        setResult(json);
+        // Notify the approval center so newly-gated trades appear immediately.
+        if (json.approvalsRequired > 0) {
+          window.dispatchEvent(new Event("approvals-updated"));
+        }
+      }
     } catch {
       // silent
     } finally {

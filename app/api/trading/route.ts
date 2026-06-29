@@ -3,6 +3,7 @@ import { runCfoTradingCycle, sampleOpportunities, type RunCycleInput } from "@/l
 import { defaultRiskLimits } from "@/lib/trading/riskEngine";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
 import type { MarketOpportunity, TradingMode } from "@/lib/trading/types";
+import { createApproval } from "@/lib/approvals";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,23 @@ export async function POST(req: NextRequest) {
     const input: RunCycleInput = { budget, opportunities, requestedMode };
     const result = runCfoTradingCycle(input);
 
-    return NextResponse.json({ ok: true, ...result });
+    // Surface trades that exceed the approval threshold as actionable items in
+    // the decision center so a human can approve or reject them.
+    const createdApprovals = result.decisions
+      .filter((d) => d.action === "NEEDS_APPROVAL")
+      .map((d) =>
+        createApproval({
+          type: "TRADE",
+          title: d.opportunity.title,
+          detail: `${d.opportunity.symbol} · ${d.opportunity.assetClass} · عائد متوقع ${(d.opportunity.expectedReturn * 100).toFixed(0)}% · ${d.reason}`,
+          amount: d.allocation,
+          requestedRole: "CFO",
+          dedupeKey: `trade-${d.opportunity.id}-${d.allocation}`,
+          metadata: { opportunityId: d.opportunity.id, score: d.score, mode: result.mode },
+        })
+      );
+
+    return NextResponse.json({ ok: true, ...result, createdApprovals });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Trading cycle failed" },
