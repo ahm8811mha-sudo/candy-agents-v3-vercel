@@ -1,0 +1,159 @@
+/* Candy Agents — Unified Theme Layer (ADDITIVE, mergeable)
+ * Add ONE line at the top of app/globals.css (after the Cairo @import):
+ *     @import "./unified-theme.css";
+ * 100% additive: does NOT rename or remove any existing class. */
+
+:root {
+  --panel-2: #192230;
+  --field: #0f1520;
+  --field-2: #0b1018;
+  --muted-2: #b8c5d5;
+  --text-strong: #ffffff;
+
+  --primary-2: #1f9d86;
+  --accent-sky: #7cc7ff;
+  --accent-sky-soft: rgba(124, 199, 255, 0.13);
+  --brand-gradient: linear-gradient(135deg, #2f80ed, #1f9d86);
+
+  --green-soft: rgba(56, 211, 159, 0.13);
+  --amber-soft: rgba(244, 183, 64, 0.13);
+  --red-soft: rgba(239, 100, 97, 0.13);
+
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+  --shadow-ceo: 0 18px 50px rgba(0, 0, 0, 0.07);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur: 220ms;
+  --dur-fast: 160ms;
+
+  --surface-app: var(--bg);
+  --surface-card: var(--panel);
+  --surface-input: var(--field);
+  --border-hairline: var(--line);
+  --text-body: var(--text);
+  --text-secondary: var(--muted);
+  --action-bg: var(--brand-gradient);
+  --action-text: #ffffff;
+
+  --gs-gold: #f7c948;
+  --gs-gold-text: #c8a050;
+  --gs-terminal: #0d1117;
+  --gs-terminal-text: #58d68d;
+}
+
+/* CEO / executive — Apple light */
+[data-theme="ceo"] {
+  --bg: #f5f5f7;
+  --panel: #ffffff;
+  --panel-2: #f5f5f7;
+  --field: #f5f5f7;
+  --line: rgba(0, 0, 0, 0.06);
+  --text: #1d1d1f;
+  --text-strong: #1d1d1f;
+  --muted: #6e6e73;
+  --muted-2: #6e6e73;
+  --primary: #0071e3;
+  --accent-sky: #0071e3;
+  --green: #34c759;
+  --amber: #ff9f0a;
+  --red: #ff3b30;
+  --green-soft: rgba(52, 199, 89, 0.12);
+  --amber-soft: rgba(255, 159, 10, 0.13);
+  --red-soft: rgba(255, 59, 48, 0.1);
+  --action-bg: #1d1d1f;
+  --action-text: #ffffff;
+}
+
+/* Golden Star office — warm */
+[data-theme="office"] {
+  --bg: #d4c5a9;
+  --panel: #f5ede0;
+  --panel-2: #ede0cc;
+  --field: #f0e8d8;
+  --line: rgba(107, 76, 42, 0.22);
+  --text: #4a2c0a;
+  --text-strong: #2e1b06;
+  --muted: #7a4f20;
+  --muted-2: #6b4a22;
+  --primary: #7a4f20;
+  --accent-sky: #7a4f20;
+  --brand-gradient: linear-gradient(135deg, #6a3093, #a044ff);
+  --action-bg: linear-gradient(135deg, #6a3093, #a044ff);
+  --action-text: #ffffff;
+}
+
+/* Unified App Header */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px clamp(16px, 4vw, 40px);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.app-header__brand { display: flex; align-items: center; gap: 11px; color: var(--text); text-decoration: none; }
+.app-header__logo {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: var(--brand-gradient);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 900; font-size: 0.9rem;
+}
+.app-header__brand b { font-size: 0.95rem; font-weight: 900; display: block; line-height: 1.1; }
+.app-header__brand small { font-size: 0.62rem; color: var(--muted); }
+
+.app-nav {
+  display: flex; gap: 4px; padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--field);
+  border: 1px solid var(--line);
+}
+.app-nav a {
+  display: inline-flex; align-items: center; gap: 7px;
+  border-radius: var(--radius-pill);
+  padding: 8px 15px;
+  font-weight: 900; font-size: 0.8rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.app-nav a.is-active { color: var(--action-text); background: var(--action-bg); }
+.app-nav a:not(.is-active):hover { color: var(--text); }
+
+.app-header__status {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 8px 13px;
+  font-weight: 900; font-size: 0.76rem;
+  background: var(--panel); color: var(--text);
+}
+.app-header__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+@keyframes appViewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.app-view { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .app-view { animation: appViewIn 0.32s var(--ease) both; }
+}
+@media (max-width: 920px) {
+  .app-header__brand small { display: none; }
+  .app-nav a span.app-nav__label { display: none; }
+}
