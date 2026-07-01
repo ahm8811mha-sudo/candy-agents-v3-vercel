@@ -67,6 +67,87 @@
   --action-text: #ffffff;
 }
 
+/* ════════════════════════════════════════════════════════
+   CORPORATE — Golden Star world-class identity
+   (Aramco-style Saudi corporate + IBM Carbon discipline)
+   Ink-navy on white, gold accent. Applied app-wide.
+   ════════════════════════════════════════════════════════ */
+[data-theme="corporate"] {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --field: #f3f5f8;
+  --field-2: #e9edf2;
+  --line: rgba(16, 24, 40, 0.1);
+  --text: #101828;
+  --text-strong: #0b1220;
+  --muted: #5b6b83;
+  --muted-2: #47566e;
+
+  --primary: #13315c;
+  --primary-2: #1d4e89;
+  --accent-sky: #1d4e89;
+  --accent-sky-soft: rgba(29, 78, 137, 0.1);
+
+  --green: #067647;
+  --amber: #b54708;
+  --red: #b42318;
+  --green-soft: rgba(6, 118, 71, 0.1);
+  --amber-soft: rgba(181, 71, 8, 0.12);
+  --red-soft: rgba(180, 35, 24, 0.1);
+
+  --shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+  --brand-gradient: linear-gradient(135deg, #13315c, #b98a2f);
+  --action-bg: #13315c;
+  --action-text: #ffffff;
+
+  --gs-gold: #b98a2f;
+  --gs-gold-text: #9a721f;
+}
+
+/* Corporate facade hero: ink-navy band with a golden horizon */
+[data-theme="corporate"] .hero-scenic {
+  border: 0;
+  background: linear-gradient(165deg, #0d2440 0%, #13315c 58%, #1b3e6f 100%);
+}
+[data-theme="corporate"] .hero-scenic::before {
+  background: linear-gradient(90deg, transparent, rgba(201, 152, 47, 0.75), transparent);
+}
+[data-theme="corporate"] .hero-scenic::after {
+  background: radial-gradient(50% 50% at 50% 50%, rgba(201, 152, 47, 0.28), transparent 70%);
+}
+[data-theme="corporate"] .hero-pill {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e7c873;
+}
+[data-theme="corporate"] .hero-title { color: #ffffff; }
+[data-theme="corporate"] .hero-title em {
+  background: linear-gradient(120deg, #e7c873, #b98a2f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme="corporate"] .hero-sub { color: #b9c9de; }
+[data-theme="corporate"] .hero-logos { color: #9fb4cc; }
+[data-theme="corporate"] .hero-logos i { background: #9fb4cc; }
+[data-theme="corporate"] .hero-scenic .primary-btn {
+  background: linear-gradient(135deg, #c9982f, #a87b23);
+  color: #14100a;
+}
+[data-theme="corporate"] .hero-scenic .secondary-btn {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+[data-theme="corporate"] .glow-title {
+  background: linear-gradient(120deg, var(--text-strong) 45%, var(--gs-gold) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+[data-theme="corporate"] .app-header__dot { box-shadow: none; }
+[data-theme="corporate"] .shell-link.is-active { box-shadow: var(--shadow); }
+
 /* Golden Star office — warm */
 [data-theme="office"] {
   --bg: #d4c5a9;

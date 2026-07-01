@@ -3,21 +3,18 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-// /dashboard → ceo (فاتح Apple) · /enterprise-os → office (دافئ) · الباقي → dark
-function themeForPath(pathname: string): "dark" | "ceo" | "office" {
-  if (pathname.startsWith("/dashboard")) return "ceo";
-  if (pathname.startsWith("/enterprise-os")) return "office";
-  return "dark";
-}
-
+/**
+ * Unified corporate identity (Golden Star: ink-navy on white, gold accent)
+ * applied app-wide — the company facade and the departments behind it share
+ * one world-class corporate language.
+ */
 export default function ThemeShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const theme = themeForPath(pathname);
 
   return (
-    <div data-theme={theme} className="app-shell">
-      {/* المفتاح على theme يُعيد تشغيل انتقال الظهور الناعم لكل سطح */}
-      <div key={theme} className="app-view">
+    <div data-theme="corporate" className="app-shell">
+      {/* keyed per route to re-run the soft view transition */}
+      <div key={pathname} className="app-view">
         {children}
       </div>
     </div>
