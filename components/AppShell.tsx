@@ -47,6 +47,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(0);
 
+  // Close the drawer on navigation and lock body scroll while it is open.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
   // Pending-decision badge for the sidebar.
   useEffect(() => {
     let alive = true;

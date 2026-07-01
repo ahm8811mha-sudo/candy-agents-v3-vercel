@@ -18,6 +18,7 @@ import {
   PackageSearch,
   BarChart3,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 
 type Dashboard = {
@@ -68,18 +69,34 @@ export default function CompanyOverview() {
 
   return (
     <main className="page-wrap">
-      {/* Hero */}
-      <header className="page-head">
-        <div>
-          <span className="eyebrow"><Building2 size={16} /> شركة النجمة الذهبية · نظام تشغيل الأعمال</span>
-          <h1 className="glow-title">حالة الشركة الآن</h1>
-          <p className="page-sub">
-            نظرة تنفيذية واحدة: القرارات المعلّقة، المالية، التداول، والمشاريع — ثم انتقل للتشغيل أو الاعتماد بنقرة.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {/* Scenic hero — atmospheric horizon */}
+      <header className="hero-scenic">
+        <span className="hero-pill">
+          <Sparkles size={14} /> النجمة الذهبية · نظام تشغيل الأعمال بالذكاء الاصطناعي
+        </span>
+        <h1 className="hero-title">
+          شركة كاملة تعمل بالذكاء،
+          <br />
+          والقرار الأخير <em>بيدك</em>
+        </h1>
+        <p className="hero-sub">
+          الوكلاء يحلّلون السوق، يديرون الأقسام، ويجهّزون الصفقات — وكل ما يتجاوز الصلاحيات
+          يصلك في مركز القرار لتعتمده أو ترفضه أو تحيله.
+        </p>
+        <div className="hero-actions">
           <Link className="primary-btn" href="/operations"><Send size={17} /> تشغيل الشركة</Link>
-          <Link className="secondary-btn" href="/inbox"><Inbox size={17} /> مركز القرار</Link>
+          <Link className="secondary-btn" href="/inbox">
+            <Inbox size={17} /> مركز القرار{pending > 0 ? ` (${pending})` : ""}
+          </Link>
+        </div>
+        <div className="hero-logos">
+          <span>8 أقسام تشغيلية</span>
+          <i />
+          <span>تداول بإشراف المدير المالي</span>
+          <i />
+          <span>{dash?.projects.length ?? 0} مشروع نشط</span>
+          <i />
+          <span>{pending} قرار بانتظارك</span>
         </div>
       </header>
 

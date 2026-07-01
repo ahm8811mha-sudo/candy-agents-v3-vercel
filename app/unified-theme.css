@@ -289,25 +289,144 @@
 
 @media (max-width: 980px) {
   .shell-menu-btn { display: grid; }
+  /* RTL drawer: anchored to the RIGHT edge, slides in from the right.
+     Physical properties on purpose — the app is always dir="rtl". */
   .shell-sidebar {
     position: fixed;
-    inset-inline-start: auto;
-    inset-inline-end: 0;
-    transform: translateX(-100%);
+    top: 0;
+    right: 0;
+    bottom: 0;
+    height: 100dvh;
+    width: min(300px, 84vw);
+    transform: translateX(100%);
     transition: transform var(--dur) var(--ease);
-    z-index: 90;
+    z-index: 120;
     background: var(--panel);
+    border-inline-end: none;
+    border-inline-start: 1px solid var(--line);
+    box-shadow: -24px 0 70px rgba(0, 0, 0, 0.5);
   }
-  [dir="rtl"] .shell-sidebar { transform: translateX(100%); }
-  .shell-sidebar.open { transform: translateX(0) !important; }
+  .shell-sidebar.open { transform: translateX(0); }
   .shell-backdrop.open {
     display: block;
     position: fixed;
     inset: 0;
-    z-index: 80;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(2px);
+    z-index: 110;
+    background: rgba(4, 8, 14, 0.55);
+    backdrop-filter: blur(3px);
   }
+}
+
+/* ── Scenic hero — atmospheric horizon (Giga/Basewell-inspired) ── */
+.hero-scenic {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: clamp(44px, 7vw, 88px) clamp(18px, 5vw, 56px) clamp(36px, 5vw, 64px);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  background:
+    radial-gradient(120% 85% at 50% 118%, color-mix(in srgb, var(--primary) 30%, transparent) 0%, transparent 62%),
+    radial-gradient(85% 55% at 50% 122%, color-mix(in srgb, var(--primary-2) 42%, transparent) 0%, transparent 58%),
+    linear-gradient(180deg, var(--field-2), var(--panel));
+}
+
+.hero-scenic > * { position: relative; z-index: 1; }
+
+/* horizon light line */
+.hero-scenic::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 24%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-sky) 60%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* rising-sun glow behind the horizon */
+.hero-scenic::after {
+  content: "";
+  position: absolute;
+  bottom: -42%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 72%;
+  aspect-ratio: 2 / 1;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--accent-sky) 22%, transparent), transparent 70%);
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
+  background: color-mix(in srgb, var(--field) 80%, transparent);
+  color: var(--accent-sky);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(1.9rem, 5.2vw, 3.4rem);
+  font-weight: 900;
+  line-height: 1.2;
+  color: var(--text-strong);
+  max-width: 24ch;
+}
+
+.hero-title em {
+  font-style: normal;
+  background: linear-gradient(120deg, var(--accent-sky), var(--green));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+  margin: 0;
+  color: var(--muted);
+  max-width: 58ch;
+  line-height: 1.9;
+  font-size: 0.95rem;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.hero-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.hero-logos i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.5;
 }
 
 /* ── Page scaffolding ── */
