@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import AppHeader from "@/components/AppHeader";
 import ThemeShell from "@/components/ThemeShell";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Candy Agents | AI Business Operating System",
@@ -15,8 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ar" dir="rtl">
       <body>
         <ThemeShell>
-          <AppHeader />
-          {children}
+          <AppShell>{children}</AppShell>
         </ThemeShell>
       </body>
     </html>
