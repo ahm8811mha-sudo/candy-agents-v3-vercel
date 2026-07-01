@@ -129,6 +129,8 @@
 .app-nav a.is-active { color: var(--action-text); background: var(--action-bg); }
 .app-nav a:not(.is-active):hover { color: var(--text); }
 
+.app-header__actions { display: flex; align-items: center; gap: 10px; }
+
 .app-header__status {
   display: inline-flex; align-items: center; gap: 7px;
   border: 1px solid var(--line);
@@ -136,6 +138,9 @@
   padding: 8px 13px;
   font-weight: 900; font-size: 0.76rem;
   background: var(--panel); color: var(--text);
+}
+@media (max-width: 920px) {
+  .app-header__status { display: none; }
 }
 .app-header__dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -156,4 +161,5 @@
 @media (max-width: 920px) {
   .app-header__brand small { display: none; }
   .app-nav a span.app-nav__label { display: none; }
+  .hide-mobile { display: none; }
 }

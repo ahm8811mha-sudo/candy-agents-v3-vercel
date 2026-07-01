@@ -3,10 +3,10 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-// /dashboard → ceo (فاتح Apple) · /office → office (دافئ) · الباقي → dark (الافتراضي)
+// /dashboard → ceo (فاتح Apple) · /enterprise-os → office (دافئ) · الباقي → dark
 function themeForPath(pathname: string): "dark" | "ceo" | "office" {
   if (pathname.startsWith("/dashboard")) return "ceo";
-  if (pathname.startsWith("/office")) return "office";
+  if (pathname.startsWith("/enterprise-os")) return "office";
   return "dark";
 }
 

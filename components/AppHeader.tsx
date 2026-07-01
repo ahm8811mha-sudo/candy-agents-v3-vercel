@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import NotificationCenter from "./NotificationCenter";
 
 type NavItem = { href: string; label: string };
 
-// عدّل هذه المسارات لتطابق routes مشروعك:
+// مسارات المشروع الفعلية:
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "المدير" },   // CEO Apple dashboard
-  { href: "/", label: "التشغيل" },            // Enterprise OS / StrategyRunner
-  { href: "/office", label: "المكتب" },       // Golden Star agents office
+  { href: "/dashboard", label: "المدير" },     // CEO Apple dashboard
+  { href: "/", label: "التشغيل" },              // Enterprise OS / StrategyRunner
+  { href: "/enterprise-os", label: "المكتب" },  // Golden Star agents office (warm theme)
 ];
 
 export default function AppHeader({ status = "جاهز" }: { status?: string }) {
@@ -40,10 +41,13 @@ export default function AppHeader({ status = "جاهز" }: { status?: string }) 
         ))}
       </nav>
 
-      <span className="app-header__status">
-        <span className="app-header__dot" />
-        {status}
-      </span>
+      <div className="app-header__actions">
+        <NotificationCenter />
+        <span className="app-header__status">
+          <span className="app-header__dot" />
+          {status}
+        </span>
+      </div>
     </header>
   );
 }
