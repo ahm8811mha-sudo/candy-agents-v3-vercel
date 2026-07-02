@@ -30,6 +30,7 @@ const PAGE_TITLES: Array<[string, string]> = [
   ["/inbox", "مركز القرار"],
   ["/ideas", "الأفكار"],
   ["/operations", "التشغيل"],
+  ["/office", "مكتب النجمة الذهبية"],
   ["/company", "الهيكل الإداري"],
   ["/dashboard", "لوحة CEO"],
   ["/enterprise-os", "Enterprise OS"],
@@ -95,6 +96,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     {
       title: "اللوحات",
       links: [
+        { href: "/office", label: "المكتب", icon: Building2 },
         { href: "/company", label: "الهيكل الإداري", icon: Users },
         { href: "/dashboard", label: "لوحة CEO", icon: ShieldCheck },
         { href: "/enterprise-os", label: "Enterprise OS", icon: Building2 },

@@ -510,6 +510,54 @@
   opacity: 0.5;
 }
 
+/* ── Golden Star office rooms ── */
+.room-avatar {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-gradient);
+  color: #fff;
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+.presence-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+  opacity: 0.5;
+}
+
+.presence-dot--working {
+  background: var(--green);
+  opacity: 1;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent);
+  animation: presencePulse 1.8s ease-out infinite;
+}
+
+.presence-dot--today {
+  background: var(--amber);
+  opacity: 1;
+}
+
+@keyframes presencePulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent); }
+  70% { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.room--working { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+.room--idle { opacity: 0.75; }
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot--working { animation: none; }
+}
+
 /* ── Page scaffolding ── */
 .page-wrap {
   width: min(1180px, calc(100% - 32px));
