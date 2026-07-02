@@ -18,6 +18,7 @@ import {
   Boxes,
   ShieldCheck,
   BarChart3,
+  ShoppingBag,
   Menu,
   X,
 } from "lucide-react";
@@ -32,6 +33,7 @@ const PAGE_TITLES: Array<[string, string]> = [
   ["/operations", "التشغيل"],
   ["/office", "مكتب النجمة الذهبية"],
   ["/company", "الهيكل الإداري"],
+  ["/sales", "نظام المبيعات"],
   ["/dashboard", "لوحة CEO"],
   ["/enterprise-os", "Enterprise OS"],
   ["/bi-center", "مركز الذكاء BI"],
@@ -107,6 +109,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       title: "الأقسام",
       links: [
         { href: "/departments/executive", label: "المكتب التنفيذي", icon: ShieldCheck },
+        { href: "/sales", label: "نظام المبيعات (المتجر)", icon: ShoppingBag },
         { href: "/departments/finance", label: "المالية", icon: Calculator },
         { href: "/departments/marketing", label: "التسويق", icon: Megaphone },
         { href: "/departments/sales", label: "المبيعات CRM", icon: Users },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listApprovals, decideApproval, approvalStats, type ApprovalStatus } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
+import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
     }
 
-    // On approval of a trade, route it to the broker (Alpaca paper by default).
+    // On approval, run the item's governed side-effect: place the trade, book
+    // the sales income, or apply the store change.
     let execution = null;
-    if (decision === "APPROVED" && result.type === "TRADE") {
-      execution = await executeApprovedTrade(result.metadata || {});
+    if (decision === "APPROVED") {
+      if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
+      else if (result.type === "INCOME") execution = recognizeIncome(result.metadata || {});
+      else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
     }
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
