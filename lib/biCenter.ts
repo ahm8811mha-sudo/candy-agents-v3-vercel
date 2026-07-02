@@ -5,6 +5,7 @@ import { getExecutiveOffice } from "./executiveOffice";
 import { getGovernmentRelationsOS } from "./governmentRelations";
 import { getMarketingOS } from "./marketingOS";
 import { getProcurementInventoryOS } from "./procurementInventory";
+import { getInbox } from "./inbox";
 
 function number(value: unknown) {
   const parsed = Number(value);
@@ -12,7 +13,7 @@ function number(value: unknown) {
 }
 
 export async function getUnifiedBICenter() {
-  const [finance, marketing, government, executive, crm, procurement, alerts] = await Promise.all([
+  const [finance, marketing, government, executive, crm, procurement, alerts, inbox] = await Promise.all([
     getAccountingConsole(),
     getMarketingOS(),
     getGovernmentRelationsOS(),
@@ -20,6 +21,7 @@ export async function getUnifiedBICenter() {
     getCrmSalesOS(),
     getProcurementInventoryOS(),
     getOperationalAlerts(),
+    getInbox().catch(() => ({ items: [], pending: 0 })),
   ]);
 
   const income = finance.statements.incomeStatement;
@@ -41,16 +43,22 @@ export async function getUnifiedBICenter() {
       marginValue: Math.max(0, number(item.target_price) - number(item.unit_cost)) * number(item.on_hand),
     }))
     .sort((a: any, b: any) => b.marginValue - a.marginValue)[0];
-  const decisionToday =
+  // The day's decision must be ACTIONABLE: text + a destination the owner can
+  // click. Priority: critical alerts → pending sign-offs (/inbox) → no books
+  // yet → losing campaigns → healthy margin (grow via ideas) → fix margin.
+  const hasFinancialData = income.revenue > 0 || income.expenses > 0;
+  const decision =
     alerts.metrics.critical > 0
-      ? "ابدأ بإغلاق التنبيهات الحرجة قبل أي توسع."
-      : executive.operatingBrief.waitingApprovals > 0
-        ? "راجع الاعتمادات المعلقة في مكتب CEO."
-        : losingCampaigns.length > 0
-          ? "أوقف أو عدل الحملات الخاسرة قبل زيادة الميزانية."
-          : profitMargin > 0.2
-            ? "الشركة قادرة على تجربة توسع صغير منضبط."
-            : "ركز على تحسين الهامش والتحصيل قبل التوسع.";
+      ? { text: "ابدأ بإغلاق التنبيهات الحرجة قبل أي توسع.", actionLabel: "افتح التنبيهات", href: "#bi-alerts" }
+      : inbox.pending > 0
+        ? { text: `لديك ${inbox.pending} قراراً بانتظار اعتمادك في مركز القرار.`, actionLabel: "افتح مركز القرار", href: "/inbox" }
+        : !hasFinancialData
+          ? { text: "لا توجد قيود مالية مسجّلة بعد — ابدأ بتسجيل عملياتك لتقرأ الشركة أرقامها الحقيقية.", actionLabel: "افتح المالية", href: "/departments/finance" }
+          : losingCampaigns.length > 0
+            ? { text: "أوقف أو عدّل الحملات الخاسرة قبل زيادة الميزانية.", actionLabel: "افتح التسويق", href: "/departments/marketing" }
+            : profitMargin > 0.2
+              ? { text: "الشركة قادرة على تجربة توسع صغير منضبط — راجع فكرة الفريق اليوم أو قدّم فكرتك.", actionLabel: "افتح الأفكار", href: "/ideas" }
+              : { text: "ركّز على تحسين الهامش والتحصيل قبل التوسع.", actionLabel: "افتح المالية", href: "/departments/finance" };
 
   return {
     scorecard: {
@@ -62,13 +70,16 @@ export async function getUnifiedBICenter() {
       pipeline: crm.metrics.openPipeline,
       inventoryValue: procurement.metrics.inventoryValue,
       alertCount: alerts.metrics.open,
+      pendingDecisions: inbox.pending,
+      hasFinancialData,
     },
     answers: {
       isProfitable: income.netIncome > 0,
       bestProductOrOpportunity: bestCampaign?.name || bestInventoryItem?.name || "لا توجد بيانات كافية بعد.",
       expiringDocuments: expiringDocs.slice(0, 8),
       losingCampaigns,
-      decisionToday,
+      decisionToday: decision.text,
+      decisionAction: { label: decision.actionLabel, href: decision.href },
     },
     departments: {
       finance: {
