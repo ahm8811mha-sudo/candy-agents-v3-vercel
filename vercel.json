@@ -17,6 +17,10 @@
     {
       "path": "/api/reports/cron",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/company/learning/cron",
+      "schedule": "0 7 * * 0"
     }
   ]
 }

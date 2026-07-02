@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Loader2, Activity, RefreshCw, ArrowLeft } from "lucide-react";
+import { Building2, Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target } from "lucide-react";
 
 type Presence = "WORKING" | "TODAY" | "IDLE";
 
@@ -27,6 +27,14 @@ type PulseEvent = {
   kindLabel: string;
   title: string;
   createdAt: string;
+};
+
+type Learning = {
+  decisionsAnalyzed: number;
+  approvalRate: number;
+  confidenceThreshold: number;
+  agentAccuracy: Array<{ agentId: string; agentName: string; studied: number; aligned: number; accuracy: number }>;
+  recommendation: string;
 };
 
 const kindPill: Record<string, string> = {
@@ -78,17 +86,21 @@ export default function GoldenStarOffice() {
   const [agents, setAgents] = useState<AgentRoom[]>([]);
   const [events, setEvents] = useState<PulseEvent[]>([]);
   const [working, setWorking] = useState(0);
+  const [learning, setLearning] = useState<Learning | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/company/pulse", { cache: "no-store" });
-      const json = await res.json();
-      if (json.ok) {
-        setAgents(json.agents || []);
-        setEvents(json.events || []);
-        setWorking(json.workingCount || 0);
+      const [pulseRes, learnRes] = await Promise.all([
+        fetch("/api/company/pulse", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch("/api/company/learning", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+      ]);
+      if (pulseRes?.ok) {
+        setAgents(pulseRes.agents || []);
+        setEvents(pulseRes.events || []);
+        setWorking(pulseRes.workingCount || 0);
       }
+      if (learnRes?.ok) setLearning(learnRes);
     } catch {
       // silent
     } finally {
@@ -146,6 +158,42 @@ export default function GoldenStarOffice() {
               {staff.map((a) => <Room key={a.id} agent={a} />)}
             </div>
           </section>
+
+          {/* Self-improvement — the company learning from its own record */}
+          {learning && (
+            <section className="bento-card bento-full bento-card--glow" style={{ gap: 12 }}>
+              <span className="bento-kicker"><Brain size={15} /> التعلّم الذاتي — الشركة تتعلّم من قراراتها</span>
+              <div className="report-kpi-grid">
+                <div className="kpi-card-inner">
+                  <small>قرارات مكتملة حُلّلت</small>
+                  <strong>{learning.decisionsAnalyzed}</strong>
+                </div>
+                <div className="kpi-card-inner">
+                  <small>نسبة الاعتماد</small>
+                  <strong>{Math.round(learning.approvalRate * 100)}%</strong>
+                </div>
+                <div className="kpi-card-inner">
+                  <small><Target size={12} style={{ verticalAlign: "middle" }} /> حد الثقة المتكيّف</small>
+                  <strong>{Math.round(learning.confidenceThreshold * 100)}%</strong>
+                </div>
+              </div>
+              <div className="statement-row" style={{ background: "var(--accent-sky-soft)" }}>
+                <span>{learning.recommendation}</span>
+              </div>
+              {learning.agentAccuracy.length > 0 && (
+                <div className="bento-list">
+                  {learning.agentAccuracy.map((a) => (
+                    <div key={a.agentId} className="bento-list__row">
+                      <span><b style={{ color: "var(--text-strong)" }}>{a.agentName}</b> · توافق مع قرارك</span>
+                      <b style={{ color: a.accuracy >= 0.6 ? "var(--green)" : a.accuracy >= 0.4 ? "var(--amber)" : "var(--red)", fontVariantNumeric: "tabular-nums" }}>
+                        {Math.round(a.accuracy * 100)}% ({a.aligned}/{a.studied})
+                      </b>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="bento-card bento-full" style={{ gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
