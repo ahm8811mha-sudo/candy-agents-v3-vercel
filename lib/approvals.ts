@@ -8,7 +8,7 @@
  * (noted as a follow-up); the actionable approve/reject flow works as-is.
  */
 
-export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "GENERAL";
+export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "GENERAL";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export type ApprovalItem = {

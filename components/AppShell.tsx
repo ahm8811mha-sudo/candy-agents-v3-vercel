@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Inbox,
+  Lightbulb,
   Send,
   Building2,
   Calculator,
@@ -27,6 +28,7 @@ type NavGroup = { title: string; links: NavLink[] };
 
 const PAGE_TITLES: Array<[string, string]> = [
   ["/inbox", "مركز القرار"],
+  ["/ideas", "الأفكار"],
   ["/operations", "التشغيل"],
   ["/company", "الهيكل الإداري"],
   ["/dashboard", "لوحة CEO"],
@@ -86,6 +88,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       links: [
         { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
         { href: "/inbox", label: "مركز القرار", icon: Inbox, badge: pending },
+        { href: "/ideas", label: "الأفكار", icon: Lightbulb },
         { href: "/operations", label: "التشغيل", icon: Send },
       ],
     },

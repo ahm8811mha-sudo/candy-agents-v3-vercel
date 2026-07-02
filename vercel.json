@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "crons": [
     {
+      "path": "/api/company/ideas/cron",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/opportunity-radar",
       "schedule": "0 5 * * *"
     },
