@@ -25,9 +25,18 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "propose-change") {
-      const kind = ["PRICE", "STATUS", "DISCOUNT"].includes(body.kind) ? body.kind : null;
+      const kind = ["PRICE", "STATUS", "DISCOUNT", "ADD_PRODUCT", "REMOVE_PRODUCT"].includes(body.kind) ? body.kind : null;
       if (!kind) return NextResponse.json({ ok: false, error: "نوع التعديل غير صالح" }, { status: 400 });
-      return NextResponse.json(proposeSalesChange({ kind, target: String(body.target || ""), detail: String(body.detail || "") }));
+      return NextResponse.json(
+        proposeSalesChange({
+          kind,
+          target: String(body.target || ""),
+          detail: String(body.detail || ""),
+          price: body.price !== undefined ? Number(body.price) : undefined,
+          productId: body.productId ? String(body.productId) : undefined,
+          newStatus: body.newStatus ? String(body.newStatus) : undefined,
+        })
+      );
     }
 
     return NextResponse.json({ ok: false, error: "إجراء غير معروف" }, { status: 400 });

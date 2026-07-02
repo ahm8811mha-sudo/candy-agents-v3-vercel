@@ -75,4 +75,29 @@ describe("sales integration (Shopify under company governance)", () => {
     const res = proposeSalesChange({ kind: "PRICE", target: "", detail: "" });
     expect(res.ok).toBe(false);
   });
+
+  it("proposes adding a product (requires a valid price)", () => {
+    expect(proposeSalesChange({ kind: "ADD_PRODUCT", target: "منتج جديد", detail: "إضافة", price: 0 }).ok).toBe(false);
+    const ok = proposeSalesChange({ kind: "ADD_PRODUCT", target: "منتج جديد", detail: "إضافة", price: 150 });
+    expect(ok.ok).toBe(true);
+    const approval = listApprovals().find((a) => a.type === "SALES_CHANGE")!;
+    expect(approval.metadata?.changeKind).toBe("ADD_PRODUCT");
+    expect(approval.metadata?.price).toBe(150);
+  });
+
+  it("proposes removing a product (requires a product id)", () => {
+    expect(proposeSalesChange({ kind: "REMOVE_PRODUCT", target: "منتج", detail: "إزالة" }).ok).toBe(false);
+    const ok = proposeSalesChange({ kind: "REMOVE_PRODUCT", target: "منتج", detail: "إزالة", productId: "p-1001" });
+    expect(ok.ok).toBe(true);
+    const approval = listApprovals().find((a) => a.metadata?.changeKind === "REMOVE_PRODUCT")!;
+    expect(approval.metadata?.productId).toBe("p-1001");
+  });
+
+  it("add/remove approvals simulate safely when write is disabled", async () => {
+    proposeSalesChange({ kind: "ADD_PRODUCT", target: "منتج", detail: "إضافة", price: 99 });
+    const approval = listApprovals().find((a) => a.metadata?.changeKind === "ADD_PRODUCT")!;
+    const exec = await applySalesChange(approval.metadata || {});
+    expect(exec.simulated).toBe(true);
+    expect(exec.reason).toContain("محاكاة");
+  });
 });

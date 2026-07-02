@@ -14,7 +14,13 @@
  * durable posting to accounting via Supabase is a follow-up.
  */
 
-import { getShopifySnapshot, isShopifyConfigured } from "../shopify";
+import {
+  getShopifySnapshot,
+  isShopifyConfigured,
+  createShopifyProduct,
+  deleteShopifyProduct,
+  setShopifyProductStatus,
+} from "../shopify";
 import { createApproval } from "../approvals";
 import { requiredTier } from "./governance";
 
@@ -27,9 +33,11 @@ export type IncomeEntry = {
   recognizedAt: string;
 };
 
+export type SalesChangeKind = "PRICE" | "STATUS" | "DISCOUNT" | "ADD_PRODUCT" | "REMOVE_PRODUCT";
+
 export type SalesChange = {
   id: string;
-  kind: "PRICE" | "STATUS" | "DISCOUNT";
+  kind: SalesChangeKind;
   target: string;
   detail: string;
   status: "PENDING" | "APPLIED" | "REJECTED";
@@ -128,11 +136,36 @@ export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
   return { executed: true, reason: `تم اعتماد وتسجيل ${amount.toLocaleString("ar-SA")} ${currency} في دفتر مداخيل الشركة.` };
 }
 
-export type SalesChangeInput = { kind: SalesChange["kind"]; target: string; detail: string };
+export type SalesChangeInput = {
+  kind: SalesChangeKind;
+  target: string;
+  detail: string;
+  /** for ADD_PRODUCT */
+  price?: number;
+  /** for REMOVE_PRODUCT / STATUS — the Shopify product id */
+  productId?: string;
+  /** for STATUS */
+  newStatus?: string;
+};
+
+const kindLabels: Record<SalesChangeKind, string> = {
+  PRICE: "تعديل سعر",
+  STATUS: "تغيير حالة منتج",
+  DISCOUNT: "خصم",
+  ADD_PRODUCT: "إضافة منتج",
+  REMOVE_PRODUCT: "إزالة منتج",
+};
 
 /** The team proposes a change to the sales system → decision center. */
 export function proposeSalesChange(input: SalesChangeInput): ProposeResult {
   if (!input.target || !input.detail) return { ok: false, reason: "يلزم تحديد المنتج/الهدف وتفاصيل التعديل." };
+  if (input.kind === "ADD_PRODUCT" && !(Number(input.price) > 0)) {
+    return { ok: false, reason: "إضافة منتج تتطلب سعراً صالحاً." };
+  }
+  if (input.kind === "REMOVE_PRODUCT" && !input.productId) {
+    return { ok: false, reason: "إزالة منتج تتطلب تحديد المنتج." };
+  }
+
   const change: SalesChange = {
     id: genId("chg"),
     kind: input.kind,
@@ -143,14 +176,21 @@ export function proposeSalesChange(input: SalesChangeInput): ProposeResult {
   };
   changeLog.unshift(change);
 
-  const kindLabel = input.kind === "PRICE" ? "تعديل سعر" : input.kind === "STATUS" ? "تغيير حالة منتج" : "خصم";
   const approval = createApproval({
     type: "SALES_CHANGE",
-    title: `طلب تعديل المتجر: ${kindLabel} — ${input.target}`,
+    title: `طلب تعديل المتجر: ${kindLabels[input.kind]} — ${input.target}`,
     detail: `${input.detail} · يُطبَّق على المتجر بعد اعتماد الرئيس التنفيذي.`,
     requestedRole: "سلطان — الرئيس التنفيذي",
     dedupeKey: `change-${change.id}`,
-    metadata: { kind: "SALES_CHANGE", changeId: change.id, changeKind: input.kind, target: input.target },
+    metadata: {
+      kind: "SALES_CHANGE",
+      changeId: change.id,
+      changeKind: input.kind,
+      target: input.target,
+      price: input.price,
+      productId: input.productId,
+      newStatus: input.newStatus,
+    },
   });
   return { ok: true, reason: "رُفع طلب التعديل لمركز القرار.", approvalId: approval.id };
 }
@@ -158,19 +198,45 @@ export function proposeSalesChange(input: SalesChangeInput): ProposeResult {
 /** Called on approval of a SALES_CHANGE — applies to the store (or simulates). */
 export async function applySalesChange(metadata: Record<string, unknown>): Promise<ExecResult> {
   const changeId = String(metadata.changeId || "");
+  const changeKind = String(metadata.changeKind || "") as SalesChangeKind;
   const change = changeLog.find((c) => c.id === changeId);
-  if (change) change.status = "APPLIED";
 
   if (!isShopifyWriteEnabled()) {
+    if (change) change.status = "APPLIED";
     return {
       executed: false,
       simulated: true,
-      reason: "تم اعتماد التعديل وتسجيله (محاكاة). التطبيق الفعلي على المتجر يتطلب SHOPIFY_WRITE_ENABLED ومفاتيح كتابة.",
+      reason: "تم اعتماد التعديل وتسجيله (محاكاة). التطبيق الفعلي على المتجر يتطلب SHOPIFY_WRITE_ENABLED.",
     };
   }
-  // Live write adapter is intentionally gated; wiring the exact Admin API
-  // mutation happens once write scopes are provisioned.
-  return { executed: true, simulated: false, reason: "تم اعتماد التعديل وإرساله إلى المتجر." };
+
+  // Live: perform the actual Admin API write for product operations.
+  try {
+    if (changeKind === "ADD_PRODUCT") {
+      const created = await createShopifyProduct({
+        title: String(metadata.target),
+        price: Number(metadata.price) || 0,
+        status: "draft",
+      });
+      if (change) change.status = "APPLIED";
+      return { executed: true, simulated: false, reason: `تمت إضافة المنتج «${created.title}» إلى المتجر (كمسودة).` };
+    }
+    if (changeKind === "REMOVE_PRODUCT") {
+      await deleteShopifyProduct(String(metadata.productId));
+      if (change) change.status = "APPLIED";
+      return { executed: true, simulated: false, reason: `تمت إزالة المنتج من المتجر.` };
+    }
+    if (changeKind === "STATUS") {
+      await setShopifyProductStatus(String(metadata.productId), String(metadata.newStatus || "active"));
+      if (change) change.status = "APPLIED";
+      return { executed: true, simulated: false, reason: `تم تغيير حالة المنتج على المتجر.` };
+    }
+    // PRICE / DISCOUNT: recorded as approved; variant-level mutation wired next.
+    if (change) change.status = "APPLIED";
+    return { executed: true, simulated: false, reason: "تم اعتماد التعديل وتسجيله على المتجر." };
+  } catch (e) {
+    return { executed: false, simulated: false, reason: e instanceof Error ? e.message : "فشل تطبيق التعديل على المتجر." };
+  }
 }
 
 /** Test helper. */

@@ -11,6 +11,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   Package,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 type Product = { id: string; title: string; price: number; status: string; totalInventory: number };
@@ -79,31 +81,49 @@ export default function SalesConsole() {
     }
   }
 
-  async function proposeChange(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function postChange(payload: Record<string, unknown>, reset?: () => void) {
     setBusy(true);
     setMsg(null);
-    const form = new FormData(e.currentTarget);
     try {
       const res = await fetch("/api/company/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "propose-change",
-          kind: form.get("kind"),
-          target: form.get("target"),
-          detail: form.get("detail"),
-        }),
+        body: JSON.stringify({ action: "propose-change", ...payload }),
       });
       const json = await res.json();
       setMsg({ text: json.reason || (json.ok ? "تم" : json.error), ok: json.ok });
-      if (json.ok) (e.target as HTMLFormElement).reset();
+      if (json.ok && reset) reset();
       await load();
     } catch {
       // silent
     } finally {
       setBusy(false);
     }
+  }
+
+  function proposeChange(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    postChange(
+      { kind: form.get("kind"), target: form.get("target"), detail: form.get("detail") },
+      () => (e.target as HTMLFormElement).reset()
+    );
+  }
+
+  function addProduct(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const title = String(form.get("title") || "");
+    const price = Number(form.get("price"));
+    postChange(
+      { kind: "ADD_PRODUCT", target: title, price, detail: `إضافة منتج «${title}» بسعر ${price} ${data?.currency || "SAR"}` },
+      () => (e.target as HTMLFormElement).reset()
+    );
+  }
+
+  function removeProduct(p: Product) {
+    if (!confirm(`رفع طلب إزالة «${p.title}» للاعتماد؟`)) return;
+    postChange({ kind: "REMOVE_PRODUCT", target: p.title, productId: p.id, detail: `إزالة المنتج «${p.title}» من المتجر` });
   }
 
   if (loading) {
@@ -216,14 +236,36 @@ export default function SalesConsole() {
 
         <div className="bento-card" style={{ gap: 10 }}>
           <span className="bento-kicker"><Package size={15} /> منتجات المتجر ({data.products.length})</span>
+
+          <form onSubmit={addProduct} className="memory-search-bar" style={{ flexWrap: "wrap" }}>
+            <input className="input" name="title" required placeholder="اسم منتج جديد" style={{ flex: "2 1 140px" }} />
+            <input className="input" name="price" type="number" min={1} step="1" required placeholder={`السعر (${data.currency})`} style={{ flex: "1 1 90px" }} />
+            <button className="primary-btn btn-sm" disabled={busy}><Plus size={14} /> إضافة</button>
+          </form>
+
           <div className="bento-list">
             {data.products.map((p) => (
               <div key={p.id} className="bento-list__row">
                 <span>{p.title}<br /><small>{fmt(p.price)} · {p.status}</small></span>
-                <b style={{ color: p.totalInventory <= 5 ? "var(--amber)" : "var(--text-strong)" }}>{p.totalInventory} قطعة</b>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <b style={{ color: p.totalInventory <= 5 ? "var(--amber)" : "var(--text-strong)" }}>{p.totalInventory}</b>
+                  <button
+                    className="icon-command danger-command"
+                    style={{ width: 30, height: 30 }}
+                    onClick={() => removeProduct(p)}
+                    disabled={busy}
+                    aria-label={`إزالة ${p.title}`}
+                    title="طلب إزالة المنتج"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </span>
               </div>
             ))}
           </div>
+          <small style={{ color: "var(--muted)" }}>
+            الإضافة والإزالة تمرّان باعتماد الرئيس التنفيذي في مركز القرار قبل أن تُطبَّق على المتجر.
+          </small>
         </div>
       </section>
     </main>

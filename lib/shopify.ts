@@ -83,6 +83,61 @@ async function shopifyFetch<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Write access requires the token AND an explicit opt-in flag. */
+export function isShopifyWriteConfigured(): boolean {
+  return isShopifyConfigured() && process.env.SHOPIFY_WRITE_ENABLED === "true";
+}
+
+async function shopifyWrite<T>(path: string, method: "POST" | "PUT" | "DELETE", body?: unknown): Promise<T> {
+  const domain = storeDomain();
+  const token = accessToken();
+  if (!domain || !token) throw new Error("Shopify is not configured.");
+
+  const base = domain.includes(".") ? domain : `${domain}.myshopify.com`;
+  const res = await fetch(`https://${base}/admin/api/${API_VERSION}/${path}`, {
+    method,
+    headers: {
+      "X-Shopify-Access-Token": token,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Shopify write ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return (res.status === 200 || res.status === 201 ? await res.json() : ({} as T)) as T;
+}
+
+export type CreateProductInput = { title: string; price: number; status?: "active" | "draft"; vendor?: string };
+
+/** Create a product on the store (Admin API). */
+export async function createShopifyProduct(input: CreateProductInput): Promise<{ id: string; title: string }> {
+  const res = await shopifyWrite<{ product: { id: number; title: string } }>("products.json", "POST", {
+    product: {
+      title: input.title,
+      status: input.status || "draft",
+      vendor: input.vendor || "Golden Star",
+      variants: [{ price: String(input.price) }],
+    },
+  });
+  return { id: String(res.product.id), title: res.product.title };
+}
+
+/** Permanently remove a product from the store (Admin API). */
+export async function deleteShopifyProduct(productId: string): Promise<{ deleted: boolean }> {
+  await shopifyWrite(`products/${productId}.json`, "DELETE");
+  return { deleted: true };
+}
+
+/** Change a product's status (active / draft / archived). */
+export async function setShopifyProductStatus(productId: string, status: string): Promise<{ id: string; status: string }> {
+  await shopifyWrite(`products/${productId}.json`, "PUT", { product: { id: Number(productId), status } });
+  return { id: productId, status };
+}
+
 function mockSnapshot(): ShopifySnapshot {
   const products: ShopifyProduct[] = [
     { id: "p-1001", title: "حقيبة جلد فاخرة", status: "active", totalInventory: 8, price: 320, vendor: "Candy Leather" },
