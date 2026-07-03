@@ -1,18 +1,55 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { ArrowRight, BarChart3, Building2, Loader2, RefreshCw, ShieldAlert, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import {
+  BarChart3,
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+  TrendingUp,
+  Wallet,
+  Boxes,
+  Users,
+  Inbox,
+  FileWarning,
+  Megaphone,
+  ArrowLeft,
+  Sparkles,
+} from "lucide-react";
 
 type BIData = {
-  scorecard?: { revenue: number; expenses: number; netIncome: number; profitMargin: number; cash: number; pipeline: number; inventoryValue: number; alertCount: number };
-  answers?: { isProfitable: boolean; bestProductOrOpportunity: string; expiringDocuments: any[]; losingCampaigns: any[]; decisionToday: string };
-  departments?: Record<string, any>;
+  scorecard?: {
+    revenue: number;
+    expenses: number;
+    netIncome: number;
+    profitMargin: number;
+    cash: number;
+    pipeline: number;
+    inventoryValue: number;
+    alertCount: number;
+    pendingDecisions: number;
+    hasFinancialData: boolean;
+  };
+  answers?: {
+    isProfitable: boolean;
+    bestProductOrOpportunity: string;
+    expiringDocuments: Array<{ id: string; title: string; issuer?: string; status: string }>;
+    losingCampaigns: Array<{ id: string; name: string; status: string }>;
+    decisionToday: string;
+    decisionAction?: { label: string; href: string };
+  };
   alerts?: Array<{ id: string; title: string; department: string; severity: string; message: string; action_url?: string }>;
 };
 
 const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+
+const severityPill: Record<string, string> = {
+  CRITICAL: "high",
+  HIGH: "high",
+  MEDIUM: "medium",
+  LOW: "done",
+};
 
 export default function UnifiedBIConsole() {
   const [data, setData] = useState<BIData>({});
@@ -22,15 +59,15 @@ export default function UnifiedBIConsole() {
 
   async function load(method: "GET" | "POST" = "GET") {
     setWorking(method === "POST");
-    setLoading(method === "GET");
+    if (method === "GET") setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/bi-center", { method, cache: "no-store" });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل BI.");
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل بيانات الشركة.");
       setData(json);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تحميل BI.");
+      setError(err instanceof Error ? err.message : "تعذر تحميل بيانات الشركة.");
     } finally {
       setLoading(false);
       setWorking(false);
@@ -43,108 +80,178 @@ export default function UnifiedBIConsole() {
 
   const score = data.scorecard;
   const answers = data.answers;
+  const hasData = Boolean(score?.hasFinancialData);
+
+  /** Honest money display: "—" until real books exist. */
+  const money = (v: number | undefined) => (hasData ? currency.format(v || 0) : "—");
 
   return (
-    <main className="company-app ops-console">
-      <section className="department-hero department-hero-live">
+    <main className="page-wrap">
+      <header className="page-head">
         <div>
-          <Link className="back-link" href="/"><ArrowRight size={16} /> العودة للشركة</Link>
-          <span className="eyebrow"><BarChart3 size={16} /> ذكاء الأعمال الموحد</span>
-          <h1>لوحة قرار الشركة</h1>
-          <p>صفحة واحدة تقرأ المالية، التسويق، CRM، المخزون، الوثائق، والتنبيهات لتقول لك ما القرار المطلوب اليوم.</p>
-          <div className="department-hero-actions">
-            <span>القرار: {answers?.decisionToday || "جار التحميل"}</span>
-          </div>
+          <span className="eyebrow"><BarChart3 size={16} /> ذكاء الأعمال الموحّد</span>
+          <h1 className="glow-title">لوحة قرار الشركة</h1>
+          <p className="page-sub">
+            صفحة واحدة تقرأ المالية، التسويق، المبيعات، المخزون، الوثائق، والتنبيهات — وتحوّلها إلى قرارٍ قابل للتنفيذ.
+          </p>
         </div>
-        <div className="department-badge"><strong>BI Center</strong><small>{answers?.isProfitable ? "ربحية" : "تحتاج تحسين"}</small></div>
-      </section>
+        {score && (
+          <span className={`status-pill ${!hasData ? "" : answers?.isProfitable ? "done" : "running"}`}>
+            {!hasData ? "لا بيانات مالية بعد" : answers?.isProfitable ? "الشركة رابحة" : "بحاجة لتحسين الهامش"}
+          </span>
+        )}
+      </header>
 
-      <section className="enterprise-actions">
-        <button className="primary-btn" onClick={() => load("POST")} disabled={working}>
-          {working ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />} تحديث BI وتشغيل التنبيهات
-        </button>
-        {error && <p className="notice error">{error}</p>}
-      </section>
+      {error && <p className="notice error">{error}</p>}
 
-      <section className="ops-metrics">
-        <Metric label="الإيرادات" value={currency.format(score?.revenue || 0)} icon="money" />
-        <Metric label="المصروفات" value={currency.format(score?.expenses || 0)} icon="money" />
-        <Metric label="صافي الربح" value={currency.format(score?.netIncome || 0)} icon="money" />
-        <Metric label="الهامش" value={`${Math.round((score?.profitMargin || 0) * 100)}%`} icon="trend" />
-        <Metric label="Pipeline" value={currency.format(score?.pipeline || 0)} icon="trend" />
-        <Metric label="المخزون" value={currency.format(score?.inventoryValue || 0)} icon="stock" />
-        <Metric label="تنبيهات مفتوحة" value={score?.alertCount || 0} icon="alert" />
-      </section>
+      {loading && (
+        <div className="bento-card bento-full" style={{ placeItems: "center", padding: 30 }}>
+          <Loader2 className="spin" size={24} style={{ color: "var(--muted)" }} />
+        </div>
+      )}
 
-      <section className="ops-card executive-brief">
-        <span className="eyebrow"><TrendingUp size={16} /> القرار المطلوب اليوم</span>
-        <h2>{answers?.decisionToday}</h2>
-        <p>أفضل منتج أو فرصة الآن: {answers?.bestProductOrOpportunity}</p>
-      </section>
+      {/* ── The decision of the day — the hero, with a real action ── */}
+      {!loading && answers && (
+        <section className="bento-card bento-full bento-card--glow" style={{ gap: 12 }}>
+          <span className="bento-kicker"><Sparkles size={15} /> القرار المطلوب اليوم</span>
+          <strong style={{ fontSize: "clamp(1.15rem, 2.6vw, 1.6rem)", lineHeight: 1.6, color: "var(--text-strong)" }}>
+            {answers.decisionToday}
+          </strong>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {answers.decisionAction && (
+              <Link className="primary-btn" href={answers.decisionAction.href}>
+                {answers.decisionAction.label} <ArrowLeft size={15} />
+              </Link>
+            )}
+            <button className="secondary-btn" onClick={() => load("POST")} disabled={working}>
+              {working ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+              تحديث وفحص التنبيهات
+            </button>
+          </div>
+          <span className="bento-foot">أفضل فرصة الآن: {answers.bestProductOrOpportunity}</span>
+        </section>
+      )}
 
-      <section className="ops-board">
-        <Panel title="وثائق قريبة من الانتهاء">
-          {(answers?.expiringDocuments || []).slice(0, 8).map((doc: any) => (
-            <Statement key={doc.id} label={`${doc.title} - ${doc.issuer || "جهة غير محددة"}`} value={doc.status} />
-          ))}
-        </Panel>
-        <Panel title="حملات خاسرة">
-          {(answers?.losingCampaigns || []).slice(0, 8).map((campaign: any) => (
-            <Statement key={campaign.id} label={campaign.name} value={campaign.status} />
-          ))}
-        </Panel>
-        <Panel title="التنبيهات">
-          {(data.alerts || []).slice(0, 10).map((alert) => (
-            <Statement key={alert.id} label={`${alert.department}: ${alert.title}`} value={alert.severity} />
-          ))}
-        </Panel>
-      </section>
+      {/* ── Scorecard — every number opens its department ── */}
+      {!loading && score && (
+        <section className="bento-grid">
+          <Link href="/departments/finance" className={`bento-card ${hasData && score.revenue > 0 ? "bento-card--green" : ""}`}>
+            <span className="bento-kicker"><Wallet size={14} /> الإيرادات</span>
+            <span className="bento-value" style={{ color: hasData ? "var(--green)" : "var(--muted)" }}>{money(score.revenue)}</span>
+            <span className="bento-label">{hasData ? "إجمالي الإيرادات المسجّلة" : "لا قيود مسجّلة بعد"}</span>
+          </Link>
 
-      <section className="ops-board two">
-        {Object.entries(data.departments || {}).map(([name, value]) => (
-          <Panel title={sectionTitle(name)} key={name}>
-            {Object.entries(value || {}).slice(0, 8).map(([key, val]) => (
-              <Statement key={key} label={key} value={formatValue(val)} />
+          <Link href="/departments/finance" className="bento-card">
+            <span className="bento-kicker"><Wallet size={14} /> المصروفات</span>
+            <span className="bento-value" style={{ color: hasData ? "var(--text-strong)" : "var(--muted)" }}>{money(score.expenses)}</span>
+            <span className="bento-label">{hasData ? "إجمالي المصروفات" : "لا قيود مسجّلة بعد"}</span>
+          </Link>
+
+          <Link href="/departments/finance" className={`bento-card ${!hasData ? "" : score.netIncome >= 0 ? "bento-card--green" : "bento-card--red"}`}>
+            <span className="bento-kicker"><TrendingUp size={14} /> صافي الربح</span>
+            <span className="bento-value" style={{ color: !hasData ? "var(--muted)" : score.netIncome >= 0 ? "var(--green)" : "var(--red)" }}>
+              {money(score.netIncome)}
+            </span>
+            <span className="bento-label">{hasData ? `الهامش ${Math.round((score.profitMargin || 0) * 100)}%` : "بانتظار أول قيد"}</span>
+          </Link>
+
+          <Link href="/inbox" className={`bento-card ${score.pendingDecisions > 0 ? "bento-card--amber" : ""}`}>
+            <span className="bento-kicker"><Inbox size={14} /> قرارات معلّقة</span>
+            <span className="bento-value">{score.pendingDecisions}</span>
+            <span className="bento-label">{score.pendingDecisions > 0 ? "بانتظار اعتمادك في مركز القرار" : "لا قرارات معلّقة"}</span>
+          </Link>
+
+          <Link href="/departments/sales" className="bento-card">
+            <span className="bento-kicker"><Users size={14} /> مبيعات محتملة</span>
+            <span className="bento-value">{currency.format(score.pipeline || 0)}</span>
+            <span className="bento-label">قيمة الفرص المفتوحة في CRM</span>
+          </Link>
+
+          <Link href="/departments/procurement" className="bento-card">
+            <span className="bento-kicker"><Boxes size={14} /> قيمة المخزون</span>
+            <span className="bento-value">{currency.format(score.inventoryValue || 0)}</span>
+            <span className="bento-label">تكلفة المخزون الحالي</span>
+          </Link>
+
+          <a href="#bi-alerts" className={`bento-card ${score.alertCount > 0 ? "bento-card--amber" : ""}`}>
+            <span className="bento-kicker"><ShieldAlert size={14} /> تنبيهات مفتوحة</span>
+            <span className="bento-value">{score.alertCount}</span>
+            <span className="bento-label">{score.alertCount > 0 ? "انزل للقائمة وعالجها" : "لا تنبيهات مفتوحة"}</span>
+          </a>
+
+          <Link href="/departments/finance" className="bento-card">
+            <span className="bento-kicker"><Wallet size={14} /> النقد</span>
+            <span className="bento-value" style={{ color: hasData ? "var(--text-strong)" : "var(--muted)" }}>{money(score.cash)}</span>
+            <span className="bento-label">السيولة المتاحة</span>
+          </Link>
+        </section>
+      )}
+
+      {/* ── Watchlists ── */}
+      {!loading && (
+        <section className="report-two-col">
+          <div className="bento-card" style={{ gap: 10 }}>
+            <span className="bento-kicker"><FileWarning size={14} /> وثائق قريبة من الانتهاء</span>
+            <div className="bento-list">
+              {(answers?.expiringDocuments || []).length === 0 && (
+                <div className="bento-list__row"><small>لا وثائق قريبة من الانتهاء ✓</small></div>
+              )}
+              {(answers?.expiringDocuments || []).map((doc) => (
+                <Link key={doc.id} href="/departments/government-relations" className="bento-list__row" style={{ color: "inherit", textDecoration: "none" }}>
+                  <span>
+                    {doc.title}
+                    <br />
+                    <small>{doc.issuer || "جهة غير محددة"}</small>
+                  </span>
+                  <span className="mini-pill medium">{doc.status}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="bento-card" style={{ gap: 10 }}>
+            <span className="bento-kicker"><Megaphone size={14} /> حملات خاسرة</span>
+            <div className="bento-list">
+              {(answers?.losingCampaigns || []).length === 0 && (
+                <div className="bento-list__row"><small>لا حملات خاسرة حالياً ✓</small></div>
+              )}
+              {(answers?.losingCampaigns || []).map((c) => (
+                <Link key={c.id} href="/departments/marketing" className="bento-list__row" style={{ color: "inherit", textDecoration: "none" }}>
+                  <span>{c.name}</span>
+                  <span className="mini-pill high">{c.status}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Alerts ── */}
+      {!loading && (
+        <section id="bi-alerts" className="bento-card bento-full" style={{ gap: 10 }}>
+          <span className="bento-kicker"><ShieldAlert size={14} /> التنبيهات ({(data.alerts || []).length})</span>
+          <div className="bento-list">
+            {(data.alerts || []).length === 0 && (
+              <div className="bento-list__row"><small>لا تنبيهات — الشركة هادئة ✓</small></div>
+            )}
+            {(data.alerts || []).slice(0, 12).map((alert) => (
+              <div key={alert.id} className="bento-list__row" style={{ alignItems: "flex-start" }}>
+                <span>
+                  <b style={{ color: "var(--text-strong)" }}>{alert.department}: {alert.title}</b>
+                  <br />
+                  <small>{alert.message}</small>
+                </span>
+                <span style={{ display: "grid", gap: 6, justifyItems: "end" }}>
+                  <span className={`mini-pill ${severityPill[(alert.severity || "").toUpperCase()] || "medium"}`}>{alert.severity}</span>
+                  {alert.action_url && (
+                    <Link href={alert.action_url} className="secondary-btn btn-sm">معالجة <ArrowLeft size={12} /></Link>
+                  )}
+                </span>
+              </div>
             ))}
-          </Panel>
-        ))}
-      </section>
-
-      {loading && <p className="notice">جار تحميل بيانات الشركة...</p>}
+          </div>
+        </section>
+      )}
     </main>
   );
-}
-
-function Metric({ label, value, icon }: { label: string; value: string | number; icon: string }) {
-  const Icon = icon === "alert" ? ShieldAlert : icon === "stock" ? Building2 : icon === "trend" ? TrendingUp : BarChart3;
-  return <article className="metric-card green"><span><Icon size={20} /></span><small>{label}</small><strong>{value}</strong></article>;
-}
-
-function Panel({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="ops-card"><h2>{title}</h2><div className="statement-list">{children}</div></section>;
-}
-
-function Statement({ label, value }: { label: string; value: string | number }) {
-  return <div className="statement-row"><span>{label}</span><b>{value}</b></div>;
-}
-
-function sectionTitle(key: string) {
-  const names: Record<string, string> = {
-    finance: "المالية",
-    marketing: "التسويق",
-    government: "العلاقات الحكومية",
-    executive: "مكتب CEO",
-    crm: "CRM والمبيعات",
-    procurement: "المشتريات والمخزون",
-    alerts: "التنبيهات",
-  };
-  return names[key] || key;
-}
-
-function formatValue(value: unknown) {
-  if (typeof value === "number") return Math.abs(value) > 100 ? currency.format(value) : String(Math.round(value * 100) / 100);
-  if (typeof value === "boolean") return value ? "نعم" : "لا";
-  if (Array.isArray(value)) return `${value.length}`;
-  if (typeof value === "object" && value) return "بيانات";
-  return String(value ?? "-");
 }

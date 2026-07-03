@@ -1,7 +1,7 @@
-import StrategyRunner from "@/components/StrategyRunner";
+import CompanyOverview from "@/components/CompanyOverview";
 
 export const dynamic = "force-dynamic";
 
 export default function HomePage() {
-  return <StrategyRunner />;
+  return <CompanyOverview />;
 }

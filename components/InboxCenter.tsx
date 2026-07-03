@@ -1,0 +1,263 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  Inbox,
+  Loader2,
+  Check,
+  X,
+  MessageSquarePlus,
+  Share2,
+  CircleDollarSign,
+  Building2,
+  Filter,
+} from "lucide-react";
+
+type InboxItem = {
+  id: string;
+  channel: "SYSTEM" | "COMPANY";
+  actionsVia: "approvals" | "decisions";
+  type: string;
+  title: string;
+  detail: string;
+  amount?: number;
+  requestedBy: string;
+  status: string;
+  createdAt: string;
+};
+
+const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+
+const DEPARTMENTS = ["دراسة الجدوى", "المالية", "التسويق", "المبيعات", "العمليات", "المشتريات", "المدير المالي", "التنفيذي"];
+
+const statusMeta: Record<string, { label: string; pill: string }> = {
+  PENDING: { label: "بانتظار قرارك", pill: "medium" },
+  APPROVED: { label: "معتمد", pill: "done" },
+  REJECTED: { label: "مرفوض", pill: "high" },
+  NOTED: { label: "بها ملاحظة", pill: "medium" },
+  FORWARDED: { label: "مُحالة", pill: "medium" },
+};
+
+type FilterKey = "ALL" | "SYSTEM" | "COMPANY";
+
+export default function InboxCenter() {
+  const [items, setItems] = useState<InboxItem[]>([]);
+  const [pending, setPending] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterKey>("ALL");
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [forwardFor, setForwardFor] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/inbox", { cache: "no-store" });
+      const json = await res.json();
+      if (json.ok) {
+        setItems(json.items || []);
+        setPending(json.pending || 0);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function decideSystem(item: InboxItem, decision: "APPROVED" | "REJECTED") {
+    setBusy(item.id);
+    setExecMsg(null);
+    try {
+      const res = await fetch("/api/approvals/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, decision }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        if (json.execution) setExecMsg({ text: json.execution.reason, ok: json.execution.executed });
+        await load();
+      }
+    } catch {
+      // silent
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reviewCompany(
+    item: InboxItem,
+    action: "APPROVED" | "REJECTED" | "NOTED" | "FORWARDED",
+    extra: { note?: string; forwardedTo?: string } = {}
+  ) {
+    setBusy(item.id);
+    try {
+      const res = await fetch("/api/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceType: "company-approval", sourceId: item.id, title: item.title, action, ...extra }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setNoteFor(null);
+        setForwardFor(null);
+        setNoteText("");
+        await load();
+      }
+    } catch {
+      // silent
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const visible = items.filter((i) => filter === "ALL" || i.channel === filter);
+  const visiblePending = visible.filter((i) => i.status === "PENDING");
+  const visibleDecided = visible.filter((i) => i.status !== "PENDING");
+
+  return (
+    <main className="page-wrap">
+      <header className="page-head">
+        <div>
+          <span className="eyebrow"><Inbox size={16} /> مركز القرار</span>
+          <h1 className="glow-title">صندوق القرارات الموحّد</h1>
+          <p className="page-sub">كل ما ينتظر اعتمادك من كل الأقسام والأنظمة — في مكان واحد، بدورة قرار كاملة.</p>
+        </div>
+        <span className={`status-pill ${pending > 0 ? "running" : "done"}`}>{pending} بانتظار القرار</span>
+      </header>
+
+      <div className="section-tabs" role="tablist" aria-label="تصفية القرارات">
+        {([
+          { key: "ALL", label: "الكل", icon: Filter },
+          { key: "SYSTEM", label: "التداول والنظام", icon: CircleDollarSign },
+          { key: "COMPANY", label: "إدارية", icon: Building2 },
+        ] as const).map((f) => {
+          const Icon = f.icon;
+          return (
+            <button
+              key={f.key}
+              role="tab"
+              aria-selected={filter === f.key}
+              className={`section-tab ${filter === f.key ? "active" : ""}`}
+              onClick={() => setFilter(f.key)}
+            >
+              <Icon size={15} /> {f.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {execMsg && (
+        <p className={`notice ${execMsg.ok ? "done" : ""}`} style={{ color: execMsg.ok ? "var(--green)" : "var(--amber)" }}>
+          {execMsg.ok ? "✅ " : "ℹ️ "}{execMsg.text}
+        </p>
+      )}
+
+      {loading && (
+        <div className="delivery-panel" style={{ padding: 24, textAlign: "center" }}>
+          <Loader2 className="spin" size={24} style={{ color: "var(--muted)" }} />
+        </div>
+      )}
+
+      {!loading && visiblePending.length === 0 && (
+        <div className="empty-state" style={{ minHeight: 160 }}>
+          <Inbox size={30} />
+          <strong>لا توجد قرارات معلّقة</strong>
+          <span>عند وصول طلب اعتماد من أي قسم أو صفقة تتجاوز الحد، تظهر هنا فوراً.</span>
+        </div>
+      )}
+
+      <div className="inbox-list">
+        {visiblePending.map((item) => (
+          <article key={`${item.channel}-${item.id}`} className="bento-card inbox-item">
+            <div className="inbox-item__head">
+              <div>
+                <strong>{item.title}</strong>
+                <small className="inbox-item__meta">
+                  {item.channel === "SYSTEM" ? "نظام/تداول" : "إداري"} · {item.type} · من: {item.requestedBy}
+                </small>
+              </div>
+              {item.amount !== undefined && <b className="inbox-item__amount">{currency.format(item.amount)}</b>}
+            </div>
+            <p className="inbox-item__detail">{item.detail}</p>
+
+            <div className="inbox-item__actions">
+              {item.actionsVia === "approvals" ? (
+                <>
+                  <button className="primary-btn btn-sm" disabled={busy === item.id} onClick={() => decideSystem(item, "APPROVED")}>
+                    {busy === item.id ? <Loader2 className="spin" size={14} /> : <Check size={14} />} اعتماد وتنفيذ
+                  </button>
+                  <button className="secondary-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => decideSystem(item, "REJECTED")}>
+                    <X size={14} /> رفض
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="primary-btn btn-sm" disabled={busy === item.id} onClick={() => reviewCompany(item, "APPROVED")}>
+                    {busy === item.id ? <Loader2 className="spin" size={14} /> : <Check size={14} />} اعتماد
+                  </button>
+                  <button className="secondary-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => reviewCompany(item, "REJECTED")}>
+                    <X size={14} /> رفض
+                  </button>
+                  <button className="secondary-btn btn-sm" onClick={() => { setNoteFor(noteFor === item.id ? null : item.id); setForwardFor(null); }}>
+                    <MessageSquarePlus size={14} /> ملاحظة
+                  </button>
+                  <button className="secondary-btn btn-sm" onClick={() => { setForwardFor(forwardFor === item.id ? null : item.id); setNoteFor(null); }}>
+                    <Share2 size={14} /> إحالة
+                  </button>
+                </>
+              )}
+            </div>
+
+            {noteFor === item.id && (
+              <div className="memory-search-bar">
+                <input
+                  className="input"
+                  placeholder="اكتب ملاحظتك..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && noteText.trim() && reviewCompany(item, "NOTED", { note: noteText.trim() })}
+                />
+                <button className="primary-btn" disabled={!noteText.trim() || busy === item.id} onClick={() => reviewCompany(item, "NOTED", { note: noteText.trim() })}>
+                  حفظ
+                </button>
+              </div>
+            )}
+
+            {forwardFor === item.id && (
+              <div className="memory-search-bar">
+                <select className="input" defaultValue="" onChange={(e) => e.target.value && reviewCompany(item, "FORWARDED", { forwardedTo: e.target.value })}>
+                  <option value="" disabled>اختر القسم المختص...</option>
+                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+
+      {visibleDecided.length > 0 && (
+        <section style={{ display: "grid", gap: 8 }}>
+          <strong style={{ color: "var(--muted)", fontSize: "0.9rem" }}>سجل القرارات ({visibleDecided.length})</strong>
+          {visibleDecided.slice(0, 12).map((item) => (
+            <div key={`${item.channel}-${item.id}`} className="statement-row">
+              <span>
+                {item.title}
+                {item.amount !== undefined && <> · {currency.format(item.amount)}</>}
+              </span>
+              <span className={`mini-pill ${statusMeta[item.status]?.pill || ""}`}>
+                {statusMeta[item.status]?.label || item.status}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}
