@@ -4,7 +4,7 @@ import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 /** Bumped on each deploy so we can confirm which build is live. */
-const BUILD_MARKER = "probe-v1";
+const BUILD_MARKER = "probe-v2";
 
 /**
  * Diagnostic: is Supabase configured and are all company OS tables reachable?
@@ -34,11 +34,15 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()!;
-  const tables: Record<string, { ok: boolean; count?: number; error?: string }> = {};
+  const tables: Record<string, { ok: boolean; rows?: number; error?: string; code?: string }> = {};
   for (const t of TABLES) {
     try {
-      const { count, error } = await supabase.from(t).select("*", { head: true, count: "exact" });
-      tables[t] = error ? { ok: false, error: error.message } : { ok: true, count: count ?? 0 };
+      // Real GET (has an error body) so a missing table is reported honestly,
+      // unlike a HEAD count which returns no body on 404.
+      const { data, error } = await supabase.from(t).select("*").limit(1);
+      tables[t] = error
+        ? { ok: false, error: error.message, code: error.code }
+        : { ok: true, rows: data?.length ?? 0 };
     } catch (e) {
       tables[t] = { ok: false, error: e instanceof Error ? e.message : "unknown" };
     }
