@@ -182,6 +182,9 @@ export default function CompanyOverview() {
         </Link>
       </section>
 
+      {/* Daily digest — the company reaches out */}
+      <DigestCard />
+
       {/* Live pulse strip */}
       {pulse && pulse.events.length > 0 && (
         <section className="bento-card bento-full" style={{ gap: 10 }}>
@@ -220,5 +223,46 @@ export default function CompanyOverview() {
         <Link className="secondary-btn" href="/operations"><Send size={16} /> تشغيل طلب شركة كامل</Link>
       </div>
     </main>
+  );
+}
+
+function DigestCard() {
+  const [digest, setDigest] = useState<{ headline: string; text: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/company/digest", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => j.ok && setDigest(j.digest))
+      .catch(() => {});
+  }, []);
+
+  async function send() {
+    setSending(true);
+    setSent(null);
+    try {
+      const res = await fetch("/api/company/digest", { method: "POST" });
+      const json = await res.json();
+      if (json.ok) setSent(json.dispatch.reason);
+    } catch {
+      // silent
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!digest) return null;
+  return (
+    <section className="bento-card bento-full" style={{ gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <span className="bento-kicker"><Sparkles size={15} /> الملخص اليومي · {digest.headline}</span>
+        <button className="secondary-btn btn-sm" onClick={send} disabled={sending}>
+          {sending ? <Loader2 className="spin" size={14} /> : <Send size={14} />} إرسال الملخص للمالك
+        </button>
+      </div>
+      <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: "var(--muted)", fontSize: "0.82rem", lineHeight: 1.9, fontFamily: "inherit" }}>{digest.text}</pre>
+      {sent && <p className="notice done" style={{ color: "var(--green)" }}>{sent}</p>}
+    </section>
   );
 }

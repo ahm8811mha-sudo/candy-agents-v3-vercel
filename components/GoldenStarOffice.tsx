@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target } from "lucide-react";
+import { Building2, Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target, ScrollText } from "lucide-react";
 
 type Presence = "WORKING" | "TODAY" | "IDLE";
 
@@ -87,13 +87,15 @@ export default function GoldenStarOffice() {
   const [events, setEvents] = useState<PulseEvent[]>([]);
   const [working, setWorking] = useState(0);
   const [learning, setLearning] = useState<Learning | null>(null);
+  const [audit, setAudit] = useState<Array<{ id: string; actor: string; action: string; detail: string; tier?: string; createdAt: string }>>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [pulseRes, learnRes] = await Promise.all([
+      const [pulseRes, learnRes, auditRes] = await Promise.all([
         fetch("/api/company/pulse", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         fetch("/api/company/learning", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        fetch("/api/company/audit", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
       ]);
       if (pulseRes?.ok) {
         setAgents(pulseRes.agents || []);
@@ -101,6 +103,7 @@ export default function GoldenStarOffice() {
         setWorking(pulseRes.workingCount || 0);
       }
       if (learnRes?.ok) setLearning(learnRes);
+      if (auditRes?.ok) setAudit(auditRes.entries || []);
     } catch {
       // silent
     } finally {
@@ -192,6 +195,23 @@ export default function GoldenStarOffice() {
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {audit.length > 0 && (
+            <section className="bento-card bento-full" style={{ gap: 10 }}>
+              <span className="bento-kicker"><ScrollText size={15} /> سجل التدقيق — غير قابل للتعديل ({audit.length})</span>
+              <div className="bento-list">
+                {audit.slice(0, 8).map((a) => (
+                  <div key={a.id} className="bento-list__row">
+                    <span><b style={{ color: "var(--text-strong)" }}>{a.actor}</b> — {a.detail}</span>
+                    <span style={{ display: "grid", gap: 4, justifyItems: "end", whiteSpace: "nowrap" }}>
+                      <span className="mini-pill">{a.action}{a.tier ? ` · ${a.tier}` : ""}</span>
+                      <small style={{ color: "var(--muted)" }}>{timeAgo(a.createdAt)}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
 
