@@ -4,7 +4,17 @@ import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 /** Bumped on each deploy so we can confirm which build is live. */
-const BUILD_MARKER = "probe-v2";
+const BUILD_MARKER = "probe-v3";
+
+/** The public project host the app is actually connected to (safe to expose). */
+function connectedHost(): string | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  try {
+    return url ? new URL(url).host : null;
+  } catch {
+    return url || null;
+  }
+}
 
 /**
  * Diagnostic: is Supabase configured and are all company OS tables reachable?
@@ -77,6 +87,7 @@ export async function GET(req: NextRequest) {
     ok: allOk,
     build: BUILD_MARKER,
     configured: true,
+    projectHost: connectedHost(),
     message: allOk
       ? "Supabase متصل وكل الجداول جاهزة — الديمومة مفعّلة ✓"
       : "Supabase متصل لكن بعض الجداول غير جاهزة — شغّل docs/supabase-schema.sql.",
