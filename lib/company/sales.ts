@@ -23,6 +23,9 @@ import {
 } from "../shopify";
 import { createApproval } from "../approvals";
 import { requiredTier } from "./governance";
+import { postSale } from "./ledger";
+import { buildInvoice } from "./zatca";
+import { recordAudit } from "./audit";
 
 export type IncomeEntry = {
   id: string;
@@ -125,15 +128,32 @@ export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
   if (amount <= 0) return { executed: false, reason: "لا مبلغ صالح للاعتماد." };
 
   for (const id of orderIds) recognizedOrders.add(id);
+  const entryId = genId("inc");
   incomeLedger.unshift({
-    id: genId("inc"),
+    id: entryId,
     amount,
     currency,
     orderCount: orderIds.length,
     note: "مداخيل مبيعات معتمدة ومسجّلة في دفتر الشركة",
     recognizedAt: new Date().toISOString(),
   });
-  return { executed: true, reason: `تم اعتماد وتسجيل ${amount.toLocaleString("ar-SA")} ${currency} في دفتر مداخيل الشركة.` };
+
+  // Post a balanced double-entry (net + VAT) and issue a ZATCA invoice.
+  const sale = postSale(amount, entryId, `مداخيل مبيعات معتمدة (${orderIds.length} طلب)`);
+  const invoice = buildInvoice({ gross: amount, currency, reference: entryId });
+  recordAudit({
+    actor: "المالك",
+    role: "OWNER",
+    action: "RECOGNIZE_INCOME",
+    entityType: "income",
+    entityId: entryId,
+    detail: `اعتماد مداخيل ${amount.toLocaleString("ar-SA")} ${currency} · صافي ${sale.net} + ضريبة ${sale.vat} · فاتورة ${invoice.invoiceNumber}`,
+  });
+
+  return {
+    executed: true,
+    reason: `تم اعتماد ${amount.toLocaleString("ar-SA")} ${currency}: صافي ${sale.net} + ضريبة قيمة مضافة ${sale.vat} · فاتورة ${invoice.invoiceNumber}.`,
+  };
 }
 
 export type SalesChangeInput = {

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { listApprovals, decideApproval, approvalStats, type ApprovalStatus } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
+import { authenticateRequest } from "@/lib/auth";
+import { canSignOff } from "@/lib/company/access";
+import { requiredTier } from "@/lib/company/governance";
+import { recordAudit } from "@/lib/company/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +30,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "يلزم معرّف العنصر والقرار (APPROVED/REJECTED)" }, { status: 400 });
     }
 
-    const result = decideApproval(id, decision, String(body.decidedBy || "CEO"), body.note ? String(body.note) : undefined);
+    // F2 — enforce the authority matrix in the API, not just the UI.
+    const target = listApprovals().find((a) => a.id === id);
+    const tier = target?.amount ? requiredTier(target.amount).tier : "T1";
+    const user = await authenticateRequest(req);
+    const access = canSignOff(user?.role ?? null, tier);
+    if (!access.allowed) {
+      return NextResponse.json({ ok: false, error: access.reason }, { status: 403 });
+    }
+
+    const decidedBy = user?.name || String(body.decidedBy || "المالك");
+    const result = decideApproval(id, decision, decidedBy, body.note ? String(body.note) : undefined);
     if (!result) {
       return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
     }
+
+    // F1 — append-only audit trail for every sign-off.
+    recordAudit({
+      actor: decidedBy,
+      role: user?.role,
+      action: decision === "APPROVED" ? "APPROVE" : "REJECT",
+      entityType: (result.type || "APPROVAL").toLowerCase(),
+      entityId: result.id,
+      detail: `${decision === "APPROVED" ? "اعتماد" : "رفض"}: ${result.title}`,
+      tier,
+    });
 
     // On approval, run the item's governed side-effect: place the trade, book
     // the sales income, or apply the store change.
