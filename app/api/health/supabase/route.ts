@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+
+/** Bumped on each deploy so we can confirm which build is live. */
+const BUILD_MARKER = "probe-v1";
 
 /**
  * Diagnostic: is Supabase configured and are all company OS tables reachable?
@@ -20,10 +23,11 @@ const TABLES = [
   "sales_changes",
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!hasSupabaseEnv()) {
     return NextResponse.json({
       ok: true,
+      build: BUILD_MARKER,
       configured: false,
       message: "Supabase غير مُهيّأ — النظام يعمل بالذاكرة (تدهور آمن). أضف NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY لتفعيل الديمومة.",
     });
@@ -40,13 +44,39 @@ export async function GET() {
     }
   }
 
+  // Optional AWAITED write probe (?probe=1): inserts a marker row into audit_log,
+  // reads it back, then removes it — reporting the exact error if the key cannot
+  // write (e.g. RLS). This isolates "writes blocked" from "serverless froze".
+  let writeProbe: Record<string, unknown> | undefined;
+  if (req.nextUrl.searchParams.get("probe") === "1") {
+    const id = `probe-${Date.now()}`;
+    const insert = await supabase.from("audit_log").insert({
+      id,
+      actor: "health-probe",
+      action: "PROBE",
+      entity_type: "diagnostic",
+      entity_id: id,
+      detail: "write probe",
+      created_at: new Date().toISOString(),
+    });
+    if (insert.error) {
+      writeProbe = { wrote: false, error: insert.error.message, code: insert.error.code };
+    } else {
+      const read = await supabase.from("audit_log").select("id").eq("id", id).maybeSingle();
+      writeProbe = { wrote: true, readBack: Boolean(read.data), error: read.error?.message };
+      await supabase.from("audit_log").delete().eq("id", id);
+    }
+  }
+
   const allOk = Object.values(tables).every((r) => r.ok);
   return NextResponse.json({
     ok: allOk,
+    build: BUILD_MARKER,
     configured: true,
     message: allOk
       ? "Supabase متصل وكل الجداول جاهزة — الديمومة مفعّلة ✓"
       : "Supabase متصل لكن بعض الجداول غير جاهزة — شغّل docs/supabase-schema.sql.",
     tables,
+    ...(writeProbe ? { writeProbe } : {}),
   });
 }
