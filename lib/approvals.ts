@@ -2,11 +2,13 @@
  * Approval center store.
  *
  * A single place where every item that needs human sign-off (trades above the
- * limit, budget gates, CEO decisions) is collected and acted on. Uses a
- * module-level in-memory store, consistent with the project's cache/rateLimit
- * pattern. Durable cross-instance persistence would back this with Supabase
- * (noted as a follow-up); the actionable approve/reject flow works as-is.
+ * limit, budget gates, CEO decisions) is collected and acted on. The in-memory
+ * store is the fast working copy; when Supabase is configured every write is
+ * also persisted to `company_approvals` and the store is hydrated from it once
+ * per process (see hydrateApprovals), so decisions survive serverless restarts.
  */
+
+import { persist, fetchRows, hydrateOnce } from "./supabase";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -31,6 +33,51 @@ const store: ApprovalItem[] = [];
 function genId() {
   return `apr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+function toRow(a: ApprovalItem): Record<string, unknown> {
+  return {
+    id: a.id,
+    type: a.type,
+    title: a.title,
+    detail: a.detail,
+    amount: a.amount ?? null,
+    requested_role: a.requestedRole,
+    status: a.status,
+    created_at: a.createdAt,
+    decided_at: a.decidedAt ?? null,
+    decided_by: a.decidedBy ?? null,
+    note: a.note ?? null,
+    metadata: a.metadata ?? null,
+  };
+}
+
+function fromRow(r: Record<string, unknown>): ApprovalItem {
+  return {
+    id: String(r.id),
+    type: r.type as ApprovalType,
+    title: String(r.title),
+    detail: String(r.detail ?? ""),
+    amount: r.amount != null ? Number(r.amount) : undefined,
+    requestedRole: String(r.requested_role ?? "CEO"),
+    status: r.status as ApprovalStatus,
+    createdAt: String(r.created_at),
+    decidedAt: r.decided_at ? String(r.decided_at) : undefined,
+    decidedBy: r.decided_by ? String(r.decided_by) : undefined,
+    note: r.note ? String(r.note) : undefined,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
+  };
+}
+
+/** Hydrate the store from Supabase once per process (before reads). */
+export const hydrateApprovals = hydrateOnce(async () => {
+  const rows = await fetchRows("company_approvals", { orderBy: "created_at", limit: 200 });
+  const seen = new Set(store.map((a) => a.id));
+  for (const r of rows) {
+    if (seen.has(String(r.id))) continue;
+    store.push(fromRow(r));
+  }
+  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+});
 
 export type CreateApprovalInput = {
   type: ApprovalType;
@@ -63,6 +110,7 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     metadata: { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) },
   };
   store.unshift(item);
+  persist("company_approvals", toRow(item));
   return item;
 }
 
@@ -84,6 +132,7 @@ export function decideApproval(
   item.decidedAt = new Date().toISOString();
   item.decidedBy = decidedBy;
   if (note) item.note = note;
+  persist("company_approvals", toRow(item));
   return item;
 }
 

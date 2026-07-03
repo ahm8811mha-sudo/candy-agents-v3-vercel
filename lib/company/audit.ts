@@ -8,7 +8,7 @@
  * in-memory ring, consistent with the rest of the company modules.
  */
 
-import { getSupabaseAdmin } from "../supabase";
+import { persist, fetchRows, hydrateOnce } from "../supabase";
 
 export type AuditEntry = {
   id: string;
@@ -55,25 +55,42 @@ export function recordAudit(input: RecordAuditInput): AuditEntry {
   if (store.length > MAX) store.length = MAX;
 
   // Best-effort durable persistence; never blocks or throws into the caller.
-  const supabase = getSupabaseAdmin();
-  if (supabase) {
-    void supabase
-      .from("audit_log")
-      .insert({
-        id: entry.id,
-        actor: entry.actor,
-        role: entry.role,
-        action: entry.action,
-        entity_type: entry.entityType,
-        entity_id: entry.entityId,
-        detail: entry.detail,
-        tier: entry.tier,
-        created_at: entry.createdAt,
-      })
-      .then(() => undefined, () => undefined);
-  }
+  persist("audit_log", {
+    id: entry.id,
+    actor: entry.actor,
+    role: entry.role ?? null,
+    action: entry.action,
+    entity_type: entry.entityType,
+    entity_id: entry.entityId,
+    detail: entry.detail,
+    tier: entry.tier ?? null,
+    created_at: entry.createdAt,
+  });
   return entry;
 }
+
+/** Hydrate the in-memory ring from Supabase once per process (before reads). */
+export const hydrateAudit = hydrateOnce(async () => {
+  const rows = await fetchRows("audit_log", { orderBy: "created_at", limit: MAX });
+  const seen = new Set(store.map((e) => e.id));
+  for (const r of rows) {
+    const id = String(r.id);
+    if (seen.has(id)) continue;
+    store.push({
+      id,
+      actor: String(r.actor),
+      role: r.role ? String(r.role) : undefined,
+      action: String(r.action),
+      entityType: String(r.entity_type ?? ""),
+      entityId: String(r.entity_id ?? ""),
+      detail: String(r.detail ?? ""),
+      tier: r.tier ? String(r.tier) : undefined,
+      createdAt: String(r.created_at),
+    });
+  }
+  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (store.length > MAX) store.length = MAX;
+});
 
 export type AuditFilter = { actor?: string; entityType?: string; action?: string };
 

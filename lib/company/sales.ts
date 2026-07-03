@@ -10,8 +10,9 @@
  *      team are approved before they touch the store. Live writes require an
  *      explicit opt-in; otherwise they are simulated (safe by default).
  *
- * State is in-memory (consistent with the rest of the company modules);
- * durable posting to accounting via Supabase is a follow-up.
+ * State is an in-memory working copy with best-effort write-through + hydrate to
+ * the Supabase `sales_income` / `sales_changes` tables (see hydrateSales), so
+ * recognized income and store changes survive serverless restarts when set up.
  */
 
 import {
@@ -26,6 +27,7 @@ import { requiredTier } from "./governance";
 import { postSale } from "./ledger";
 import { buildInvoice } from "./zatca";
 import { recordAudit } from "./audit";
+import { persist, fetchRows, hydrateOnce } from "../supabase";
 
 export type IncomeEntry = {
   id: string;
@@ -54,6 +56,54 @@ const changeLog: SalesChange[] = [];
 function genId(p: string) {
   return `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+function persistChange(change: SalesChange): void {
+  persist("sales_changes", {
+    id: change.id,
+    kind: change.kind,
+    target: change.target,
+    detail: change.detail,
+    status: change.status,
+    created_at: change.createdAt,
+  });
+}
+
+/** Hydrate income ledger + change log + recognized-order set once per process. */
+export const hydrateSales = hydrateOnce(async () => {
+  const [incomeRows, changeRows] = await Promise.all([
+    fetchRows("sales_income", { orderBy: "recognized_at", limit: 100 }),
+    fetchRows("sales_changes", { orderBy: "created_at", limit: 100 }),
+  ]);
+  const seenIncome = new Set(incomeLedger.map((e) => e.id));
+  for (const r of incomeRows) {
+    const id = String(r.id);
+    for (const oid of (r.order_ids as string[]) ?? []) recognizedOrders.add(String(oid));
+    if (seenIncome.has(id)) continue;
+    incomeLedger.push({
+      id,
+      amount: Number(r.amount ?? 0),
+      currency: String(r.currency ?? "SAR"),
+      orderCount: Number(r.order_count ?? 0),
+      note: String(r.note ?? ""),
+      recognizedAt: String(r.recognized_at),
+    });
+  }
+  incomeLedger.sort((a, b) => b.recognizedAt.localeCompare(a.recognizedAt));
+
+  const seenChange = new Set(changeLog.map((c) => c.id));
+  for (const r of changeRows) {
+    if (seenChange.has(String(r.id))) continue;
+    changeLog.push({
+      id: String(r.id),
+      kind: r.kind as SalesChangeKind,
+      target: String(r.target ?? ""),
+      detail: String(r.detail ?? ""),
+      status: (r.status as SalesChange["status"]) ?? "PENDING",
+      createdAt: String(r.created_at),
+    });
+  }
+  changeLog.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+});
 
 /** Live store writes only with an explicit opt-in flag + credentials. */
 export function isShopifyWriteEnabled(): boolean {
@@ -129,13 +179,23 @@ export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
 
   for (const id of orderIds) recognizedOrders.add(id);
   const entryId = genId("inc");
+  const recognizedAt = new Date().toISOString();
   incomeLedger.unshift({
     id: entryId,
     amount,
     currency,
     orderCount: orderIds.length,
     note: "مداخيل مبيعات معتمدة ومسجّلة في دفتر الشركة",
-    recognizedAt: new Date().toISOString(),
+    recognizedAt,
+  });
+  persist("sales_income", {
+    id: entryId,
+    amount,
+    currency,
+    order_count: orderIds.length,
+    order_ids: orderIds,
+    note: "مداخيل مبيعات معتمدة ومسجّلة في دفتر الشركة",
+    recognized_at: recognizedAt,
   });
 
   // Post a balanced double-entry (net + VAT) and issue a ZATCA invoice.
@@ -195,6 +255,7 @@ export function proposeSalesChange(input: SalesChangeInput): ProposeResult {
     createdAt: new Date().toISOString(),
   };
   changeLog.unshift(change);
+  persistChange(change);
 
   const approval = createApproval({
     type: "SALES_CHANGE",
@@ -222,7 +283,7 @@ export async function applySalesChange(metadata: Record<string, unknown>): Promi
   const change = changeLog.find((c) => c.id === changeId);
 
   if (!isShopifyWriteEnabled()) {
-    if (change) change.status = "APPLIED";
+    if (change) { change.status = "APPLIED"; persistChange(change); }
     return {
       executed: false,
       simulated: true,
@@ -238,21 +299,21 @@ export async function applySalesChange(metadata: Record<string, unknown>): Promi
         price: Number(metadata.price) || 0,
         status: "draft",
       });
-      if (change) change.status = "APPLIED";
+      if (change) { change.status = "APPLIED"; persistChange(change); }
       return { executed: true, simulated: false, reason: `تمت إضافة المنتج «${created.title}» إلى المتجر (كمسودة).` };
     }
     if (changeKind === "REMOVE_PRODUCT") {
       await deleteShopifyProduct(String(metadata.productId));
-      if (change) change.status = "APPLIED";
+      if (change) { change.status = "APPLIED"; persistChange(change); }
       return { executed: true, simulated: false, reason: `تمت إزالة المنتج من المتجر.` };
     }
     if (changeKind === "STATUS") {
       await setShopifyProductStatus(String(metadata.productId), String(metadata.newStatus || "active"));
-      if (change) change.status = "APPLIED";
+      if (change) { change.status = "APPLIED"; persistChange(change); }
       return { executed: true, simulated: false, reason: `تم تغيير حالة المنتج على المتجر.` };
     }
     // PRICE / DISCOUNT: recorded as approved; variant-level mutation wired next.
-    if (change) change.status = "APPLIED";
+    if (change) { change.status = "APPLIED"; persistChange(change); }
     return { executed: true, simulated: false, reason: "تم اعتماد التعديل وتسجيله على المتجر." };
   } catch (e) {
     return { executed: false, simulated: false, reason: e instanceof Error ? e.message : "فشل تطبيق التعديل على المتجر." };

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordDecision, listDecisions, decisionMap, decisionStats, type DecisionAction } from "@/lib/decisions";
+import { recordDecision, listDecisions, decisionMap, decisionStats, hydrateDecisions, type DecisionAction } from "@/lib/decisions";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +7,7 @@ const VALID_ACTIONS: DecisionAction[] = ["APPROVED", "REJECTED", "NOTED", "FORWA
 
 /** GET: decisions list + a {sourceType:sourceId → latest} map for UI lookups. */
 export async function GET(req: NextRequest) {
+  await hydrateDecisions();
   const sourceType = req.nextUrl.searchParams.get("sourceType") || undefined;
   return NextResponse.json({
     ok: true,
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
 /** POST: record an action (approve / reject / note / forward) on an item. */
 export async function POST(req: NextRequest) {
   try {
+    await hydrateDecisions();
     const body = await req.json().catch(() => ({}));
     const action = body.action as DecisionAction;
 

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getLearningSnapshot } from "@/lib/company/learning";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
 /** Weekly review: recompute the learning snapshot (§9). */
 export async function GET() {
   try {
+    await hydrateCompany();
     const snap = getLearningSnapshot();
     return NextResponse.json({
       ok: true,

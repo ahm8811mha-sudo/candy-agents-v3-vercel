@@ -7,6 +7,8 @@
  * number, timestamp, invoice total, VAT total). Pure and testable.
  */
 
+import { persist, fetchRows, hydrateOnce } from "../supabase";
+
 export const VAT_RATE = 0.15;
 
 function round2(n: number): number {
@@ -87,12 +89,56 @@ export function buildInvoice(input: { gross: number; currency?: string; referenc
     qr: buildZatcaQr({ sellerName, vatNumber, timestamp: issuedAt, invoiceTotal: gross, vatTotal: vat }),
   };
   invoices.unshift(invoice);
+  persist(
+    "zatca_invoices",
+    {
+      invoice_number: invoice.invoiceNumber,
+      issued_at: invoice.issuedAt,
+      seller_name: invoice.sellerName,
+      vat_number: invoice.vatNumber,
+      currency: invoice.currency,
+      net_amount: invoice.netAmount,
+      vat_amount: invoice.vatAmount,
+      vat_rate: invoice.vatRate,
+      total_amount: invoice.totalAmount,
+      reference: invoice.reference ?? null,
+      qr: invoice.qr,
+    },
+    "invoice_number"
+  );
   return invoice;
 }
 
 export function listInvoices(limit = 50): ZatcaInvoice[] {
   return invoices.slice(0, limit);
 }
+
+/** Hydrate invoices from Supabase once per process, restoring the number counter. */
+export const hydrateInvoices = hydrateOnce(async () => {
+  const rows = await fetchRows("zatca_invoices", { orderBy: "issued_at", limit: 200 });
+  const seen = new Set(invoices.map((i) => i.invoiceNumber));
+  for (const r of rows) {
+    const invoiceNum = String(r.invoice_number);
+    if (seen.has(invoiceNum)) continue;
+    invoices.push({
+      invoiceNumber: invoiceNum,
+      issuedAt: String(r.issued_at),
+      sellerName: String(r.seller_name ?? ""),
+      vatNumber: String(r.vat_number ?? ""),
+      currency: String(r.currency ?? "SAR"),
+      netAmount: Number(r.net_amount ?? 0),
+      vatAmount: Number(r.vat_amount ?? 0),
+      vatRate: Number(r.vat_rate ?? VAT_RATE),
+      totalAmount: Number(r.total_amount ?? 0),
+      reference: r.reference ? String(r.reference) : undefined,
+      qr: String(r.qr ?? ""),
+    });
+    // Keep the sequential counter ahead of any persisted INV-YYYY-NNNNN number.
+    const seq = Number(invoiceNum.split("-").pop());
+    if (Number.isFinite(seq) && seq > counter) counter = seq;
+  }
+  invoices.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+});
 
 /** Test helper. */
 export function _clearInvoices(): void {

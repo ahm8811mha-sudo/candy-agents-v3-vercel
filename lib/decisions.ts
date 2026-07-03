@@ -6,9 +6,11 @@
  * note, or forward an item to the relevant department. Each item is identified
  * by (sourceType, sourceId); the latest action represents its current state.
  *
- * In-memory (consistent with cache/rateLimit/approvals). Durable persistence via
- * Supabase is a follow-up.
+ * In-memory working copy with best-effort write-through + hydrate to the
+ * Supabase `company_decisions` table (see hydrateDecisions) when configured.
  */
+
+import { persist, fetchRows, hydrateOnce } from "./supabase";
 
 export type DecisionAction = "APPROVED" | "REJECTED" | "NOTED" | "FORWARDED";
 
@@ -53,8 +55,40 @@ export function recordDecision(input: RecordDecisionInput): DecisionRecord {
     createdAt: new Date().toISOString(),
   };
   store.unshift(record);
+  persist("company_decisions", {
+    id: record.id,
+    source_type: record.sourceType,
+    source_id: record.sourceId,
+    title: record.title,
+    action: record.action,
+    note: record.note ?? null,
+    forwarded_to: record.forwardedTo ?? null,
+    decided_by: record.decidedBy,
+    created_at: record.createdAt,
+  });
   return record;
 }
+
+/** Hydrate the store from Supabase once per process (before reads). */
+export const hydrateDecisions = hydrateOnce(async () => {
+  const rows = await fetchRows("company_decisions", { orderBy: "created_at", limit: 200 });
+  const seen = new Set(store.map((d) => d.id));
+  for (const r of rows) {
+    if (seen.has(String(r.id))) continue;
+    store.push({
+      id: String(r.id),
+      sourceType: String(r.source_type),
+      sourceId: String(r.source_id),
+      title: String(r.title ?? ""),
+      action: r.action as DecisionAction,
+      note: r.note ? String(r.note) : undefined,
+      forwardedTo: r.forwarded_to ? String(r.forwarded_to) : undefined,
+      decidedBy: String(r.decided_by ?? "CEO"),
+      createdAt: String(r.created_at),
+    });
+  }
+  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+});
 
 export function listDecisions(sourceType?: string): DecisionRecord[] {
   const items = sourceType ? store.filter((d) => d.sourceType === sourceType) : store;

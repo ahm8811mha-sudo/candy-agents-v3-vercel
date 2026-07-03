@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
 import { getLearningSnapshot } from "@/lib/company/learning";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    await hydrateCompany();
     const idea = ensureDailyIdea();
     await enrichIdea(idea.id);
     const learning = getLearningSnapshot();

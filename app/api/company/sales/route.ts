@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSalesConsole, proposeIncomeRecognition, proposeSalesChange } from "@/lib/company/sales";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
 /** GET: the sales console (Shopify snapshot + income recognition status). */
 export async function GET() {
   try {
+    await hydrateCompany();
     return NextResponse.json({ ok: true, ...(await getSalesConsole()) });
   } catch (error) {
     return NextResponse.json(
@@ -18,6 +20,7 @@ export async function GET() {
 /** POST: propose income recognition, or propose a store change. */
 export async function POST(req: NextRequest) {
   try {
+    await hydrateCompany();
     const body = await req.json().catch(() => ({}));
 
     if (body.action === "recognize-income") {

@@ -16,6 +16,7 @@ import { createApproval, listApprovals } from "../approvals";
 import { getAgent } from "./agents";
 import { requiredTier, requiresFeasibility } from "./governance";
 import { runAgent } from "../ai";
+import { persist, fetchRows, hydrateOnce } from "../supabase";
 
 export type IdeaSource = "OWNER" | "TEAM";
 export type IdeaStatus = "UNDER_STUDY" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -64,6 +65,58 @@ const verdictAr: Record<Verdict, string> = {
 function genId() {
   return `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+/** Upsert the full idea row — called after every mutation (best-effort). */
+function persistIdea(idea: Idea): void {
+  persist("company_ideas", {
+    id: idea.id,
+    title: idea.title,
+    hypothesis: idea.hypothesis,
+    budget_sar: idea.budgetSAR,
+    horizon_days: idea.horizonDays,
+    source: idea.source,
+    proposed_by: idea.proposedBy,
+    proposed_by_name: idea.proposedByName,
+    status: idea.status,
+    tier: idea.tier,
+    tier_label: idea.tierLabel,
+    recommendations: idea.recommendations,
+    aggregate: idea.aggregate ?? null,
+    study_mode: idea.studyMode ?? null,
+    approval_id: idea.approvalId ?? null,
+    day_key: idea.dayKey ?? null,
+    created_at: idea.createdAt,
+  });
+}
+
+/** Hydrate the store from Supabase once per process (before reads). */
+export const hydrateIdeas = hydrateOnce(async () => {
+  const rows = await fetchRows("company_ideas", { orderBy: "created_at", limit: 100 });
+  const seen = new Set(store.map((i) => i.id));
+  for (const r of rows) {
+    if (seen.has(String(r.id))) continue;
+    store.push({
+      id: String(r.id),
+      title: String(r.title),
+      hypothesis: String(r.hypothesis ?? ""),
+      budgetSAR: Number(r.budget_sar ?? 0),
+      horizonDays: Number(r.horizon_days ?? 1),
+      source: (r.source as IdeaSource) ?? "OWNER",
+      proposedBy: String(r.proposed_by ?? "owner"),
+      proposedByName: String(r.proposed_by_name ?? "المالك"),
+      status: (r.status as IdeaStatus) ?? "UNDER_STUDY",
+      tier: String(r.tier ?? ""),
+      tierLabel: String(r.tier_label ?? ""),
+      recommendations: (r.recommendations as IdeaRecommendation[]) ?? [],
+      aggregate: (r.aggregate as Idea["aggregate"]) ?? undefined,
+      studyMode: (r.study_mode as Idea["studyMode"]) ?? undefined,
+      approvalId: r.approval_id ? String(r.approval_id) : undefined,
+      dayKey: r.day_key ? String(r.day_key) : undefined,
+      createdAt: String(r.created_at),
+    });
+  }
+  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+});
 
 /** Small deterministic jitter from the idea text so twins don't look identical. */
 function seedJitter(text: string): number {
@@ -160,6 +213,7 @@ function studyAndGate(idea: Idea): Idea {
 
   idea.approvalId = approval.id;
   idea.status = "PENDING_APPROVAL";
+  persistIdea(idea);
   return idea;
 }
 
@@ -204,6 +258,7 @@ export async function enrichIdea(ideaId: string): Promise<Idea | null> {
   if (!idea) return null;
   if (!process.env.OPENAI_API_KEY) {
     idea.studyMode = "HEURISTIC";
+    persistIdea(idea);
     return idea;
   }
   try {
@@ -221,6 +276,7 @@ export async function enrichIdea(ideaId: string): Promise<Idea | null> {
   } catch {
     idea.studyMode = "HEURISTIC";
   }
+  persistIdea(idea);
   return idea;
 }
 
@@ -243,6 +299,7 @@ export function addRecommendation(
     report: note,
     createdAt: new Date().toISOString(),
   });
+  persistIdea(idea);
   return idea;
 }
 
@@ -274,6 +331,7 @@ export function ensureDailyIdea(now: Date = new Date()): Idea {
   const pick = DAILY_POOL[dayOfYear(now) % DAILY_POOL.length];
   const idea = submitIdea({ ...pick, source: "TEAM", proposedBy: "rased" });
   idea.dayKey = dayKey;
+  persistIdea(idea);
   return idea;
 }
 
@@ -284,8 +342,13 @@ export function syncIdeasWithApprovals(): void {
     if (idea.status !== "PENDING_APPROVAL" || !idea.approvalId) continue;
     const approval = approvals.find((a) => a.id === idea.approvalId);
     if (!approval) continue;
-    if (approval.status === "APPROVED") idea.status = "APPROVED";
-    else if (approval.status === "REJECTED") idea.status = "REJECTED";
+    if (approval.status === "APPROVED") {
+      idea.status = "APPROVED";
+      persistIdea(idea);
+    } else if (approval.status === "REJECTED") {
+      idea.status = "REJECTED";
+      persistIdea(idea);
+    }
   }
 }
 

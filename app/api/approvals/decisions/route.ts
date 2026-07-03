@@ -6,11 +6,13 @@ import { authenticateRequest } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { requiredTier } from "@/lib/company/governance";
 import { recordAudit } from "@/lib/company/audit";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
 /** GET: the actionable decision queue (trades / budget / CEO items). */
 export async function GET(req: NextRequest) {
+  await hydrateCompany();
   const status = req.nextUrl.searchParams.get("status") as ApprovalStatus | null;
   return NextResponse.json({
     ok: true,
@@ -22,6 +24,7 @@ export async function GET(req: NextRequest) {
 /** POST: approve or reject an item. */
 export async function POST(req: NextRequest) {
   try {
+    await hydrateCompany();
     const body = await req.json().catch(() => ({}));
     const id = String(body.id || "");
     const decision = body.decision === "REJECTED" ? "REJECTED" : body.decision === "APPROVED" ? "APPROVED" : null;

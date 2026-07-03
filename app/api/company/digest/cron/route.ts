@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { dispatchDigest } from "@/lib/company/digest";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
 /** Daily cron: send the owner their morning brief. */
 export async function GET() {
   try {
+    await hydrateCompany();
     const { dispatch } = await dispatchDigest();
     return NextResponse.json({ ok: true, dispatch });
   } catch (error) {

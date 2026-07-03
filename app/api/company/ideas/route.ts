@@ -9,6 +9,7 @@ import {
   type Verdict,
 } from "@/lib/company/ideas";
 import { getLearningSnapshot } from "@/lib/company/learning";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
  *  annotated against the company's adaptive confidence threshold (F6). */
 export async function GET() {
   try {
+    await hydrateCompany();
     const daily = ensureDailyIdea();
     await enrichIdea(daily.id);
     const threshold = getLearningSnapshot().confidenceThreshold;
@@ -35,6 +37,7 @@ export async function GET() {
 /** POST: submit an owner idea, or add a team recommendation. */
 export async function POST(req: NextRequest) {
   try {
+    await hydrateCompany();
     const body = await req.json().catch(() => ({}));
 
     if (body.action === "recommend") {

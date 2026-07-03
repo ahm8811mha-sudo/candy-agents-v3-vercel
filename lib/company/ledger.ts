@@ -4,10 +4,12 @@
  * Every posted entry must balance (Σ debits = Σ credits). Recognizing sales
  * revenue splits a VAT-inclusive gross amount into net revenue + VAT payable,
  * so the company books stay compliant and the trial balance always balances.
- * Pure/deterministic, fully testable; Supabase persistence is a follow-up.
+ * Deterministic and fully testable; entries are written through to the Supabase
+ * `ledger_entries` table and hydrated on read (see hydrateLedger) when set up.
  */
 
 import { VAT_RATE, splitVatInclusive } from "./zatca";
+import { persist, fetchRows, hydrateOnce } from "../supabase";
 
 export type LedgerLine = { account: string; debit: number; credit: number };
 
@@ -43,8 +45,32 @@ export function postEntry(input: { description: string; reference?: string; line
     lines: input.lines,
   };
   entries.unshift(entry);
+  persist("ledger_entries", {
+    id: entry.id,
+    date: entry.date,
+    description: entry.description,
+    reference: entry.reference ?? null,
+    lines: entry.lines,
+  });
   return entry;
 }
+
+/** Hydrate the ledger from Supabase once per process (before reads). */
+export const hydrateLedger = hydrateOnce(async () => {
+  const rows = await fetchRows("ledger_entries", { orderBy: "date", limit: 500 });
+  const seen = new Set(entries.map((e) => e.id));
+  for (const r of rows) {
+    if (seen.has(String(r.id))) continue;
+    entries.push({
+      id: String(r.id),
+      date: String(r.date),
+      description: String(r.description ?? ""),
+      reference: r.reference ? String(r.reference) : undefined,
+      lines: (r.lines as LedgerLine[]) ?? [],
+    });
+  }
+  entries.sort((a, b) => b.date.localeCompare(a.date));
+});
 
 /** Recognize a VAT-inclusive sale: debit Cash, credit Sales Revenue + VAT Payable. */
 export function postSale(gross: number, reference: string, description = "مبيعات معتمدة"): LedgerEntry & { net: number; vat: number } {

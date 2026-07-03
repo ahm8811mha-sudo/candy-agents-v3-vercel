@@ -25,3 +25,66 @@ export function getSupabaseAdmin() {
   }
   return adminClient;
 }
+
+/**
+ * Durable persistence helpers for the in-memory company OS modules.
+ *
+ * Design: the in-memory store stays the fast working copy; every write also
+ * fire-and-forgets an upsert to Supabase (`persist`), and each module hydrates
+ * its store once per process from Supabase on the first read (`hydrateOnce`).
+ * All helpers are no-ops when Supabase is not configured, so the modules keep
+ * their synchronous signatures and every existing test still passes unchanged.
+ */
+
+/** Fire-and-forget upsert; never blocks or throws into the caller. */
+export function persist(table: string, row: Record<string, unknown>, onConflict = "id"): void {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+  void supabase
+    .from(table)
+    .upsert(row, { onConflict })
+    .then(() => undefined, () => undefined);
+}
+
+/** Load rows from a table (newest-first by default); [] on any failure. */
+export async function fetchRows(
+  table: string,
+  opts: { orderBy?: string; ascending?: boolean; limit?: number } = {}
+): Promise<Record<string, unknown>[]> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return [];
+  try {
+    let query = supabase.from(table).select("*");
+    if (opts.orderBy) query = query.order(opts.orderBy, { ascending: opts.ascending ?? false });
+    if (opts.limit) query = query.limit(opts.limit);
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data as Record<string, unknown>[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Wrap an async hydration routine so it runs at most once per process and
+ * concurrent callers share the same in-flight promise. On failure it stays
+ * un-hydrated so a later read can retry.
+ */
+export function hydrateOnce(fn: () => Promise<void>): () => Promise<void> {
+  let done = false;
+  let inflight: Promise<void> | null = null;
+  return () => {
+    if (done || !hasSupabaseEnv()) return Promise.resolve();
+    if (inflight) return inflight;
+    inflight = fn().then(
+      () => {
+        done = true;
+        inflight = null;
+      },
+      () => {
+        inflight = null;
+      }
+    );
+    return inflight;
+  };
+}

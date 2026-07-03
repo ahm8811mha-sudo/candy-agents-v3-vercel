@@ -13,6 +13,7 @@
 import { listApprovals as listSystemApprovals } from "./approvals";
 import { listApprovals as listCompanyApprovals } from "./repository";
 import { decisionMap } from "./decisions";
+import { hydrateCompany } from "./company/hydrate";
 
 export type InboxChannel = "SYSTEM" | "COMPANY";
 
@@ -36,6 +37,7 @@ function str(value: unknown, fallback = ""): string {
 }
 
 export async function getInbox(): Promise<{ items: InboxItem[]; pending: number }> {
+  await hydrateCompany();
   const items: InboxItem[] = [];
 
   // 1) System approvals (trades, budget gates) — actionable via /api/approvals/decisions.

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { composeDigest, dispatchDigest } from "@/lib/company/digest";
+import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
 
 /** GET: preview the daily digest (composed, not sent). */
 export async function GET() {
   try {
+    await hydrateCompany();
     return NextResponse.json({ ok: true, digest: composeDigest() });
   } catch (error) {
     return NextResponse.json(
@@ -18,6 +20,7 @@ export async function GET() {
 /** POST: compose and dispatch the digest over the best available channel. */
 export async function POST() {
   try {
+    await hydrateCompany();
     const result = await dispatchDigest();
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
