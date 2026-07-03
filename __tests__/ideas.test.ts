@@ -4,6 +4,7 @@ import {
   listIdeas,
   ensureDailyIdea,
   addRecommendation,
+  enrichIdea,
   syncIdeasWithApprovals,
   ideaStats,
   _clearIdeas,
@@ -74,6 +75,16 @@ describe("ideas pipeline", () => {
     decideApproval(approval.id, "APPROVED", "المالك");
     syncIdeasWithApprovals();
     expect(listIdeas().find((i) => i.id === idea.id)!.status).toBe("APPROVED");
+  });
+
+  it("enrichIdea degrades to heuristic-only without an OpenAI key", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    const idea = submitIdea({ title: "بلا مفتاح", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
+    const enriched = await enrichIdea(idea.id);
+    expect(enriched!.studyMode).toBe("HEURISTIC");
+    expect(enriched!.aggregate?.narrative).toBeUndefined();
+    if (prev) process.env.OPENAI_API_KEY = prev;
   });
 
   it("inbox rejection flows back too", () => {

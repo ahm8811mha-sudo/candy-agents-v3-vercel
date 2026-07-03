@@ -4,17 +4,26 @@ import {
   listIdeas,
   ideaStats,
   ensureDailyIdea,
+  enrichIdea,
   addRecommendation,
   type Verdict,
 } from "@/lib/company/ideas";
+import { getLearningSnapshot } from "@/lib/company/learning";
 
 export const dynamic = "force-dynamic";
 
-/** GET: today's team idea is guaranteed, then the full ideas board. */
+/** GET: today's team idea is guaranteed, then the full ideas board — each idea
+ *  annotated against the company's adaptive confidence threshold (F6). */
 export async function GET() {
   try {
-    ensureDailyIdea();
-    return NextResponse.json({ ok: true, ideas: listIdeas(), stats: ideaStats() });
+    const daily = ensureDailyIdea();
+    await enrichIdea(daily.id);
+    const threshold = getLearningSnapshot().confidenceThreshold;
+    const ideas = listIdeas().map((i) => ({
+      ...i,
+      belowThreshold: i.aggregate ? i.aggregate.confidence < threshold : false,
+    }));
+    return NextResponse.json({ ok: true, ideas, stats: ideaStats(), confidenceThreshold: threshold });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Ideas failed" },
@@ -54,6 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const idea = submitIdea({ title, hypothesis, budgetSAR, horizonDays, source: "OWNER" });
+    await enrichIdea(idea.id);
     return NextResponse.json({ ok: true, idea, stats: ideaStats() });
   } catch (error) {
     return NextResponse.json(

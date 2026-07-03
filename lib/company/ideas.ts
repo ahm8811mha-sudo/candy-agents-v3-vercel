@@ -15,6 +15,7 @@
 import { createApproval, listApprovals } from "../approvals";
 import { getAgent } from "./agents";
 import { requiredTier, requiresFeasibility } from "./governance";
+import { runAgent } from "../ai";
 
 export type IdeaSource = "OWNER" | "TEAM";
 export type IdeaStatus = "UNDER_STUDY" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -43,7 +44,8 @@ export type Idea = {
   tier: string;
   tierLabel: string;
   recommendations: IdeaRecommendation[];
-  aggregate?: { verdict: Verdict; confidence: number; summary: string };
+  aggregate?: { verdict: Verdict; confidence: number; summary: string; narrative?: string };
+  studyMode?: "LLM" | "HEURISTIC";
   approvalId?: string;
   dayKey?: string;
   createdAt: string;
@@ -189,6 +191,37 @@ export function submitIdea(input: SubmitIdeaInput): Idea {
   };
   store.unshift(idea);
   return studyAndGate(idea);
+}
+
+/**
+ * F3 — Enrich an idea's study with real LLM reasoning when OPENAI_API_KEY is
+ * set. The heuristic verdicts/confidence remain the deterministic base (so
+ * governance stays stable and testable); the LLM adds a reasoned narrative that
+ * cites the idea's numbers. Without a key it degrades to heuristic-only.
+ */
+export async function enrichIdea(ideaId: string): Promise<Idea | null> {
+  const idea = store.find((i) => i.id === ideaId);
+  if (!idea) return null;
+  if (!process.env.OPENAI_API_KEY) {
+    idea.studyMode = "HEURISTIC";
+    return idea;
+  }
+  try {
+    const prompt = `فكرة استثمارية داخل الشركة: «${idea.title}».
+الفرضية: ${idea.hypothesis}
+الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA")} ر.س · الأفق الزمني: ${idea.horizonDays} يوماً.
+تقارير الأقسام: ${idea.recommendations.map((r) => `${r.agentName}: ${r.report}`).join(" | ")}
+اكتب تحليل جدوى تنفيذياً موجزاً (4–6 أسطر) يستشهد بالأرقام، يحدّد أهم مخاطرة وأهم شرط للنجاح، وينتهي بتوصية واضحة.`;
+    const narrative = await runAgent(prompt, {
+      agentName: "feasibility_agent",
+      system: "أنت لجنة دراسة جدوى في شركة سعودية. حلّل بأرقام الفكرة بصدق ودون مجاملة، بالعربية، ولا تذكر أنك نموذج.",
+    });
+    idea.aggregate = { ...(idea.aggregate as NonNullable<Idea["aggregate"]>), narrative };
+    idea.studyMode = "LLM";
+  } catch {
+    idea.studyMode = "HEURISTIC";
+  }
+  return idea;
 }
 
 /** Extra team participation beyond the three core studies. */

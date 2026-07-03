@@ -39,7 +39,9 @@ type Idea = {
   tier: string;
   tierLabel: string;
   recommendations: Recommendation[];
-  aggregate?: { verdict: Verdict; confidence: number; summary: string };
+  aggregate?: { verdict: Verdict; confidence: number; summary: string; narrative?: string };
+  studyMode?: "LLM" | "HEURISTIC";
+  belowThreshold?: boolean;
   dayKey?: string;
 };
 
@@ -222,6 +224,7 @@ export default function IdeasBoard() {
                 </div>
                 <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
                   <span className={`mini-pill ${statusMeta[idea.status].pill}`}>{statusMeta[idea.status].label}</span>
+                  {idea.belowThreshold && <span className="mini-pill medium">دون حد الثقة</span>}
                   <b style={{ fontVariantNumeric: "tabular-nums" }}>{sar.format(idea.budgetSAR)}</b>
                   <small style={{ color: "var(--muted)" }}>الفئة {idea.tier} · {idea.horizonDays} يوماً</small>
                 </div>
@@ -248,8 +251,14 @@ export default function IdeasBoard() {
               </div>
 
               {idea.aggregate && (
-                <div className="statement-row" style={{ background: "var(--accent-sky-soft)" }}>
-                  <span><Sparkles size={14} style={{ color: "var(--accent-sky)" }} /> {idea.aggregate.summary}</span>
+                <div className="statement-row" style={{ background: "var(--accent-sky-soft)", display: "grid", gap: 6 }}>
+                  <span>
+                    <Sparkles size={14} style={{ color: "var(--accent-sky)" }} /> {idea.aggregate.summary}
+                    {idea.studyMode === "LLM" && <span className="mini-pill done" style={{ marginInlineStart: 8 }}>تحليل ذكاء AI</span>}
+                  </span>
+                  {idea.aggregate.narrative && (
+                    <small style={{ color: "var(--muted)", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{idea.aggregate.narrative}</small>
+                  )}
                 </div>
               )}
 
