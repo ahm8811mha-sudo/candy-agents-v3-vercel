@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 
 let adminClient: SupabaseClient | null = null;
 
@@ -36,14 +37,27 @@ export function getSupabaseAdmin() {
  * their synchronous signatures and every existing test still passes unchanged.
  */
 
-/** Fire-and-forget upsert; never blocks or throws into the caller. */
+/**
+ * Non-blocking upsert; never throws into the caller. Keeps the store's sync
+ * signatures while persisting durably.
+ *
+ * On Vercel the request function is frozen the moment the response is sent, so a
+ * plain fire-and-forget promise would be killed before it reaches Supabase. We
+ * hand the write to `after()` so the serverless runtime keeps the invocation
+ * alive until the insert completes. Outside a request scope (long-running
+ * server, scripts) `after()` throws, so we fall back to letting it float.
+ */
 export function persist(table: string, row: Record<string, unknown>, onConflict = "id"): void {
   const supabase = getSupabaseAdmin();
   if (!supabase) return;
-  void supabase
-    .from(table)
-    .upsert(row, { onConflict })
-    .then(() => undefined, () => undefined);
+  const write: Promise<void> = Promise.resolve(
+    supabase.from(table).upsert(row, { onConflict })
+  ).then(() => undefined, () => undefined);
+  try {
+    after(write);
+  } catch {
+    void write;
+  }
 }
 
 /** Load rows from a table (newest-first by default); [] on any failure. */
