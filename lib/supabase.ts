@@ -8,7 +8,7 @@ function supabaseUrl() {
 }
 
 function supabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  return process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
 export function hasSupabaseEnv() {
@@ -35,6 +35,10 @@ export function getSupabaseAdmin() {
  * its store once per process from Supabase on the first read (`hydrateOnce`).
  * All helpers are no-ops when Supabase is not configured, so the modules keep
  * their synchronous signatures and every existing test still passes unchanged.
+ *
+ * Security rule: server persistence requires SUPABASE_SERVICE_ROLE_KEY. The
+ * public anon key is intentionally not accepted here because this module writes
+ * governance, approvals, ledger, and audit data from server routes.
  */
 
 /**
