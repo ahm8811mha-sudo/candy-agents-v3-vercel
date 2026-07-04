@@ -36,6 +36,7 @@ import TradingDeskPanel from "./TradingDeskPanel";
 import ScalpingSignalPanel from "./ScalpingSignalPanel";
 import ApprovalCenter from "./ApprovalCenter";
 import AccountPanel from "./AccountPanel";
+import ActionQueuePanel from "./ActionQueuePanel";
 
 type ExecutionResult = {
   ok: true;
@@ -44,7 +45,15 @@ type ExecutionResult = {
     expenses: number;
     profit: number;
     transactionCount: number;
+    source?: "ledger" | "demo";
   };
+  intelligence?: {
+    confidence?: number;
+    riskLevel?: string;
+    actionToday?: string;
+    assumptions?: string[];
+  };
+  actions?: Array<{ actionType: string; title: string; confidence?: number; blockedBy?: string[] }>;
   cfo: string;
   ceo: string;
   tasks: string;
@@ -69,6 +78,7 @@ type DashboardData = {
   projects: unknown[];
   tasks: unknown[];
   decisions: unknown[];
+  actions: unknown[];
 };
 
 const currency = new Intl.NumberFormat("ar-SA", {
@@ -126,6 +136,7 @@ export default function StrategyRunner() {
           projects: data.projects || [],
           tasks: data.tasks || [],
           decisions: data.decisions || [],
+          actions: data.actions || [],
         });
       }
     } catch {
@@ -163,7 +174,6 @@ export default function StrategyRunner() {
     loadDashboard();
   }, []);
 
-  // Allow deep-linking to a specific tab, e.g. /?tab=trading from the CEO office.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requested = params.get("tab") as TabKey | null;
@@ -174,13 +184,12 @@ export default function StrategyRunner() {
 
   return (
     <main className="company-app">
-      {/* Hero Section */}
       <section className="request-panel">
         <div className="request-copy">
           <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي تنفيذية</span>
           <h1>اكتب الطلب، والشركة تقرر ثم تنشئ مشروع التنفيذ</h1>
           <p>
-            يقرأ البيانات المالية، يراجعها المدير المالي، يعتمد الرئيس التنفيذي القرار، ثم تتحول النتيجة إلى مهام ومشروع محفوظين.
+            يقرأ النظام الدفتر المالي، يراجع CFO وCEO القرار، ثم تتحول النتيجة إلى مشروع ومهام وAction Queue قابلة للتتبع.
           </p>
         </div>
 
@@ -204,7 +213,6 @@ export default function StrategyRunner() {
         </form>
       </section>
 
-      {/* Stages Strip */}
       <section className="employee-strip" aria-label="مراحل تنفيذ الشركة">
         {stages.map((stage, index) => {
           const Icon = stage.icon;
@@ -221,7 +229,6 @@ export default function StrategyRunner() {
         })}
       </section>
 
-      {/* Section Tabs */}
       <div className="section-tabs" role="tablist" aria-label="أقسام التطبيق">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -240,7 +247,6 @@ export default function StrategyRunner() {
         })}
       </div>
 
-      {/* Tab: Execution Results */}
       {activeTab === "execution" && (
         <>
           <section className="delivery-panel fade-in">
@@ -278,6 +284,10 @@ export default function StrategyRunner() {
 الحالة: ${result.project.status || "ACTIVE"}
 المهمة: ${result.task.title}
 حالة المهمة: ${result.task.status}
+مصدر المالية: ${result.financials.source === "ledger" ? "Ledger" : "Demo"}
+الثقة: ${result.intelligence?.confidence ?? "غير متاح"}%
+قرار اليوم: ${result.intelligence?.actionToday || "غير متاح"}
+الأفعال التنفيذية: ${result.actions?.length ?? 0}
 الحفظ في قاعدة البيانات: ${result.saved ? "تم" : "غير متصل بقاعدة البيانات"}`}</pre>
                 </article>
 
@@ -292,39 +302,42 @@ export default function StrategyRunner() {
         </>
       )}
 
-      {/* Tab: Dashboard */}
       {activeTab === "dashboard" && (
-        <section className="delivery-panel fade-in">
-          <div className="delivery-header">
-            <div>
-              <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
-              <h2>لوحة متابعة الشركة</h2>
+        <>
+          <section className="delivery-panel fade-in">
+            <div className="delivery-header">
+              <div>
+                <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
+                <h2>لوحة متابعة الشركة</h2>
+              </div>
+              <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
             </div>
-            <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
-          </div>
 
-          <div className="finance-summary" style={{ marginBottom: 16 }}>
-            <DashboardMetric title="المشاريع" value={dashboard?.projects.length ?? 0} />
-            <DashboardMetric title="المهام" value={dashboard?.tasks.length ?? 0} />
-            <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
-          </div>
+            <div className="finance-summary" style={{ marginBottom: 16 }}>
+              <DashboardMetric title="المشاريع" value={dashboard?.projects.length ?? 0} />
+              <DashboardMetric title="المهام" value={dashboard?.tasks.length ?? 0} />
+              <DashboardMetric title="القرارات المالية" value={dashboard?.decisions.length ?? 0} />
+              <DashboardMetric title="الأفعال" value={dashboard?.actions.length ?? 0} />
+            </div>
 
-          <h3 style={{ margin: "0 0 12px", fontSize: "1.1rem" }}>الانتقال السريع</h3>
-          <div className="quick-nav">
-            {quickNavItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link key={item.href} href={item.href} className="quick-nav-card">
-                  <span><Icon size={18} /></span>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
+            <h3 style={{ margin: "0 0 12px", fontSize: "1.1rem" }}>الانتقال السريع</h3>
+            <div className="quick-nav">
+              {quickNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href} className="quick-nav-card">
+                    <span><Icon size={18} /></span>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+
+          <ActionQueuePanel />
+        </>
       )}
 
-      {/* Tab: Trading Desk */}
       {activeTab === "trading" && (
         <>
           <AccountPanel />
@@ -334,19 +347,10 @@ export default function StrategyRunner() {
         </>
       )}
 
-      {/* Tab: Store */}
       {activeTab === "store" && <ShopifyPanel />}
-
-      {/* Tab: Monitoring */}
       {activeTab === "monitoring" && <MonitoringPanel />}
-
-      {/* Tab: Reports */}
       {activeTab === "reports" && <ExecutiveReport />}
-
-      {/* Tab: Memory */}
       {activeTab === "memory" && <AgentMemoryPanel />}
-
-      {/* Tab: Integrations */}
       {activeTab === "integrations" && <IntegrationsPanel />}
     </main>
   );
