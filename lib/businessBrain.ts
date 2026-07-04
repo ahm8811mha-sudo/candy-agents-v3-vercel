@@ -11,6 +11,13 @@ export type BusinessAlert = {
   metadata?: Record<string, unknown>;
 };
 
+export type DecisionEvidence = {
+  source: "financials" | "request" | "rules_engine" | "approval_matrix" | "memory" | "integration";
+  type: "metric" | "text" | "rule" | "system";
+  summary: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type RecommendedAction = {
   actionType: string;
   title: string;
@@ -19,12 +26,16 @@ export type RecommendedAction = {
   provider?: string;
   executionMode: "INTERNAL" | "READY_FOR_INTEGRATION";
   requiresApproval: boolean;
+  confidence: number;
+  assumptions: string[];
+  evidence: DecisionEvidence[];
+  blockedBy?: string[];
 };
 
 export type ApprovalPolicy = {
   budget: number;
-  gate: "AUTO" | "CFO" | "CEO" | "RISK";
-  requiredRole: "NONE" | "CFO" | "CEO" | "RISK_AGENT";
+  gate: "AUTO" | "CEO" | "OWNER" | "RISK";
+  requiredRole: "NONE" | "CEO" | "OWNER" | "RISK_AGENT";
   reason: string;
 };
 
@@ -40,6 +51,9 @@ export type BusinessIntelligence = {
   approval: ApprovalPolicy;
   alerts: BusinessAlert[];
   recommendedActions: RecommendedAction[];
+  confidence: number;
+  assumptions: string[];
+  evidence: DecisionEvidence[];
 };
 
 export type ExecutionStep = {
@@ -91,6 +105,73 @@ export function extractRequestedBudget(request: string) {
 
   if (numbers.length === 0) return 0;
   return Math.max(...numbers);
+}
+
+function buildBaseEvidence(request: string, financials: Financials, requestedBudget: number): DecisionEvidence[] {
+  return [
+    {
+      source: "request",
+      type: "text",
+      summary: `نص الطلب الذي بُني عليه القرار: ${request.slice(0, 240)}`,
+      metadata: { requestedBudget },
+    },
+    {
+      source: "financials",
+      type: "metric",
+      summary: `الإيرادات ${financials.income.toLocaleString("ar-SA")} ريال، المصروفات ${financials.expenses.toLocaleString("ar-SA")} ريال، صافي الربح ${financials.profit.toLocaleString("ar-SA")} ريال.`,
+      metadata: financials as unknown as Record<string, unknown>,
+    },
+  ];
+}
+
+function buildAssumptions(requestedBudget: number, financials: Financials): string[] {
+  const assumptions = [
+    "الأرقام المتاحة في النظام هي مصدر القرار الحالي، وقد تتغير بعد ربط بيانات فعلية من المتجر أو المحاسبة.",
+    "أي تنفيذ خارجي مثل إعلانات أو واتساب أو متجر يجب أن يمر عبر Action Queue قبل التنفيذ الفعلي.",
+  ];
+  if (requestedBudget <= 0) assumptions.push("لم يتم رصد ميزانية صريحة في الطلب، لذلك تُعامل الخطة كتجربة محدودة منخفضة التكلفة.");
+  if (financials.income <= 0) assumptions.push("لا توجد إيرادات كافية في السجل الحالي، لذلك يجب اعتبار أي توسع تجربة لا مشروع توسع كامل.");
+  return assumptions;
+}
+
+function scoreConfidence(financials: Financials, requestedBudget: number, alerts: BusinessAlert[]) {
+  let score = 74;
+  if (financials.transactionCount <= 0) score -= 18;
+  if (financials.income <= 0) score -= 14;
+  if (requestedBudget <= 0) score -= 8;
+  if (alerts.some((alert) => alert.severity === "CRITICAL")) score -= 15;
+  if (alerts.some((alert) => alert.severity === "HIGH")) score -= 8;
+  return Math.round(clamp(score, 20, 92));
+}
+
+function withActionControls(
+  action: Omit<RecommendedAction, "confidence" | "assumptions" | "evidence" | "blockedBy">,
+  context: {
+    confidence: number;
+    assumptions: string[];
+    evidence: DecisionEvidence[];
+    approval: ApprovalPolicy;
+  }
+): RecommendedAction {
+  const blockedBy: string[] = [];
+  if (action.executionMode === "READY_FOR_INTEGRATION") blockedBy.push("يتطلب ربط التكامل الخارجي قبل التنفيذ الآلي.");
+  if (action.requiresApproval) blockedBy.push(`يتطلب اعتماد ${context.approval.requiredRole} قبل التنفيذ.`);
+
+  return {
+    ...action,
+    confidence: context.confidence,
+    assumptions: context.assumptions,
+    evidence: [
+      ...context.evidence,
+      {
+        source: "rules_engine",
+        type: "rule",
+        summary: `تم توليد الإجراء ${action.actionType} بناءً على قواعد المخاطر والميزانية.` ,
+        metadata: { priority: action.priority, executionMode: action.executionMode },
+      },
+    ],
+    blockedBy,
+  };
 }
 
 export function evaluateBusiness(request: string, financials: Financials): BusinessIntelligence {
@@ -161,8 +242,23 @@ export function evaluateBusiness(request: string, financials: Financials): Busin
         : "LOW";
 
   const approval = getApprovalPolicy(requestedBudget, riskLevel, profit);
+  const evidence = [
+    ...buildBaseEvidence(request, financials, requestedBudget),
+    {
+      source: "approval_matrix" as const,
+      type: "rule" as const,
+      summary: `بوابة الاعتماد: ${approval.gate}. السبب: ${approval.reason}`,
+      metadata: approval,
+    },
+  ];
+  const assumptions = buildAssumptions(requestedBudget, financials);
+  const confidence = scoreConfidence(financials, requestedBudget, alerts);
   const actionToday = chooseActionToday(profit, expenseRatio, requestedBudget, approval.gate);
-  const recommendedActions = buildRecommendedActions(request, requestedBudget, approval, riskLevel);
+  const recommendedActions = buildRecommendedActions(request, requestedBudget, approval, riskLevel, {
+    confidence,
+    assumptions,
+    evidence,
+  });
 
   return {
     requestedBudget,
@@ -176,6 +272,9 @@ export function evaluateBusiness(request: string, financials: Financials): Busin
     approval,
     alerts,
     recommendedActions,
+    confidence,
+    assumptions,
+    evidence,
   };
 }
 
@@ -198,20 +297,20 @@ function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number)
     };
   }
 
-  if (budget <= 50000) {
+  if (budget <= 25000) {
     return {
       budget,
-      gate: "CFO",
-      requiredRole: "CFO",
-      reason: "الميزانية متوسطة وتحتاج اعتماد المدير المالي قبل الصرف.",
+      gate: "CEO",
+      requiredRole: "CEO",
+      reason: "الميزانية ضمن شريحة T1 وتحتاج اعتماد CEO Agent قبل الصرف.",
     };
   }
 
   return {
     budget,
-    gate: "CEO",
-    requiredRole: "CEO",
-    reason: "الميزانية عالية وتحتاج اعتماد الرئيس التنفيذي.",
+    gate: "OWNER",
+    requiredRole: "OWNER",
+    reason: "الميزانية تتجاوز صلاحية التشغيل الذاتي وتحتاج اعتماد المالك وربط التنفيذ بمراجعة جدوى.",
   };
 }
 
@@ -219,8 +318,8 @@ function chooseActionToday(profit: number, expenseRatio: number, budget: number,
   if (profit < 0) return "إيقاف المصاريف غير الضرورية وطلب مراجعة مالية قبل أي توسع.";
   if (expenseRatio > 0.7) return "خفض المصاريف التشغيلية أو التسويقية غير المثبتة بعائد.";
   if (gate === "AUTO") return "تشغيل تجربة صغيرة اليوم مع قياس الإيراد والتكلفة خلال أسبوعين.";
-  if (gate === "CFO") return "إرسال الطلب لاعتماد CFO ثم تشغيل مرحلة أولى محدودة.";
-  if (gate === "CEO") return "رفع القرار إلى CEO مع خطة مراحل واضحة قبل الصرف.";
+  if (gate === "CEO") return "إرسال الطلب لاعتماد CEO ثم تشغيل مرحلة أولى محدودة.";
+  if (gate === "OWNER") return "رفع القرار للمالك مع خطة مراحل ومخاطر واضحة قبل الصرف.";
   if (budget > 0) return "تقسيم الميزانية إلى دفعات ومراجعة المخاطر قبل التنفيذ.";
   return "إنشاء مشروع تجريبي وربطه بمؤشرات أداء قابلة للقياس.";
 }
@@ -229,53 +328,70 @@ function buildRecommendedActions(
   request: string,
   budget: number,
   approval: ApprovalPolicy,
-  riskLevel: RiskLevel
+  riskLevel: RiskLevel,
+  controls: { confidence: number; assumptions: string[]; evidence: DecisionEvidence[] }
 ): RecommendedAction[] {
   const requiresApproval = approval.requiredRole !== "NONE";
+  const context = { ...controls, approval };
   return [
-    {
-      actionType: "BUDGET_GATE",
-      title: "اعتماد الميزانية المرحلية",
-      description: approval.reason,
-      priority: requiresApproval ? "URGENT" : "HIGH",
-      executionMode: "INTERNAL",
-      requiresApproval,
-    },
-    {
-      actionType: "PRICING_EXPERIMENT",
-      title: "اختبار عرض وسعر أولي",
-      description: `تحويل الطلب إلى عرض تجاري قابل للبيع: ${request.slice(0, 120)}`,
-      priority: "HIGH",
-      executionMode: "INTERNAL",
-      requiresApproval: false,
-    },
-    {
-      actionType: "MARKETING_CAMPAIGN_DRAFT",
-      title: "تجهيز حملة تسويق تجريبية",
-      description: `إعداد حملة محدودة بميزانية لا تتجاوز ${Math.max(1000, Math.round((budget || 5000) * 0.15)).toLocaleString("ar-SA")} ريال.`,
-      priority: riskLevel === "HIGH" ? "MEDIUM" : "HIGH",
-      provider: "Google Ads / Meta Ads",
-      executionMode: "READY_FOR_INTEGRATION",
-      requiresApproval,
-    },
-    {
-      actionType: "SUPPLIER_SHORTLIST",
-      title: "قائمة موردين ومخزون",
-      description: "تجهيز قائمة موردين أو أدوات تشغيل وتقدير تكلفة الوحدة والهامش.",
-      priority: "MEDIUM",
-      provider: "Supplier sheet",
-      executionMode: "READY_FOR_INTEGRATION",
-      requiresApproval: false,
-    },
-    {
-      actionType: "SALES_OUTREACH",
-      title: "تجهيز رسالة مبيعات",
-      description: "إعداد رسالة بريد أو واتساب لاختبار الطلب مع أول شريحة عملاء.",
-      priority: "MEDIUM",
-      provider: "Email / WhatsApp",
-      executionMode: "READY_FOR_INTEGRATION",
-      requiresApproval: false,
-    },
+    withActionControls(
+      {
+        actionType: "BUDGET_GATE",
+        title: "اعتماد الميزانية المرحلية",
+        description: approval.reason,
+        priority: requiresApproval ? "URGENT" : "HIGH",
+        executionMode: "INTERNAL",
+        requiresApproval,
+      },
+      context
+    ),
+    withActionControls(
+      {
+        actionType: "PRICING_EXPERIMENT",
+        title: "اختبار عرض وسعر أولي",
+        description: `تحويل الطلب إلى عرض تجاري قابل للبيع: ${request.slice(0, 120)}`,
+        priority: "HIGH",
+        executionMode: "INTERNAL",
+        requiresApproval: false,
+      },
+      context
+    ),
+    withActionControls(
+      {
+        actionType: "MARKETING_CAMPAIGN_DRAFT",
+        title: "تجهيز حملة تسويق تجريبية",
+        description: `إعداد حملة محدودة بميزانية لا تتجاوز ${Math.max(1000, Math.round((budget || 5000) * 0.15)).toLocaleString("ar-SA")} ريال.`,
+        priority: riskLevel === "HIGH" ? "MEDIUM" : "HIGH",
+        provider: "Google Ads / Meta Ads",
+        executionMode: "READY_FOR_INTEGRATION",
+        requiresApproval,
+      },
+      context
+    ),
+    withActionControls(
+      {
+        actionType: "SUPPLIER_SHORTLIST",
+        title: "قائمة موردين ومخزون",
+        description: "تجهيز قائمة موردين أو أدوات تشغيل وتقدير تكلفة الوحدة والهامش.",
+        priority: "MEDIUM",
+        provider: "Supplier sheet",
+        executionMode: "READY_FOR_INTEGRATION",
+        requiresApproval: false,
+      },
+      context
+    ),
+    withActionControls(
+      {
+        actionType: "SALES_OUTREACH",
+        title: "تجهيز رسالة مبيعات",
+        description: "إعداد رسالة بريد أو واتساب لاختبار الطلب مع أول شريحة عملاء.",
+        priority: "MEDIUM",
+        provider: "Email / WhatsApp",
+        executionMode: "READY_FOR_INTEGRATION",
+        requiresApproval: false,
+      },
+      context
+    ),
   ];
 }
 
