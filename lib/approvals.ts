@@ -88,6 +88,8 @@ export type CreateApprovalInput = {
   metadata?: Record<string, unknown>;
   /** Optional idempotency key to avoid duplicate pending items. */
   dedupeKey?: string;
+  /** Optional deterministic id so concurrent cold starts upsert one row. */
+  id?: string;
 };
 
 export function createApproval(input: CreateApprovalInput): ApprovalItem {
@@ -97,9 +99,14 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     );
     if (existing) return existing;
   }
+  // A deterministic id already present (hydrated or same process) is reused.
+  if (input.id) {
+    const existing = store.find((a) => a.id === input.id);
+    if (existing) return existing;
+  }
 
   const item: ApprovalItem = {
-    id: genId(),
+    id: input.id || genId(),
     type: input.type,
     title: input.title,
     detail: input.detail,

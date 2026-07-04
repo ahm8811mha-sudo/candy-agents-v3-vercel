@@ -62,6 +62,26 @@ describe("ideas pipeline", () => {
     expect(ideaStats().fromTeam).toBe(2);
   });
 
+  it("the daily team idea uses a deterministic day-keyed id (no cross-restart dupes)", () => {
+    const now = new Date("2026-07-04T08:00:00Z");
+    const a = ensureDailyIdea(now);
+    expect(a.id).toBe("idea-daily-2026-07-04");
+    // Simulate a second cold instance re-submitting the same deterministic id
+    // (e.g. before the first write hydrated) — it must collapse to one idea.
+    const b = submitIdea({
+      title: a.title,
+      hypothesis: a.hypothesis,
+      budgetSAR: a.budgetSAR,
+      horizonDays: a.horizonDays,
+      source: "TEAM",
+      proposedBy: "rased",
+      id: "idea-daily-2026-07-04",
+      dayKey: "2026-07-04",
+    });
+    expect(b.id).toBe(a.id);
+    expect(ideaStats().fromTeam).toBe(1);
+  });
+
   it("other agents can add recommendations (team participation)", () => {
     const idea = submitIdea({ title: "ف", hypothesis: "ف", budgetSAR: 5_000, horizonDays: 14 });
     const updated = addRecommendation(idea.id, "sara", "APPROVE", "قاعدة عملائنا مناسبة لهذه الفكرة");
