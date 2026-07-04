@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listApprovals, decideApproval, approvalStats, type ApprovalStatus } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
+import { executeApprovedIdea } from "@/lib/company/ideaExecution";
 import { authenticateRequest } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { requiredTier } from "@/lib/company/governance";
@@ -59,13 +60,15 @@ export async function POST(req: NextRequest) {
       tier,
     });
 
-    // On approval, run the item's governed side-effect: place the trade, book
-    // the sales income, or apply the store change.
+    // On approval, run the item's governed side-effect. The important business
+    // fix is IDEA: an approved idea must become an execution project, not only
+    // a green status in the inbox.
     let execution = null;
     if (decision === "APPROVED") {
       if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
       else if (result.type === "INCOME") execution = recognizeIncome(result.metadata || {});
       else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
+      else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
     }
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
