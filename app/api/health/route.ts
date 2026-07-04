@@ -14,8 +14,13 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    service: "Candy Agents",
-    version: "2.3.0",
+    service: "Orvanta",
+    brand: {
+      name: "Orvanta",
+      arabicName: "أورفانتا",
+      tagline: "AI Operating System for Business",
+    },
+    version: "2.4.0",
     productionReady: readiness.okForProduction,
     readiness,
     checks: {
