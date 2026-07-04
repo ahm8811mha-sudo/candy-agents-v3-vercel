@@ -22,6 +22,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
+import OrvantaLogo from "./OrvantaLogo";
 
 type Dashboard = {
   projects: Array<{ id: string }>;
@@ -86,30 +87,56 @@ export default function CompanyOverview() {
 
   return (
     <main className="page-wrap">
-      {/* Scenic hero */}
       <header className="hero-scenic">
+        <div className="orvanta-hero-brand">
+          <OrvantaLogo size={58} subtitle="AI Operating System for Business" />
+        </div>
+
         <span className="hero-pill">
-          <Sparkles size={14} /> النجمة الذهبية · نظام تشغيل الأعمال بالذكاء الاصطناعي
+          <Sparkles size={14} /> Orvanta · نظام التشغيل الذكي للأعمال والتجارة والاستثمار
         </span>
+
         <h1 className="hero-title">
-          شركة كاملة تعمل بالذكاء،
+          شركة كاملة تعمل بالذكاء الاصطناعي،
           <br />
-          والقرار الأخير <em>بيدك</em>
+          من القرار إلى <em>التنفيذ</em>
         </h1>
+
         <p className="hero-sub">
-          الوكلاء يقترحون فكرة كل يوم ويدرسونها ويوصون — وكل ما يتجاوز الصلاحيات يصلك في مركز القرار لتعتمده أو ترفضه.
+          أورفانتا تدير الأفكار، الاعتمادات، المشاريع، المؤشرات، وAction Queue عبر وكلاء ذكاء اصطناعي —
+          مع بقاء القرار النهائي بيدك.
         </p>
+
         <div className="hero-actions">
           <Link className="primary-btn" href="/inbox"><Inbox size={17} /> مركز القرار{pending > 0 ? ` (${pending})` : ""}</Link>
           <Link className="secondary-btn" href="/ideas"><Lightbulb size={17} /> الأفكار</Link>
+          <Link className="secondary-btn" href="/operations"><Send size={17} /> تشغيل Orvanta</Link>
           <Link className="secondary-btn" href="/office"><Activity size={17} /> المكتب الحيّ</Link>
         </div>
+
+        <div className="orvanta-system-card" aria-label="Orvanta AI operating system logo concept">
+          <div className="orvanta-system-orbit">
+            <OrvantaLogo size={112} showWordmark={false} />
+            <i className="orvanta-node n1" />
+            <i className="orvanta-node n2" />
+            <i className="orvanta-node n3" />
+            <i className="orvanta-node n4" />
+          </div>
+        </div>
+
         <div className="hero-logos">
           <span>{pulse ? `${pulse.workingCount} وكيلاً يعمل الآن` : "8 أقسام تشغيلية"}</span>
           <i />
           <span>{dash?.projects.length ?? 0} مشروع نشط</span>
           <i />
           <span>{pending} قرار بانتظارك</span>
+        </div>
+
+        <div className="orvanta-brand-strip">
+          <span>AI Agents</span>
+          <span>Business OS</span>
+          <span>Trade & Investment</span>
+          <span>Enterprise Governance</span>
         </div>
       </header>
 
@@ -119,10 +146,9 @@ export default function CompanyOverview() {
         </div>
       )}
 
-      {/* The decision of the day — hero of the cockpit */}
       {decision && (
         <section className="bento-card bento-full bento-card--glow" style={{ gap: 12 }}>
-          <span className="bento-kicker"><Sparkles size={15} /> قرار اليوم — خلاصة قراءة الشركة كاملة</span>
+          <span className="bento-kicker"><Sparkles size={15} /> قرار اليوم — خلاصة قراءة Orvanta للأعمال</span>
           <strong style={{ fontSize: "clamp(1.15rem, 2.6vw, 1.55rem)", lineHeight: 1.6, color: "var(--text-strong)" }}>
             {decision.decisionToday}
           </strong>
@@ -134,7 +160,6 @@ export default function CompanyOverview() {
         </section>
       )}
 
-      {/* Cockpit bento */}
       <section className="bento-grid">
         <Link href="/inbox" className={`bento-card bento-2x ${pending > 0 ? "bento-card--amber" : ""}`}>
           <span className="bento-kicker"><Inbox size={15} /> مركز القرار الموحّد</span>
@@ -182,14 +207,12 @@ export default function CompanyOverview() {
         </Link>
       </section>
 
-      {/* Daily digest — the company reaches out */}
       <DigestCard />
 
-      {/* Live pulse strip */}
       {pulse && pulse.events.length > 0 && (
         <section className="bento-card bento-full" style={{ gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span className="bento-kicker"><Activity size={15} /> نبض الشركة الآن</span>
+            <span className="bento-kicker"><Activity size={15} /> نبض Orvanta الآن</span>
             <Link href="/office" className="secondary-btn btn-sm">المكتب <ArrowLeft size={12} /></Link>
           </div>
           <div className="bento-list">
@@ -203,9 +226,8 @@ export default function CompanyOverview() {
         </section>
       )}
 
-      {/* Departments */}
       <section className="bento-card bento-full">
-        <span className="bento-kicker"><Building2 size={15} /> الأقسام</span>
+        <span className="bento-kicker"><Building2 size={15} /> أقسام Orvanta</span>
         <div className="quick-nav" style={{ marginTop: 4 }}>
           {departments.map((d) => {
             const Icon = d.icon;
@@ -220,7 +242,7 @@ export default function CompanyOverview() {
       </section>
 
       <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-        <Link className="secondary-btn" href="/operations"><Send size={16} /> تشغيل طلب شركة كامل</Link>
+        <Link className="secondary-btn" href="/operations"><Send size={16} /> تشغيل طلب شركة كامل عبر Orvanta</Link>
       </div>
     </main>
   );
@@ -256,7 +278,7 @@ function DigestCard() {
   return (
     <section className="bento-card bento-full" style={{ gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <span className="bento-kicker"><Sparkles size={15} /> الملخص اليومي · {digest.headline}</span>
+        <span className="bento-kicker"><Sparkles size={15} /> ملخص Orvanta اليومي · {digest.headline}</span>
         <button className="secondary-btn btn-sm" onClick={send} disabled={sending}>
           {sending ? <Loader2 className="spin" size={14} /> : <Send size={14} />} إرسال الملخص للمالك
         </button>
