@@ -1,8 +1,16 @@
 import { calculateFinancials, type Financials } from "./accountingSystem";
-import { buildExecutionBlueprint, evaluateBusiness, type BusinessAlert, type BusinessIntelligence, type ExecutionBlueprint, type RecommendedAction } from "./businessBrain";
+import {
+  buildExecutionBlueprint,
+  evaluateBusiness,
+  type BusinessAlert,
+  type BusinessIntelligence,
+  type ExecutionBlueprint,
+  type RecommendedAction,
+} from "./businessBrain";
 import { getSupabaseAdmin } from "./supabase";
 import { getMemoryContext } from "./agentMemory";
 import { invalidateCache } from "./cache";
+import { normalizeActionInitialStatus } from "./company/actionQueue";
 
 type ExecutionProject = {
   id: string;
@@ -73,7 +81,7 @@ async function runAI(prompt: string, fallback: string) {
         {
           role: "system",
           content:
-            "You are a professional business AI operating as an enterprise company. Write in Arabic with structured, realistic execution outputs.",
+            "You are a professional business AI operating as an enterprise company. Write in Arabic with structured, realistic execution outputs. Every recommendation must include evidence, assumptions, confidence, risk, approval gate, and next executable action.",
         },
         { role: "user", content: prompt },
       ],
@@ -85,7 +93,7 @@ async function runAI(prompt: string, fallback: string) {
   return data.choices?.[0]?.message?.content || fallback;
 }
 
-function fallbackCfo(request: string, financials: Financials) {
+function fallbackCfo(request: string, financials: Financials, intelligence: BusinessIntelligence) {
   const recommendation =
     financials.profit > 0
       ? "موافقة مشروطة بمرحلة تجريبية وربط الصرف بعائد قابل للقياس."
@@ -101,11 +109,18 @@ ${recommendation}
 - الإيرادات: ${financials.income.toLocaleString("ar-SA")} ريال
 - المصروفات: ${financials.expenses.toLocaleString("ar-SA")} ريال
 - صافي الربح: ${financials.profit.toLocaleString("ar-SA")} ريال
+- الميزانية المطلوبة: ${intelligence.requestedBudget.toLocaleString("ar-SA")} ريال
+- بوابة الاعتماد: ${intelligence.approval.gate}
+
+### الثقة والأدلة
+- درجة الثقة: ${intelligence.confidence}%
+- الدليل المالي: ${intelligence.evidence.map((item) => item.summary).join(" | ")}
+
+### الافتراضات
+${intelligence.assumptions.map((item) => `- ${item}`).join("\n")}
 
 ### المخاطر
-- الالتزام بميزانية كبيرة قبل إثبات الطلب.
-- ضعف قياس العائد إذا لم توجد مؤشرات أسبوعية.
-- ضغط السيولة إذا تم الصرف دفعة واحدة.
+${intelligence.alerts.length ? intelligence.alerts.map((alert) => `- ${alert.title}: ${alert.message}`).join("\n") : "- لا توجد مخاطر حرجة مسجلة."}
 
 ### القرار المالي
 الطلب: ${request}
@@ -113,19 +128,20 @@ ${recommendation}
 `.trim();
 }
 
-function fallbackCeo(cfo: string) {
+function fallbackCeo(cfo: string, intelligence: BusinessIntelligence) {
   return `
 ## قرار CEO
 
 ### القرار النهائي
-اعتماد التنفيذ بشكل معدل ومشروط.
+اعتماد التنفيذ بشكل معدل ومشروط حسب بوابة الاعتماد: ${intelligence.approval.gate}.
 
 ### سبب القرار
-تقرير المدير المالي يوضح أن التنفيذ ممكن إذا تم التحكم في الصرف وتقسيم المخاطر.
+تقرير المدير المالي يوضح أن التنفيذ ممكن إذا تم التحكم في الصرف وتقسيم المخاطر. درجة الثقة الحالية ${intelligence.confidence}%.
 
 ### خطة التنفيذ
 - إنشاء مشروع تنفيذي رسمي.
 - تحويل القرار إلى مهام قابلة للمتابعة.
+- إدخال الأفعال في Action Queue بدل تنفيذها بشكل مخفي.
 - مراجعة الأداء خلال 14 يوم عمل.
 - إيقاف أو توسيع المشروع بناء على الربحية ومؤشرات التشغيل.
 
@@ -143,7 +159,7 @@ function fallbackTasks(decision: string) {
 - المدة: يومان
 
 2. اعتماد الميزانية المرحلية
-- المسؤول: المدير المالي
+- المسؤول: حسب بوابة الصلاحيات
 - المدة: يوم عمل
 
 3. تجهيز خطة التسويق الأولية
@@ -163,7 +179,7 @@ ${decision}
 `.trim();
 }
 
-async function CFO(request: string, financials: Financials) {
+async function CFO(request: string, financials: Financials, intelligence: BusinessIntelligence) {
   return runAI(
     `
 You are a CFO.
@@ -171,25 +187,32 @@ You are a CFO.
 Financials:
 ${JSON.stringify(financials, null, 2)}
 
+Business intelligence:
+${JSON.stringify(intelligence, null, 2)}
+
 Request:
 ${request}
 
 Give:
 - Budget approval
 - Financial impact
+- Evidence used
+- Assumptions
+- Confidence score
 - Risks
 - Decision
 
 Rules:
 - Be realistic.
 - Use corporate finance logic.
+- Do not invent unsupported numbers.
 - Write in Arabic.
 `,
-    fallbackCfo(request, financials)
+    fallbackCfo(request, financials, intelligence)
   );
 }
 
-async function CEO(cfo: string) {
+async function CEO(cfo: string, intelligence: BusinessIntelligence) {
   return runAI(
     `
 You are a CEO.
@@ -197,14 +220,18 @@ You are a CEO.
 CFO Report:
 ${cfo}
 
+Business intelligence:
+${JSON.stringify(intelligence, null, 2)}
+
 Give final decision and execution plan.
 
 Rules:
 - Make one clear executive decision.
 - Convert the decision into a practical business direction.
+- Include evidence, assumptions, confidence, approval gate, and next executable action.
 - Write in Arabic.
 `,
-    fallbackCeo(cfo)
+    fallbackCeo(cfo, intelligence)
   );
 }
 
@@ -219,6 +246,8 @@ Return:
 - Tasks list
 - Required roles
 - Timeline
+- KPI for each task
+- What must be approved before execution
 
 Rules:
 - Write practical execution tasks.
@@ -227,6 +256,20 @@ Rules:
 `,
     fallbackTasks(decision)
   );
+}
+
+function buildActionPayload(action: RecommendedAction, request: string, intelligence: BusinessIntelligence) {
+  return {
+    request,
+    priority: action.priority,
+    approval: intelligence.approval,
+    confidence: action.confidence,
+    assumptions: action.assumptions,
+    evidence: action.evidence,
+    blockedBy: action.blockedBy || [],
+    riskLevel: intelligence.riskLevel,
+    generatedBy: "businessBrain",
+  };
 }
 
 async function createProjectFlow(
@@ -280,6 +323,9 @@ async function createProjectFlow(
         requestedBudget: intelligence.requestedBudget,
         healthScore: intelligence.healthScore,
         riskLevel: intelligence.riskLevel,
+        confidence: intelligence.confidence,
+        assumptions: intelligence.assumptions,
+        evidence: intelligence.evidence,
         approval: intelligence.approval,
       },
       next_review_at: new Date(Date.now() + 14 * 86400000).toISOString(),
@@ -332,16 +378,17 @@ async function createProjectFlow(
     action_type: action.actionType,
     title: action.title,
     description: action.description,
-    status: action.requiresApproval ? "WAITING_APPROVAL" : "QUEUED",
+    status: normalizeActionInitialStatus({
+      requiresApproval: action.requiresApproval,
+      executionMode: action.executionMode,
+      approvalStatus: action.requiresApproval ? "PENDING" : "NOT_REQUIRED",
+    }),
     execution_mode: action.executionMode,
     provider: action.provider || "internal",
     requires_approval: action.requiresApproval,
     approval_status: action.requiresApproval ? "PENDING" : "NOT_REQUIRED",
-    payload: {
-      request,
-      priority: action.priority,
-      approval: intelligence.approval,
-    },
+    payload: buildActionPayload(action, request, intelligence),
+    attempts: 0,
   }));
   const { error: actionsError } = await supabase.from("business_actions").insert(actionRows);
   if (actionsError) throw actionsError;
@@ -385,8 +432,15 @@ async function createProjectFlow(
       request,
       tasksReport,
       healthScore: intelligence.healthScore,
+      confidence: intelligence.confidence,
+      assumptions: intelligence.assumptions,
+      evidence: intelligence.evidence,
       approval: intelligence.approval,
-      actions: blueprint.actions.map((action) => action.actionType),
+      actions: blueprint.actions.map((action) => ({
+        type: action.actionType,
+        confidence: action.confidence,
+        blockedBy: action.blockedBy || [],
+      })),
     },
   });
   if (memoryError) throw memoryError;
@@ -424,8 +478,8 @@ export async function runCompanyExecution(request: string): Promise<CompanyExecu
   const financials = await calculateFinancials();
   const intelligence = evaluateBusiness(request.trim(), financials);
   const memoryContext = await getMemoryContext(request.trim());
-  const cfo = await CFO(request.trim() + memoryContext, financials);
-  const ceo = await CEO(cfo);
+  const cfo = await CFO(request.trim() + memoryContext, financials, intelligence);
+  const ceo = await CEO(cfo, intelligence);
   await saveFinancialDecision(request.trim(), financials, cfo, ceo);
   const tasks = await generateTasks(ceo);
   const blueprint = buildExecutionBlueprint(request.trim(), intelligence);
@@ -481,7 +535,7 @@ export async function getDashboardData() {
     supabase.from("financial_decisions").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_alerts").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_kpis").select("*").order("created_at", { ascending: false }).limit(20),
-    supabase.from("business_actions").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("business_actions").select("*").order("created_at", { ascending: false }).limit(50),
     supabase.from("approvals").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_memory").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
