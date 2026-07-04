@@ -202,6 +202,7 @@ function studyAndGate(idea: Idea): Idea {
 
   const tier = requiredTier(idea.budgetSAR);
   const approval = createApproval({
+    id: `apr-${idea.id}`,
     type: "IDEA",
     title: `فكرة: ${idea.title}`,
     detail: `${idea.aggregate.summary} · الميزانية ${sar.format(idea.budgetSAR)} ر.س · الفئة ${tier.tier} — يعتمدها ${tier.approver}${requiresFeasibility(idea.budgetSAR) ? " · الجدوى الثلاثية مرفقة ✓" : ""} · مقدَّمة من ${idea.proposedByName}`,
@@ -224,12 +225,21 @@ export type SubmitIdeaInput = {
   horizonDays: number;
   source?: IdeaSource;
   proposedBy?: string;
+  /** Optional deterministic id (e.g. the daily team idea) so concurrent cold
+   *  starts upsert one row instead of duplicating. */
+  id?: string;
+  dayKey?: string;
 };
 
 export function submitIdea(input: SubmitIdeaInput): Idea {
+  // A deterministic id that already exists (hydrated or same process) is reused.
+  if (input.id) {
+    const existing = store.find((i) => i.id === input.id);
+    if (existing) return existing;
+  }
   const proposer = input.proposedBy ? getAgent(input.proposedBy) : undefined;
   const idea: Idea = {
-    id: genId(),
+    id: input.id || genId(),
     title: input.title.trim(),
     hypothesis: input.hypothesis.trim(),
     budgetSAR: Math.max(0, Math.round(input.budgetSAR)),
@@ -241,6 +251,7 @@ export function submitIdea(input: SubmitIdeaInput): Idea {
     tier: requiredTier(input.budgetSAR).tier,
     tierLabel: requiredTier(input.budgetSAR).label,
     recommendations: [],
+    dayKey: input.dayKey,
     createdAt: new Date().toISOString(),
   };
   store.unshift(idea);
@@ -329,10 +340,9 @@ export function ensureDailyIdea(now: Date = new Date()): Idea {
   if (existing) return existing;
 
   const pick = DAILY_POOL[dayOfYear(now) % DAILY_POOL.length];
-  const idea = submitIdea({ ...pick, source: "TEAM", proposedBy: "rased" });
-  idea.dayKey = dayKey;
-  persistIdea(idea);
-  return idea;
+  // Deterministic id keyed by the day so concurrent serverless cold starts all
+  // upsert the SAME row instead of creating duplicate daily ideas.
+  return submitIdea({ ...pick, source: "TEAM", proposedBy: "rased", id: `idea-daily-${dayKey}`, dayKey });
 }
 
 /** Reflect inbox decisions back onto ideas (approval is the source of truth). */

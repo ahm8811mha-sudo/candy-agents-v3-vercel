@@ -4,7 +4,7 @@ import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 /** Bumped on each deploy so we can confirm which build is live. */
-const BUILD_MARKER = "probe-v5";
+const BUILD_MARKER = "probe-v6";
 
 /** The public project host the app is actually connected to (safe to expose). */
 function connectedHost(): string | null {
@@ -44,15 +44,15 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()!;
-  const tables: Record<string, { ok: boolean; rows?: number; error?: string; code?: string }> = {};
+  const tables: Record<string, { ok: boolean; count?: number; error?: string; code?: string }> = {};
   for (const t of TABLES) {
     try {
-      // Real GET (has an error body) so a missing table is reported honestly,
-      // unlike a HEAD count which returns no body on 404.
-      const { data, error } = await supabase.from(t).select("*").limit(1);
+      // Real GET with an exact count: surfaces a missing-table error body AND
+      // the true row count (limit(1) only caps returned rows, not the count).
+      const { count, error } = await supabase.from(t).select("*", { count: "exact" }).limit(1);
       tables[t] = error
         ? { ok: false, error: error.message, code: error.code }
-        : { ok: true, rows: data?.length ?? 0 };
+        : { ok: true, count: count ?? 0 };
     } catch (e) {
       tables[t] = { ok: false, error: e instanceof Error ? e.message : "unknown" };
     }
