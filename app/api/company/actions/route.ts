@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/auth";
+import { authenticateRequest, isAuthEnabled, requireAuth } from "@/lib/auth";
 import { listCompanyActions, updateCompanyActionStatus, type CompanyActionStatus } from "@/lib/company/actionQueue";
 import { hydrateCompany } from "@/lib/company/hydrate";
 
@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await authenticateRequest(req);
+    if (isAuthEnabled()) {
+      const authError = requireAuth(user, "MANAGER");
+      if (authError) return authError;
+    }
+
     const action = await updateCompanyActionStatus({
       id,
       status,
