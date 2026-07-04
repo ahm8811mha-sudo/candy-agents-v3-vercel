@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "./brand.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "Candy Agents | AI Business Operating System",
+  title: "Orvanta | AI Operating System for Business",
   description:
-    "نظام وكلاء ذكاء اصطناعي لتحليل السوق واختيار الفرص وتحويل القرارات إلى تنفيذ.",
+    "أورفانتا — نظام تشغيل ذكي للأعمال والتجارة والاستثمار، يدير القرارات والمشاريع عبر AI Agents.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
