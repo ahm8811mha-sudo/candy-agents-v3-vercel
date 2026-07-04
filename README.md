@@ -5,7 +5,7 @@ AI Business Operating System built with Next.js, OpenAI, and durable server-side
 The product direction is not “a chatbot with departments”. The target operating loop is:
 
 ```txt
-Idea → Feasibility → Approval → Execution → KPI → Scaling / Hold / Kill
+Idea → Feasibility → Approval → Execution → KPI → Action Queue → Scaling / Hold / Kill
 ```
 
 ## Agent Flow
@@ -14,7 +14,7 @@ Idea → Feasibility → Approval → Execution → KPI → Scaling / Hold / Kil
 AI System
 ├── Owner Decision Center
 ├── CEO Agent
-├── Financial Department
+├── Financial Department / Ledger
 ├── Marketing Department
 ├── Operations Department
 ├── Supply Chain / Procurement
@@ -26,27 +26,36 @@ AI System
 The main screen runs the company flow:
 
 1. User submits one company request or idea.
-2. Finance returns budget, cost allocation, ROI, and financial risk.
+2. Finance reads the double-entry ledger and returns budget, ROI, and financial risk.
 3. Marketing returns market analysis, target audience, strategy, and KPIs.
 4. Operations returns execution plan, resources, timeline, and steps.
 5. Supply Chain returns inventory, suppliers, logistics, and optimization.
 6. CEO Advisor reviews all reports and returns the final decision.
 7. Governance sends gated items to the unified decision center.
 8. Once an `IDEA` is approved, the system creates an execution project, tasks, KPIs, business actions, memory, and audit trail.
+9. The Action Queue shows what happened after approval and what is blocked by approval or integration.
 
 Core files:
 
 ```txt
 lib/aiCompany.ts
 lib/companyExecutionSystem.ts
+lib/businessBrain.ts
+lib/accountingSystem.ts
+lib/company/ledger.ts
+lib/company/actionQueue.ts
 lib/company/ideas.ts
 lib/company/ideaExecution.ts
 lib/company/governance.ts
+lib/company/productionReadiness.ts
+components/ActionQueuePanel.tsx
 app/api/company/route.ts
 app/api/company-execution/route.ts
+app/api/company/actions/route.ts
 app/api/approvals/decisions/route.ts
 docs/OPERATING_MODEL.md
 docs/CONSULTING_AUDIT_ACTION_PLAN.md
+docs/IMPLEMENTATION_STATUS.md
 ```
 
 ## Environment
@@ -67,6 +76,7 @@ Important security rule:
 - Server writes require `SUPABASE_SERVICE_ROLE_KEY`.
 - Do not use `SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` for governance, approvals, ledger, audit, or execution writes.
 - Keep `AUTH_ENABLED=true` in production.
+- `/api/health` exposes production readiness checks. Production should not be considered ready unless `productionReady=true`.
 
 Without Supabase, the app still runs in memory/demo mode. That is acceptable for development only. Production needs Supabase persistence.
 
@@ -76,6 +86,12 @@ For the production company OS persistence layer, run:
 
 ```txt
 docs/supabase-schema.sql
+```
+
+If older `database/*.sql` files were already applied to your Supabase project, run the hardening override after them:
+
+```txt
+database/production-hardening.sql
 ```
 
 The legacy SQL files still exist for older app tables and local experiments:
@@ -132,18 +148,30 @@ POST /api/approvals/decisions
 { "id": "apr-...", "decision": "APPROVED" }
 ```
 
+Action Queue API:
+
+```txt
+GET /api/company/actions
+POST /api/company/actions
+{ "id": "<action-id>", "status": "RUNNING" }
+```
+
 ## Consulting Audit
 
 The full consulting-level critique and action plan is stored at:
 
 ```txt
 docs/CONSULTING_AUDIT_ACTION_PLAN.md
+docs/IMPLEMENTATION_STATUS.md
 ```
 
-The highest-priority implemented fix is:
+The highest-priority implemented fixes are:
 
 ```txt
 Approved IDEA → Project + Tasks + KPIs + Business Actions + Business Memory + Audit Log
+Business recommendation → confidence + assumptions + evidence + blockedBy
+Manual transaction → balanced Ledger entry
+Action → governed status transition
 ```
 
 ## iOS App
