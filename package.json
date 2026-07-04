@@ -1,5 +1,5 @@
 {
-  "name": "golden-star-enterprise-os",
+  "name": "orvanta-business-os",
   "private": true,
   "scripts": {
     "dev": "next dev",
