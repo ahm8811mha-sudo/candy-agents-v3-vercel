@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
+import OrvantaLogo from "./OrvantaLogo";
 
 type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number };
 type NavGroup = { title: string; links: NavLink[] };
@@ -31,7 +32,7 @@ const PAGE_TITLES: Array<[string, string]> = [
   ["/inbox", "مركز القرار"],
   ["/ideas", "الأفكار"],
   ["/operations", "التشغيل"],
-  ["/office", "مكتب النجمة الذهبية"],
+  ["/office", "مكتب Orvanta"],
   ["/company", "الهيكل الإداري"],
   ["/sales", "نظام المبيعات"],
   ["/dashboard", "لوحة CEO"],
@@ -53,7 +54,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(0);
 
-  // Close the drawer on navigation and lock body scroll while it is open.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -65,7 +65,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [open]);
 
-  // Pending-decision badge for the sidebar.
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -122,7 +121,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const pageTitle = PAGE_TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))?.[1] || "Candy Agents";
+  const pageTitle = PAGE_TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))?.[1] || "Orvanta";
 
   return (
     <div className="shell-root">
@@ -130,11 +129,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className={`shell-sidebar ${open ? "open" : ""}`} aria-label="التنقل الرئيسي">
         <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)}>
-          <span className="app-header__logo">AI</span>
-          <span>
-            <b>Candy Agents</b>
-            <small>النجمة الذهبية · AI Operating System</small>
-          </span>
+          <OrvantaLogo size={42} subtitle="AI Operating System" />
         </Link>
 
         {groups.map((group) => (
@@ -176,7 +171,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <NotificationCenter />
             <span className="app-header__status hide-mobile">
               <span className="app-header__dot" />
-              جاهز
+              Orvanta جاهز
             </span>
           </div>
         </div>
