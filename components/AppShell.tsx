@@ -20,6 +20,7 @@ import {
   BarChart3,
   ShoppingBag,
   AlertTriangle,
+  Mail,
   Menu,
   X,
 } from "lucide-react";
@@ -32,6 +33,7 @@ type NavGroup = { title: string; links: NavLink[] };
 const PAGE_TITLES: Array<[string, string]> = [
   ["/inbox", "مركز القرار"],
   ["/ideas", "الأفكار"],
+  ["/correspondence-center", "مركز المخاطبات"],
   ["/recovery-center", "Crisis Room"],
   ["/operations", "التشغيل"],
   ["/office", "مكتب Orvanta"],
@@ -93,6 +95,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
         { href: "/inbox", label: "مركز القرار", icon: Inbox, badge: pending },
         { href: "/ideas", label: "الأفكار", icon: Lightbulb },
+        { href: "/correspondence-center", label: "مركز المخاطبات", icon: Mail },
         { href: "/recovery-center", label: "Crisis Room", icon: AlertTriangle },
         { href: "/operations", label: "التشغيل", icon: Send },
       ],
