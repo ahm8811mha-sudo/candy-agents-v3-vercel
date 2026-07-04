@@ -4,7 +4,7 @@ import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 /** Bumped on each deploy so we can confirm which build is live. */
-const BUILD_MARKER = "probe-v3";
+const BUILD_MARKER = "probe-v4";
 
 /** The public project host the app is actually connected to (safe to expose). */
 function connectedHost(): string | null {
