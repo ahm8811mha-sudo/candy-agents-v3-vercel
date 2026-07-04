@@ -20,7 +20,7 @@ export type Financials = {
   expenses: number;
   profit: number;
   transactionCount: number;
-  source: "ledger" | "demo";
+  source?: "ledger" | "demo";
 };
 
 const fallbackTransactions: Transaction[] = [
