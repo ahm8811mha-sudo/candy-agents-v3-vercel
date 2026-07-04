@@ -1,6 +1,12 @@
-# Candy Agents
+# Orvanta
 
-AI Business Operating System built with Next.js, OpenAI, and durable server-side Supabase persistence.
+**Orvanta** is an AI Business Operating System built with Next.js, OpenAI, and durable server-side Supabase persistence.
+
+Tagline:
+
+```txt
+AI Operating System for Business
+```
 
 The product direction is not “a chatbot with departments”. The target operating loop is:
 
@@ -8,10 +14,26 @@ The product direction is not “a chatbot with departments”. The target operat
 Idea → Feasibility → Approval → Execution → KPI → Action Queue → Scaling / Hold / Kill
 ```
 
+## Brand Identity
+
+Orvanta uses an abstract **O/V monogram**:
+
+- `O` = operating system, governance loop, business core.
+- `V` = vision, velocity, value, venture.
+- Blue → teal gradient = intelligence, trust, and operational clarity.
+
+Core brand files:
+
+```txt
+components/OrvantaLogo.tsx
+app/brand.css
+app/icon.svg
+```
+
 ## Agent Flow
 
 ```txt
-AI System
+Orvanta AI System
 ├── Owner Decision Center
 ├── CEO Agent
 ├── Financial Department / Ledger
@@ -48,6 +70,7 @@ lib/company/ideas.ts
 lib/company/ideaExecution.ts
 lib/company/governance.ts
 lib/company/productionReadiness.ts
+components/OrvantaLogo.tsx
 components/ActionQueuePanel.tsx
 app/api/company/route.ts
 app/api/company-execution/route.ts
