@@ -2,6 +2,7 @@ import { calculateFinancials } from "../accountingSystem";
 import { buildExecutionBlueprint, evaluateBusiness, type BusinessIntelligence } from "../businessBrain";
 import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
+import { normalizeActionInitialStatus } from "./actionQueue";
 import { recordAudit } from "./audit";
 import { listIdeas } from "./ideas";
 
@@ -43,9 +44,38 @@ function asApprovedIntelligence(base: BusinessIntelligence, budgetSAR: number, a
         ? `تم اعتماد الفكرة مسبقاً عبر مركز القرار (${approvalId})؛ يسمح الآن بتحويلها إلى مشروع تنفيذ.`
         : "تم اعتماد الفكرة مسبقاً؛ يسمح الآن بتحويلها إلى مشروع تنفيذ.",
     },
+    evidence: [
+      ...base.evidence,
+      {
+        source: "approval_matrix",
+        type: "system",
+        summary: approvalId
+          ? `تم اعتماد الفكرة عبر مركز القرار بالمعرف ${approvalId}.`
+          : "تم اعتماد الفكرة عبر مركز القرار.",
+        metadata: { approvalId, budgetSAR },
+      },
+    ],
+    assumptions: [
+      ...base.assumptions,
+      "تم إلغاء شرط الاعتماد الداخلي لهذه الفكرة لأن المالك أو صاحب الصلاحية اعتمدها مسبقاً.",
+    ],
     recommendedActions: base.recommendedActions.map((action) => ({
       ...action,
       requiresApproval: false,
+      assumptions: [
+        ...action.assumptions,
+        "الإجراء جزء من فكرة معتمدة مسبقاً، لكن التكاملات الخارجية تبقى في انتظار الربط عند الحاجة.",
+      ],
+      evidence: [
+        ...action.evidence,
+        {
+          source: "approval_matrix",
+          type: "system",
+          summary: "تم تمرير الإجراء لأن الفكرة الأصلية معتمدة.",
+          metadata: { approvalId, budgetSAR },
+        },
+      ],
+      blockedBy: (action.blockedBy || []).filter((item) => !item.includes("يتطلب اعتماد")),
     })),
   };
 }
@@ -126,6 +156,9 @@ export async function executeApprovedIdea(
         aggregate: idea.aggregate,
         healthScore: intelligence.healthScore,
         riskLevel: intelligence.riskLevel,
+        confidence: intelligence.confidence,
+        assumptions: intelligence.assumptions,
+        evidence: intelligence.evidence,
       },
       next_review_at: new Date(Date.now() + Math.max(idea.horizonDays, 14) * 86_400_000).toISOString(),
     })
@@ -169,7 +202,11 @@ export async function executeApprovedIdea(
     action_type: action.actionType,
     title: action.title,
     description: action.description,
-    status: "QUEUED",
+    status: normalizeActionInitialStatus({
+      requiresApproval: false,
+      executionMode: action.executionMode,
+      approvalStatus: "APPROVED",
+    }),
     execution_mode: action.executionMode,
     provider: action.provider || "internal",
     requires_approval: false,
@@ -180,7 +217,12 @@ export async function executeApprovedIdea(
       approvalId: idea.approvalId,
       priority: action.priority,
       originalRequiresApproval: action.requiresApproval,
+      confidence: action.confidence,
+      assumptions: action.assumptions,
+      evidence: action.evidence,
+      blockedBy: action.blockedBy || [],
     },
+    attempts: 0,
   }));
   const { error: actionError } = await supabase.from("business_actions").insert(actionRows);
   if (actionError) throw actionError;
@@ -195,6 +237,9 @@ export async function executeApprovedIdea(
       approvalId: idea.approvalId,
       projectId,
       aggregate: idea.aggregate,
+      confidence: intelligence.confidence,
+      assumptions: intelligence.assumptions,
+      evidence: intelligence.evidence,
     },
   });
   if (memoryError) throw memoryError;
