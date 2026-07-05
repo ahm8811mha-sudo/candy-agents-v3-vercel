@@ -30,8 +30,17 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "create");
-    const path = action === "get" && body.sessionId ? `/sessions/${body.sessionId}` : "/sessions";
-    const method = action === "get" ? "GET" : "POST";
+    const sessionId = body.sessionId ? String(body.sessionId) : "";
+    let path = "/sessions";
+    let method = "POST";
+    if (action === "get" && sessionId) {
+      path = `/sessions/${sessionId}`;
+      method = "GET";
+    }
+    if (action === "command" && sessionId) {
+      path = `/sessions/${sessionId}/command`;
+      method = "POST";
+    }
     const res = await fetch(`${base}${path}`, {
       method,
       headers: runnerHeaders(),
