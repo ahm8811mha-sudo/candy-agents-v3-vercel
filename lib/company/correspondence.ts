@@ -63,12 +63,20 @@ function senderEmail() {
   return process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || "orvantacompany@gmail.com";
 }
 
+function normalizeMailbox(value: unknown): CorrespondenceMailbox {
+  const v = String(value || "INBOX").toUpperCase();
+  if (v === "SENT") return "SENT";
+  if (v === "DRAFT" || v === "DRAFTS") return "DRAFTS";
+  if (v === "ARCHIVE" || v === "ARCHIVED") return "ARCHIVED";
+  return "INBOX";
+}
+
 function fromDb(row: Record<string, unknown>): CorrespondenceMessage {
   return {
     id: String(row.id),
     reference: String(row.reference || ""),
     direction: String(row.direction || "INBOUND") as CorrespondenceDirection,
-    mailbox: String(row.mailbox || "INBOX") as CorrespondenceMailbox,
+    mailbox: normalizeMailbox(row.mailbox),
     fromEmail: String(row.from_email || ""),
     fromName: row.from_name ? String(row.from_name) : undefined,
     toEmail: String(row.to_email || ""),
@@ -144,21 +152,26 @@ const memoryMessages: CorrespondenceMessage[] = [
   },
 ];
 
+function upsertMemory(message: CorrespondenceMessage) {
+  const existing = memoryMessages.findIndex((item) => item.id === message.id || (item.providerMessageId && item.providerMessageId === message.providerMessageId));
+  if (existing >= 0) memoryMessages[existing] = message;
+  else memoryMessages.unshift(message);
+}
+
 export async function listCorrespondence(): Promise<CorrespondenceMessage[]> {
-  if (!hasSupabaseEnv()) return [...memoryMessages].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const rows = await fetchRows("correspondence_messages", { orderBy: "created_at", limit: 200 });
-  return rows.map(fromDb);
+  const rows = hasSupabaseEnv() ? await fetchRows("correspondence_messages", { orderBy: "created_at", limit: 200 }) : [];
+  const dbMessages = rows.map(fromDb);
+  const merged = new Map<string, CorrespondenceMessage>();
+  for (const item of [...memoryMessages, ...dbMessages]) {
+    merged.set(item.providerMessageId || item.id, item);
+  }
+  return Array.from(merged.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function saveCorrespondence(message: CorrespondenceMessage) {
-  const normalized = { ...message, needsApproval: false };
-  if (!hasSupabaseEnv()) {
-    const existing = memoryMessages.findIndex((item) => item.id === normalized.id);
-    if (existing >= 0) memoryMessages[existing] = normalized;
-    else memoryMessages.unshift(normalized);
-    return normalized;
-  }
-  persist("correspondence_messages", toDb(normalized));
+  const normalized: CorrespondenceMessage = { ...message, mailbox: normalizeMailbox(message.mailbox), needsApproval: false };
+  upsertMemory(normalized);
+  if (hasSupabaseEnv()) persist("correspondence_messages", toDb(normalized));
   return normalized;
 }
 
@@ -231,7 +244,6 @@ export async function sendCorrespondence(input: DraftInput & { id?: string; appr
   const base = existing || await createDraft({ ...input, needsApproval: false });
   base.needsApproval = false;
   base.status = "DRAFT";
-
   const providerResult = await sendViaProvider(base);
   base.mailbox = "SENT";
   base.direction = "OUTBOUND";
@@ -293,23 +305,12 @@ async function sendViaProvider(message: CorrespondenceMessage): Promise<{ ok: bo
 async function sendViaResend(message: CorrespondenceMessage): Promise<{ ok: boolean; provider: "RESEND" | "MANUAL"; messageId?: string; reason: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.CORRESPONDENCE_FROM_EMAIL || message.fromEmail;
-  if (!apiKey || !from || from.endsWith(".local")) {
-    return { ok: false, provider: "MANUAL", reason: "EMAIL_PROVIDER_NOT_CONFIGURED" };
-  }
-
+  if (!apiKey || !from || from.endsWith(".local")) return { ok: false, provider: "MANUAL", reason: "EMAIL_PROVIDER_NOT_CONFIGURED" };
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [message.toEmail],
-        subject: message.subject,
-        text: message.bodyText,
-      }),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [message.toEmail], subject: message.subject, text: message.bodyText }),
     });
     const json = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, provider: "RESEND", reason: String(json?.message || response.statusText) };
