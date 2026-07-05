@@ -1,5 +1,5 @@
 import { fetchRows, getSupabaseAdmin, hasSupabaseEnv, persist } from "@/lib/supabase";
-import { hasGmailEnv, listGmailInbox, sendGmailMessage } from "./gmailProvider";
+import { gmailReadiness, hasGmailEnv, listGmailInbox, sendGmailMessage } from "./gmailProvider";
 
 export type CorrespondenceDirection = "INBOUND" | "OUTBOUND";
 export type CorrespondenceMailbox = "INBOX" | "SENT" | "DRAFTS" | "ARCHIVED";
@@ -59,6 +59,10 @@ function reference() {
   return `ORV-COR-${year}-${Date.now().toString().slice(-6)}`;
 }
 
+function senderEmail() {
+  return process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || "orvantacompany@gmail.com";
+}
+
 function fromDb(row: Record<string, unknown>): CorrespondenceMessage {
   return {
     id: String(row.id),
@@ -80,7 +84,7 @@ function fromDb(row: Record<string, unknown>): CorrespondenceMessage {
     provider: row.provider ? String(row.provider) as CorrespondenceProvider : undefined,
     providerMessageId: row.provider_message_id ? String(row.provider_message_id) : undefined,
     threadId: row.thread_id ? String(row.thread_id) : undefined,
-    needsApproval: Boolean(row.needs_approval),
+    needsApproval: false,
     approvedBy: row.approved_by ? String(row.approved_by) : undefined,
     createdAt: String(row.created_at || nowIso()),
     sentAt: row.sent_at ? String(row.sent_at) : undefined,
@@ -110,7 +114,7 @@ function toDb(message: CorrespondenceMessage): Record<string, unknown> {
     provider: message.provider || "MANUAL",
     provider_message_id: message.providerMessageId || null,
     thread_id: message.threadId || null,
-    needs_approval: message.needsApproval,
+    needs_approval: false,
     approved_by: message.approvedBy || null,
     created_at: message.createdAt,
     sent_at: message.sentAt || null,
@@ -134,27 +138,9 @@ const memoryMessages: CorrespondenceMessage[] = [
     priority: "IMPORTANT",
     contactType: "GOVERNMENT",
     provider: "MANUAL",
-    needsApproval: true,
-    createdAt: nowIso(),
-    receivedAt: nowIso(),
-  },
-  {
-    id: "demo-sent-001",
-    reference: "ORV-COR-DEMO-002",
-    direction: "OUTBOUND",
-    mailbox: "SENT",
-    fromEmail: "orvantacompany@gmail.com",
-    toEmail: "supplier@example.com",
-    toName: "شركة موردين",
-    subject: "طلب إعادة جدولة دفعة",
-    bodyText: "نأمل دراسة إعادة جدولة الدفعة وتزويدنا بالخيارات المتاحة.",
-    status: "SENT",
-    priority: "IMPORTANT",
-    contactType: "COMPANY",
-    provider: "MANUAL",
     needsApproval: false,
     createdAt: nowIso(),
-    sentAt: nowIso(),
+    receivedAt: nowIso(),
   },
 ];
 
@@ -165,34 +151,33 @@ export async function listCorrespondence(): Promise<CorrespondenceMessage[]> {
 }
 
 export async function saveCorrespondence(message: CorrespondenceMessage) {
+  const normalized = { ...message, needsApproval: false };
   if (!hasSupabaseEnv()) {
-    const existing = memoryMessages.findIndex((item) => item.id === message.id);
-    if (existing >= 0) memoryMessages[existing] = message;
-    else memoryMessages.unshift(message);
-    return message;
+    const existing = memoryMessages.findIndex((item) => item.id === normalized.id);
+    if (existing >= 0) memoryMessages[existing] = normalized;
+    else memoryMessages.unshift(normalized);
+    return normalized;
   }
-  persist("correspondence_messages", toDb(message));
-  return message;
+  persist("correspondence_messages", toDb(normalized));
+  return normalized;
 }
 
 export async function createDraft(input: DraftInput) {
-  const contactType = input.contactType || "COMPANY";
-  const needsApproval = input.needsApproval ?? contactType === "GOVERNMENT";
   return saveCorrespondence({
     id: newId("cor-draft"),
     reference: reference(),
     direction: "OUTBOUND",
     mailbox: "DRAFTS",
-    fromEmail: process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || "orvantacompany@gmail.com",
+    fromEmail: senderEmail(),
     toEmail: input.toEmail || "recipient@example.com",
     toName: input.toName,
     subject: input.subject || "مسودة مخاطبة",
     bodyText: input.bodyText || "",
     status: "DRAFT",
     priority: input.priority || "NORMAL",
-    contactType,
+    contactType: input.contactType || "COMPANY",
     provider: "MANUAL",
-    needsApproval,
+    needsApproval: false,
     createdAt: nowIso(),
   });
 }
@@ -205,7 +190,7 @@ export async function createInbound(input: DraftInput & { fromEmail?: string; fr
     mailbox: "INBOX",
     fromEmail: input.fromEmail || "unknown@example.com",
     fromName: input.fromName,
-    toEmail: process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || "orvantacompany@gmail.com",
+    toEmail: senderEmail(),
     subject: input.subject || "مخاطبة واردة",
     bodyText: input.bodyText || "",
     status: "RECEIVED",
@@ -224,6 +209,7 @@ export async function approveCorrespondence(id: string, approvedBy = "Owner") {
   if (!message) return null;
   message.status = "APPROVED";
   message.approvedBy = approvedBy;
+  message.needsApproval = false;
   await saveCorrespondence(message);
   return message;
 }
@@ -242,14 +228,9 @@ export async function archiveCorrespondence(id: string) {
 export async function sendCorrespondence(input: DraftInput & { id?: string; approvedBy?: string }) {
   const all = await listCorrespondence();
   const existing = input.id ? all.find((item) => item.id === input.id) : null;
-  const base = existing || await createDraft(input);
-  const needsApproval = base.needsApproval || base.contactType === "GOVERNMENT";
-  if (needsApproval && base.status !== "APPROVED" && !input.approvedBy) {
-    base.status = "PENDING_APPROVAL";
-    base.mailbox = "DRAFTS";
-    await saveCorrespondence(base);
-    return { message: base, sent: false, reason: "PENDING_APPROVAL" };
-  }
+  const base = existing || await createDraft({ ...input, needsApproval: false });
+  base.needsApproval = false;
+  base.status = "DRAFT";
 
   const providerResult = await sendViaProvider(base);
   base.mailbox = "SENT";
@@ -258,18 +239,19 @@ export async function sendCorrespondence(input: DraftInput & { id?: string; appr
   base.provider = providerResult.provider;
   base.providerMessageId = providerResult.messageId;
   base.sentAt = nowIso();
-  if (input.approvedBy) base.approvedBy = input.approvedBy;
   await saveCorrespondence(base);
   return { message: base, sent: providerResult.ok, reason: providerResult.reason };
 }
 
 export async function syncGmailInbox() {
-  if (!hasGmailEnv()) return { synced: 0, reason: "GMAIL_NOT_CONFIGURED" };
+  const readiness = gmailReadiness();
+  if (!readiness.ready) return { synced: 0, reason: `GMAIL_MISSING:${readiness.missing.join(",")}` };
   const existing = await listCorrespondence();
   const seen = new Set(existing.map((item) => item.providerMessageId).filter(Boolean));
-  const gmailMessages = await listGmailInbox(15);
+  const gmailResult = await listGmailInbox(15);
+  if (!gmailResult.ok) return { synced: 0, reason: gmailResult.reason };
   let synced = 0;
-  for (const gmail of gmailMessages) {
+  for (const gmail of gmailResult.messages) {
     if (seen.has(gmail.providerMessageId)) continue;
     await saveCorrespondence({
       id: newId("cor-gmail"),
@@ -298,7 +280,7 @@ export async function syncGmailInbox() {
 async function sendViaProvider(message: CorrespondenceMessage): Promise<{ ok: boolean; provider: CorrespondenceProvider; messageId?: string; reason: string }> {
   if (hasGmailEnv() && (process.env.EMAIL_PROVIDER === "GMAIL" || process.env.GMAIL_SENDER_EMAIL)) {
     const result = await sendGmailMessage({
-      fromEmail: process.env.GMAIL_SENDER_EMAIL || message.fromEmail,
+      fromEmail: senderEmail(),
       toEmail: message.toEmail,
       subject: message.subject,
       bodyText: message.bodyText,
@@ -345,6 +327,10 @@ export function currentEmailProvider() {
   if (hasGmailEnv()) return "GMAIL";
   if (process.env.RESEND_API_KEY) return "RESEND";
   return "NOT_CONFIGURED";
+}
+
+export function emailReadiness() {
+  return gmailReadiness();
 }
 
 export function hasCorrespondenceDb() {
