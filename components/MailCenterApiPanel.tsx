@@ -246,7 +246,7 @@ export default function MailCenterApiPanel() {
                 <h3><UserCheck size={17} /> تحويل الرسالة لموظف</h3>
                 <div className={styles.formGrid}>
                   <label>الموظف / الوكيل<select className="input" value={agentId} onChange={(e) => setAgentId(e.target.value)}>{employees.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
-                  <label style={{ gridColumn: "span 2" }}>المطلوب من الموظف<textarea className="textarea compact" value={instruction} onChange={(e) => setInstruction(e.target.value)} /></label>
+                  <label>المطلوب من الموظف<textarea className="textarea compact" value={instruction} onChange={(e) => setInstruction(e.target.value)} /></label>
                 </div>
                 <div className={styles.actionRow}>
                   <button className="primary-btn" onClick={assignTask} disabled={assigning || !instruction.trim()}>{assigning ? <Loader2 className="spin" size={16} /> : <Send size={16} />} أرسل المهمة للموظف</button>
