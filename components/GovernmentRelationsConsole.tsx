@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Loader2, RefreshCw, Upload } from "lucide-react";
 
 type Doc = {
@@ -127,22 +128,19 @@ export default function GovernmentRelationsConsole() {
       </section>
 
       <section className="ops-board two">
-        <section className="department-board-column">
-          <header><h2>الوثائق</h2><span>{docs.length}</span></header>
-          <div>
-            {docs.length === 0 && <p className="department-empty">لا توجد وثائق بعد.</p>}
-            {docs.map((doc) => (
-              <article className="department-row" key={doc.id}>
-                <div>
-                  <span className="mini-pill">{doc.status}</span>
-                  <strong>{doc.title}</strong>
-                  <p>{doc.issuer || "جهة غير محددة"} · {doc.document_number || doc.tax_number || "رقم غير مستخرج"}</p>
-                  <small>الثقة {Math.round(Number(doc.extraction_confidence || 0) * 100)}% · النواقص {doc.missing_fields?.length || 0}</small>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        <Board title="الوثائق" count={docs.length}>
+          {docs.length === 0 && <p className="department-empty">لا توجد وثائق بعد.</p>}
+          {docs.map((doc) => (
+            <article className="department-row" key={doc.id}>
+              <div>
+                <span className="mini-pill">{doc.status}</span>
+                <strong>{doc.title}</strong>
+                <p>{doc.issuer || "جهة غير محددة"} · {doc.document_number || doc.tax_number || "رقم غير مستخرج"}</p>
+                <small>الثقة {Math.round(Number(doc.extraction_confidence || 0) * 100)}% · النواقص {doc.missing_fields?.length || 0}</small>
+              </div>
+            </article>
+          ))}
+        </Board>
       </section>
     </main>
   );
@@ -171,4 +169,8 @@ function readAsDataUrl(file: File) {
     reader.onerror = () => reject(new Error("تعذر قراءة الملف."));
     reader.readAsDataURL(file);
   });
+}
+
+function Board({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  return <section className="department-board-column"><header><h2>{title}</h2><span>{count}</span></header><div>{children}</div></section>;
 }
