@@ -16,24 +16,47 @@ function fallbackAgentOutput(agentName: string) {
   return names[agentName] || "تم تجهيز رد تجريبي منظم. لتفعيل تنفيذ AI الحقيقي يجب ضبط OPENAI_API_KEY في Vercel.";
 }
 
+function openAiErrorMessage(error: unknown) {
+  const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 0;
+  const message = error instanceof Error ? error.message : String(error || "");
+
+  if (status === 429 && message.toLowerCase().includes("quota")) {
+    return "تعذر تنفيذ AI الحقيقي لأن رصيد أو حد استخدام OpenAI API منتهي. افتح منصة OpenAI، راجع Billing وUsage Limits، ثم أضف رصيدًا أو ارفع الحد الشهري، وبعدها أعد المحاولة.";
+  }
+
+  if (status === 429) {
+    return "تعذر تنفيذ AI الحقيقي بسبب حد استخدام OpenAI المؤقت. انتظر قليلًا أو قلل عدد الطلبات ثم أعد المحاولة.";
+  }
+
+  if (status === 401) {
+    return "تعذر تنفيذ AI الحقيقي لأن مفتاح OpenAI API غير صحيح أو لا يملك صلاحية. أنشئ مفتاحًا جديدًا وضعه في Vercel باسم OPENAI_API_KEY ثم أعد النشر.";
+  }
+
+  return `تعذر تنفيذ AI الحقيقي بسبب خطأ من مزود الذكاء الاصطناعي: ${message.slice(0, 240)}`;
+}
+
 export async function runAgent(prompt: string, options: AgentOptions) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return fallbackAgentOutput(options.agentName);
 
-  const client = new OpenAI({ apiKey });
-  const completion = await client.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    temperature: 0.35,
-    messages: [
-      {
-        role: "system",
-        content:
-          options.system ||
-          "أنت موظف ذكاء اصطناعي داخل شركة. نفذ المطلوب عمليًا، واكتب بالعربية، ولا تشرح أنك نموذج ذكاء اصطناعي.",
-      },
-      { role: "user", content: prompt },
-    ],
-  });
+  try {
+    const client = new OpenAI({ apiKey });
+    const completion = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      temperature: 0.35,
+      messages: [
+        {
+          role: "system",
+          content:
+            options.system ||
+            "أنت موظف ذكاء اصطناعي داخل شركة. نفذ المطلوب عمليًا، واكتب بالعربية، ولا تشرح أنك نموذج ذكاء اصطناعي.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
 
-  return completion.choices[0]?.message?.content || "لم يتم إرجاع نتيجة من الموظف.";
+    return completion.choices[0]?.message?.content || "لم يتم إرجاع نتيجة من الموظف.";
+  } catch (error) {
+    return openAiErrorMessage(error);
+  }
 }
