@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Plus, Save } from "lucide-react";
+import { ExternalLink, Loader2, Monitor, Plus, Save } from "lucide-react";
 
 type Session = {
   id: string;
@@ -68,6 +68,18 @@ export default function OperatorSessionPanel() {
     setWorking(false);
   }
 
+  async function startRemote(session: Session) {
+    setWorking(true);
+    const res = await fetch("/api/browser-runner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create", sessionId: session.id, targetUrl: session.targetUrl, title: session.title }),
+    });
+    const json = await res.json();
+    setMessage(json.ok ? "تم إرسال الجلسة للـ Remote Runner." : json.error || "الـ Remote Runner غير جاهز.");
+    setWorking(false);
+  }
+
   function patchLocal(id: string, updater: (session: Session) => Session) {
     setSessions((old) => old.map((session) => (session.id === id ? updater(session) : session)));
   }
@@ -78,9 +90,9 @@ export default function OperatorSessionPanel() {
 
   return (
     <section className="ops-card executive-brief">
-      <span className="eyebrow">Browser Agent · Phase 2</span>
+      <span className="eyebrow">Browser Agent · Phase 2/3</span>
       <h2>جلسات تشغيل مراقبة</h2>
-      <p className="muted">هذه المرحلة تنشئ جلسة عمل، تفتح الرابط لك، تجهز القيم، وتتابع نقاط المراجعة. المتصفح التنفيذي الكامل يحتاج worker مستقل في المرحلة التالية.</p>
+      <p className="muted">أنشئ جلسة، افتح الرابط، جهز القيم، واحفظ نقاط المراجعة. عند ضبط BROWSER_RUNNER_URL يمكن إرسال الجلسة للـ Remote Runner.</p>
 
       <form className="inline-source-form" onSubmit={createSession}>
         <strong><Plus size={15} /> جلسة جديدة</strong>
@@ -99,7 +111,10 @@ export default function OperatorSessionPanel() {
             <span style={{ display: "grid", gap: 10, width: "100%" }}>
               <b>{session.title}</b>
               <small>{session.operatorName} · {session.serviceName} · {session.status}</small>
-              <a className="secondary-btn" href={session.targetUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> فتح الرابط</a>
+              <div className="form-command-row">
+                <a className="secondary-btn" href={session.targetUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> فتح الرابط</a>
+                <button className="secondary-btn" type="button" onClick={() => startRemote(session)} disabled={working}><Monitor size={15} /> إرسال للـ Runner</button>
+              </div>
               <select className="input" value={session.status} onChange={(e) => patchLocal(session.id, (s) => ({ ...s, status: e.target.value }))}>
                 <option value="READY">جاهزة</option>
                 <option value="OPENED">تم فتح الرابط</option>
