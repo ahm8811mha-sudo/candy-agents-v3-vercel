@@ -53,6 +53,12 @@ export default function MailCenterApiPanel() {
     return json;
   }
 
+  async function syncInbox() {
+    const json = await post("sync", {});
+    setNotice(json.ok ? `تمت مزامنة ${json.synced || 0} رسالة من Gmail.` : "تعذرت مزامنة Gmail.");
+    setBox("INBOX");
+  }
+
   async function save() {
     const json = await post("save", { toEmail, subject, bodyText, contactType, needsApproval: contactType === "GOVERNMENT" });
     setNotice(json.ok ? "تم حفظ المسودة." : "تعذر الحفظ.");
@@ -87,7 +93,7 @@ export default function MailCenterApiPanel() {
       </section>
       {notice && <section className="bento-card bento-full"><strong>{notice}</strong></section>}
       <section className="ops-workbench" style={{ gridTemplateColumns: "minmax(260px,.8fr) minmax(0,1fr)" }}>
-        <div className="ops-card"><h2>{labels[box]}</h2><button className="secondary-btn btn-sm" onClick={load}><RefreshCcw size={14} /> تحديث</button><div className="bento-list">{list.map((m) => <button key={m.id} className="bento-list__row" onClick={() => setSelectedId(m.id)}><span><b style={{ color: "var(--text-strong)" }}>{m.subject}</b><br /><small>{m.fromEmail} → {m.toEmail}</small></span><span className="mini-pill">{m.status}</span></button>)}</div></div>
+        <div className="ops-card"><h2>{labels[box]}</h2><div className="dashboard-actions"><button className="secondary-btn btn-sm" onClick={load}><RefreshCcw size={14} /> تحديث</button><button className="primary-btn btn-sm" onClick={syncInbox}><RefreshCcw size={14} /> مزامنة Gmail</button></div><div className="bento-list">{list.map((m) => <button key={m.id} className="bento-list__row" onClick={() => setSelectedId(m.id)}><span><b style={{ color: "var(--text-strong)" }}>{m.subject}</b><br /><small>{m.fromEmail} → {m.toEmail}</small></span><span className="mini-pill">{m.status}</span></button>)}</div></div>
         <div className="ops-card document-editor"><h2>قراءة الرسالة</h2>{selected ? <><div className="statement-row strong"><span>المرجع</span><b>{selected.reference}</b></div><pre className="final-result" style={{ minHeight: 220 }}>{selected.bodyText}</pre><div className="dashboard-actions"><button className="secondary-btn" onClick={() => approve(selected.id)}><ShieldCheck size={16} /> اعتماد</button><button className="secondary-btn" onClick={() => archive(selected.id)}><Archive size={16} /> أرشفة</button></div></> : <div className="department-empty">لا توجد رسائل.</div>}</div>
       </section>
       <section className="ops-workbench">
