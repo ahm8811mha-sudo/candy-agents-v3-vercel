@@ -14,6 +14,7 @@ import {
   updateGovernmentRenewalTask,
   uploadGovernmentDocument,
 } from "@/lib/governmentRelations";
+import { enrichUploadWithExtractedText } from "@/lib/documentText";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -42,12 +43,12 @@ export async function POST(req: Request) {
     }
 
     if (action === "upload-document") {
-      const result = await uploadGovernmentDocument(body.data || {});
+      const result = await uploadGovernmentDocument(enrichUploadWithExtractedText(body.data || {}));
       return NextResponse.json({ ok: true, result });
     }
 
     if (action === "update-document") {
-      const result = await updateGovernmentDocument(String(body.documentId || ""), body.data || {});
+      const result = await updateGovernmentDocument(String(body.documentId || ""), enrichUploadWithExtractedText(body.data || {}));
       return NextResponse.json({ ok: true, result });
     }
 
