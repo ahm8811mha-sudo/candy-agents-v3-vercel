@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canUseRealEmail, hasCorrespondenceDb, listCorrespondence } from "@/lib/company/correspondence";
+import { canUseRealEmail, createDraft, hasCorrespondenceDb, listCorrespondence } from "@/lib/company/correspondence";
 
 export async function GET() {
   const messages = await listCorrespondence();
@@ -13,4 +13,10 @@ export async function GET() {
       fromEmail: process.env.CORRESPONDENCE_FROM_EMAIL || null,
     },
   });
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const message = await createDraft(body);
+  return NextResponse.json({ ok: true, message });
 }
