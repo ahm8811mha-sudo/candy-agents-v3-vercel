@@ -8,6 +8,8 @@ const secret = process.env.RUNNER_SECRET || "";
 app.use(express.json({ limit: "2mb" }));
 
 const sessions = new Map();
+const protectedWords = ["ارسال", "إرسال", "اعتماد", "دفع", "تأكيد", "اقرار", "إقرار", "تقديم", "submit", "confirm", "pay", "approve"];
+const allowedKeys = new Set(["Tab", "Backspace", "Delete", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"]);
 
 function check(req, res, next) {
   if (!secret || req.headers["x-runner-secret"] === secret) return next();
@@ -18,8 +20,25 @@ async function snapshot(page) {
   return await page.screenshot({ type: "jpeg", quality: 70, fullPage: false, encoding: "base64" });
 }
 
+function publicSession(item) {
+  return { id: item.id, targetUrl: item.targetUrl, status: item.status, createdAt: item.createdAt, screenshot: item.lastScreenshot };
+}
+
+async function isProtectedClick(page, x, y) {
+  return await page.evaluate(({ x, y, protectedWords }) => {
+    const element = document.elementFromPoint(x, y);
+    if (!element) return false;
+    const closest = element.closest("button,a,input,textarea,select,label,[role='button']") || element;
+    const text = [closest.innerText, closest.textContent, closest.value, closest.getAttribute("aria-label"), closest.getAttribute("title")]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return protectedWords.some((word) => text.includes(String(word).toLowerCase()));
+  }, { x, y, protectedWords });
+}
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "orvanta-remote-runner", browser: "chromium" });
+  res.json({ ok: true, service: "orvanta-remote-runner", browser: "chromium", controls: ["click", "type", "press", "scroll"] });
 });
 
 app.post("/sessions", check, async (req, res) => {
@@ -33,7 +52,7 @@ app.post("/sessions", check, async (req, res) => {
     await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
     const item = { id, targetUrl, status: "OPENED", browser, context, page, createdAt: new Date().toISOString(), lastScreenshot: await snapshot(page) };
     sessions.set(id, item);
-    res.json({ ok: true, session: { id, targetUrl, status: item.status, createdAt: item.createdAt, screenshot: item.lastScreenshot } });
+    res.json({ ok: true, session: publicSession(item) });
   } catch (error) {
     res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Runner failed" });
   }
@@ -44,9 +63,68 @@ app.get("/sessions/:id", check, async (req, res) => {
     const item = sessions.get(req.params.id);
     if (!item) return res.status(404).json({ ok: false, error: "Not found" });
     item.lastScreenshot = await snapshot(item.page);
-    res.json({ ok: true, session: { id: item.id, targetUrl: item.targetUrl, status: item.status, createdAt: item.createdAt, screenshot: item.lastScreenshot } });
+    res.json({ ok: true, session: publicSession(item) });
   } catch (error) {
     res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Snapshot failed" });
+  }
+});
+
+app.post("/sessions/:id/click", check, async (req, res) => {
+  try {
+    const item = sessions.get(req.params.id);
+    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+    const x = Number(req.body?.x);
+    const y = Number(req.body?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return res.status(400).json({ ok: false, error: "Invalid coordinates" });
+    if (await isProtectedClick(item.page, x, y)) return res.status(409).json({ ok: false, error: "Protected action requires manual owner review" });
+    await item.page.mouse.click(x, y);
+    item.status = "CONTROLLED";
+    item.lastScreenshot = await snapshot(item.page);
+    res.json({ ok: true, session: publicSession(item) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Click failed" });
+  }
+});
+
+app.post("/sessions/:id/type", check, async (req, res) => {
+  try {
+    const item = sessions.get(req.params.id);
+    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+    const text = String(req.body?.text || "").slice(0, 2000);
+    if (!text) return res.status(400).json({ ok: false, error: "Text is required" });
+    await item.page.keyboard.type(text, { delay: 15 });
+    item.status = "CONTROLLED";
+    item.lastScreenshot = await snapshot(item.page);
+    res.json({ ok: true, session: publicSession(item) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Type failed" });
+  }
+});
+
+app.post("/sessions/:id/press", check, async (req, res) => {
+  try {
+    const item = sessions.get(req.params.id);
+    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+    const key = String(req.body?.key || "");
+    if (!allowedKeys.has(key)) return res.status(400).json({ ok: false, error: "Key is not allowed" });
+    await item.page.keyboard.press(key);
+    item.lastScreenshot = await snapshot(item.page);
+    res.json({ ok: true, session: publicSession(item) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Key press failed" });
+  }
+});
+
+app.post("/sessions/:id/scroll", check, async (req, res) => {
+  try {
+    const item = sessions.get(req.params.id);
+    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+    const deltaY = Number(req.body?.deltaY || 600);
+    await item.page.mouse.wheel(0, Number.isFinite(deltaY) ? deltaY : 600);
+    item.lastScreenshot = await snapshot(item.page);
+    res.json({ ok: true, session: publicSession(item) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Scroll failed" });
   }
 });
 
