@@ -18,6 +18,7 @@ export type OperatorSession = {
 };
 
 const sessions: OperatorSession[] = [];
+const SESSION_TABLE = "work_sessions";
 
 function nowIso() {
   return new Date().toISOString();
@@ -52,7 +53,7 @@ function toRow(item: OperatorSession): Record<string, unknown> {
     title: item.title,
     target_url: item.targetUrl,
     service_name: item.serviceName,
-    operator_name: item.operatorName,
+    owner_name: item.operatorName,
     request: item.request,
     status: item.status,
     prepared_fields: item.preparedFields,
@@ -69,7 +70,7 @@ function fromRow(row: Record<string, unknown>): OperatorSession {
     title: clean(row.title) || "جلسة مشغّل",
     targetUrl: clean(row.target_url) || "https://gidentity.business.sa/Identity/Account/Login?LoginType=merchant",
     serviceName: clean(row.service_name) || "تحديث بيانات الملف التجاري",
-    operatorName: clean(row.operator_name) || "ماجد",
+    operatorName: clean(row.owner_name) || "ماجد",
     request: clean(row.request),
     status: (clean(row.status) || "READY") as OperatorSessionStatus,
     preparedFields: Array.isArray(row.prepared_fields) ? (row.prepared_fields as OperatorSession["preparedFields"]) : [],
@@ -81,7 +82,7 @@ function fromRow(row: Record<string, unknown>): OperatorSession {
 }
 
 export const hydrateOperatorSessions = hydrateOnce(async () => {
-  const rows = await fetchRows("operator_sessions", { orderBy: "created_at", limit: 100 });
+  const rows = await fetchRows(SESSION_TABLE, { orderBy: "created_at", limit: 100 });
   const seen = new Set(sessions.map((item) => item.id));
   for (const row of rows) {
     if (!seen.has(String(row.id))) sessions.push(fromRow(row));
@@ -118,7 +119,7 @@ export function createOperatorSession(input: { title?: string; targetUrl?: strin
     updatedAt: now,
   };
   sessions.unshift(item);
-  persist("operator_sessions", toRow(item));
+  persist(SESSION_TABLE, toRow(item));
   return item;
 }
 
@@ -130,6 +131,6 @@ export function updateOperatorSession(idValue: string, patch: Partial<Pick<Opera
   if (patch.preparedFields) item.preparedFields = patch.preparedFields;
   if (patch.checklist) item.checklist = patch.checklist;
   item.updatedAt = nowIso();
-  persist("operator_sessions", toRow(item));
+  persist(SESSION_TABLE, toRow(item));
   return item;
 }
