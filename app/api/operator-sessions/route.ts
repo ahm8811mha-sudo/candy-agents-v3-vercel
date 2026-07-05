@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { createOperatorSession, listOperatorSessions, updateOperatorSession } from "@/lib/operatorSessions";
+import { createOperatorSession, hydrateOperatorSessions, listOperatorSessions, updateOperatorSession } from "@/lib/operatorSessions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  await hydrateOperatorSessions();
   return NextResponse.json({ ok: true, sessions: listOperatorSessions() });
 }
 
 export async function POST(req: Request) {
   try {
+    await hydrateOperatorSessions();
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "create");
 
