@@ -37,8 +37,44 @@ async function isProtectedClick(page, x, y) {
   }, { x, y, protectedWords });
 }
 
+async function runCommand(item, body) {
+  const kind = String(body?.kind || "");
+  if (kind === "point") {
+    const x = Number(body?.x);
+    const y = Number(body?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Invalid coordinates");
+    if (await isProtectedClick(item.page, x, y)) {
+      const error = new Error("Protected action requires manual owner review");
+      error.statusCode = 409;
+      throw error;
+    }
+    await item.page.mouse.click(x, y);
+    item.status = "CONTROLLED";
+    return;
+  }
+  if (kind === "text") {
+    const text = String(body?.text || "").slice(0, 2000);
+    if (!text) throw new Error("Text is required");
+    await item.page.keyboard.type(text, { delay: 15 });
+    item.status = "CONTROLLED";
+    return;
+  }
+  if (kind === "key") {
+    const key = String(body?.key || "");
+    if (!allowedKeys.has(key)) throw new Error("Key is not allowed");
+    await item.page.keyboard.press(key);
+    return;
+  }
+  if (kind === "wheel") {
+    const deltaY = Number(body?.deltaY || 600);
+    await item.page.mouse.wheel(0, Number.isFinite(deltaY) ? deltaY : 600);
+    return;
+  }
+  throw new Error("Unknown command");
+}
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "orvanta-remote-runner", browser: "chromium", controls: ["click", "type", "press", "scroll"] });
+  res.json({ ok: true, service: "orvanta-remote-runner", browser: "chromium", controls: ["point", "text", "key", "wheel"] });
 });
 
 app.post("/sessions", check, async (req, res) => {
@@ -69,62 +105,15 @@ app.get("/sessions/:id", check, async (req, res) => {
   }
 });
 
-app.post("/sessions/:id/click", check, async (req, res) => {
+app.post("/sessions/:id/command", check, async (req, res) => {
   try {
     const item = sessions.get(req.params.id);
     if (!item) return res.status(404).json({ ok: false, error: "Not found" });
-    const x = Number(req.body?.x);
-    const y = Number(req.body?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return res.status(400).json({ ok: false, error: "Invalid coordinates" });
-    if (await isProtectedClick(item.page, x, y)) return res.status(409).json({ ok: false, error: "Protected action requires manual owner review" });
-    await item.page.mouse.click(x, y);
-    item.status = "CONTROLLED";
+    await runCommand(item, req.body || {});
     item.lastScreenshot = await snapshot(item.page);
     res.json({ ok: true, session: publicSession(item) });
   } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Click failed" });
-  }
-});
-
-app.post("/sessions/:id/type", check, async (req, res) => {
-  try {
-    const item = sessions.get(req.params.id);
-    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
-    const text = String(req.body?.text || "").slice(0, 2000);
-    if (!text) return res.status(400).json({ ok: false, error: "Text is required" });
-    await item.page.keyboard.type(text, { delay: 15 });
-    item.status = "CONTROLLED";
-    item.lastScreenshot = await snapshot(item.page);
-    res.json({ ok: true, session: publicSession(item) });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Type failed" });
-  }
-});
-
-app.post("/sessions/:id/press", check, async (req, res) => {
-  try {
-    const item = sessions.get(req.params.id);
-    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
-    const key = String(req.body?.key || "");
-    if (!allowedKeys.has(key)) return res.status(400).json({ ok: false, error: "Key is not allowed" });
-    await item.page.keyboard.press(key);
-    item.lastScreenshot = await snapshot(item.page);
-    res.json({ ok: true, session: publicSession(item) });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Key press failed" });
-  }
-});
-
-app.post("/sessions/:id/scroll", check, async (req, res) => {
-  try {
-    const item = sessions.get(req.params.id);
-    if (!item) return res.status(404).json({ ok: false, error: "Not found" });
-    const deltaY = Number(req.body?.deltaY || 600);
-    await item.page.mouse.wheel(0, Number.isFinite(deltaY) ? deltaY : 600);
-    item.lastScreenshot = await snapshot(item.page);
-    res.json({ ok: true, session: publicSession(item) });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Scroll failed" });
+    res.status(error.statusCode || 500).json({ ok: false, error: error instanceof Error ? error.message : "Command failed" });
   }
 });
 
