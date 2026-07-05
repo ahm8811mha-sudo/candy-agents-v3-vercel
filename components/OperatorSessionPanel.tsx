@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ExternalLink, Loader2, Monitor, Plus, Save } from "lucide-react";
+import { ExternalLink, Loader2, Monitor, Plus, RefreshCw, Save } from "lucide-react";
 
 type Session = {
   id: string;
@@ -20,6 +20,7 @@ export default function OperatorSessionPanel() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
+  const [shots, setShots] = useState<Record<string, string>>({});
 
   async function load() {
     const res = await fetch("/api/operator-sessions", { cache: "no-store" });
@@ -76,7 +77,23 @@ export default function OperatorSessionPanel() {
       body: JSON.stringify({ action: "create", sessionId: session.id, targetUrl: session.targetUrl, title: session.title }),
     });
     const json = await res.json();
+    const screenshot = json.runner?.session?.screenshot;
+    if (screenshot) setShots((old) => ({ ...old, [session.id]: screenshot }));
     setMessage(json.ok ? "تم إرسال الجلسة للـ Remote Runner." : json.error || "الـ Remote Runner غير جاهز.");
+    setWorking(false);
+  }
+
+  async function refreshRemote(session: Session) {
+    setWorking(true);
+    const res = await fetch("/api/browser-runner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get", sessionId: session.id }),
+    });
+    const json = await res.json();
+    const screenshot = json.runner?.session?.screenshot;
+    if (screenshot) setShots((old) => ({ ...old, [session.id]: screenshot }));
+    setMessage(json.ok ? "تم تحديث لقطة الجلسة." : json.error || "تعذر تحديث الجلسة.");
     setWorking(false);
   }
 
@@ -92,7 +109,7 @@ export default function OperatorSessionPanel() {
     <section className="ops-card executive-brief">
       <span className="eyebrow">Browser Agent · Phase 2/3</span>
       <h2>جلسات تشغيل مراقبة</h2>
-      <p className="muted">أنشئ جلسة، افتح الرابط، جهز القيم، واحفظ نقاط المراجعة. عند ضبط BROWSER_RUNNER_URL يمكن إرسال الجلسة للـ Remote Runner.</p>
+      <p className="muted">أنشئ جلسة، افتح الرابط، جهز القيم، واحفظ نقاط المراجعة. عند ضبط BROWSER_RUNNER_URL يمكن إرسال الجلسة للـ Remote Runner وعرض لقطة المتصفح.</p>
 
       <form className="inline-source-form" onSubmit={createSession}>
         <strong><Plus size={15} /> جلسة جديدة</strong>
@@ -114,7 +131,9 @@ export default function OperatorSessionPanel() {
               <div className="form-command-row">
                 <a className="secondary-btn" href={session.targetUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> فتح الرابط</a>
                 <button className="secondary-btn" type="button" onClick={() => startRemote(session)} disabled={working}><Monitor size={15} /> إرسال للـ Runner</button>
+                <button className="secondary-btn" type="button" onClick={() => refreshRemote(session)} disabled={working}><RefreshCw size={15} /> تحديث اللقطة</button>
               </div>
+              {shots[session.id] && <img alt="remote browser" src={`data:image/jpeg;base64,${shots[session.id]}`} style={{ width: "100%", borderRadius: 16, border: "1px solid var(--line)" }} />}
               <select className="input" value={session.status} onChange={(e) => patchLocal(session.id, (s) => ({ ...s, status: e.target.value }))}>
                 <option value="READY">جاهزة</option>
                 <option value="OPENED">تم فتح الرابط</option>
