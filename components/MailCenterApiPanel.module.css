@@ -1,0 +1,252 @@
+.stack {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.statButton,
+.statCard {
+  min-width: 0;
+  text-align: start;
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  min-width: 0;
+  align-items: start;
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: clamp(14px, 2.5vw, 18px);
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.headerRow,
+.actionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.headerRow h2,
+.card h2,
+.card h3 {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.headerRow p,
+.muted {
+  color: var(--muted);
+  margin: 4px 0 0;
+  line-height: 1.8;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--field);
+  padding: 6px;
+  min-width: 0;
+}
+
+.tab {
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 8px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.tabActive {
+  background: var(--panel);
+  color: var(--text-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.messageList {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.messageRow {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.messageRowActive {
+  border-color: rgba(20, 184, 166, 0.62);
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.messageTitle,
+.emailMeta,
+.referenceBox,
+.outputPre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.messageTitle {
+  color: var(--text-strong);
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.emailMeta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+
+.referenceBox {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+}
+
+.outputPre {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.9;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  font-family: inherit;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) minmax(140px, 0.45fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.composeGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.delegateBox {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(124, 199, 255, 0.07), transparent), var(--field);
+  padding: 14px;
+  min-width: 0;
+}
+
+.taskList {
+  display: grid;
+  gap: 10px;
+}
+
+.taskCard {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+  padding: 12px;
+  min-width: 0;
+}
+
+.taskHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.notice {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 13px 14px;
+  color: var(--text-strong);
+  font-weight: 900;
+  line-height: 1.8;
+}
+
+@media (max-width: 1100px) {
+  .statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .statCard { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .workbench,
+  .composeGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .stack { gap: 14px; }
+  .statsGrid { grid-template-columns: 1fr; gap: 10px; }
+  .card { padding: 13px; border-radius: 16px; }
+  .tabs {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; min-width: 96px; }
+  .messageRow { grid-template-columns: 1fr; }
+  .messageRow > span:last-child { justify-self: start; }
+  .formGrid { grid-template-columns: 1fr; }
+  .actionRow { align-items: stretch; }
+  .actionRow button,
+  .actionRow a { width: 100%; }
+}
