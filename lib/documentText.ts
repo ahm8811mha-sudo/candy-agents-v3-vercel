@@ -28,6 +28,15 @@ function tryInflate(buffer: Buffer) {
   }
 }
 
+function decodeUtf16Be(buffer: Buffer) {
+  const swapped = Buffer.alloc(buffer.length);
+  for (let i = 0; i < buffer.length; i += 2) {
+    swapped[i] = buffer[i + 1] || 0;
+    swapped[i + 1] = buffer[i] || 0;
+  }
+  return swapped.toString("utf16le");
+}
+
 function decodePdfLiteral(raw: string) {
   const unescaped = raw
     .replace(/\\n/g, "\n")
@@ -43,16 +52,9 @@ function decodeHexText(hex: string) {
   const safe = hex.replace(/[^0-9a-f]/gi, "");
   if (safe.length < 4) return "";
   const buf = Buffer.from(safe.length % 2 ? `${safe}0` : safe, "hex");
-  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return cleanText(buf.subarray(2).toString("utf16le").split("").map((_, i, arr) => (i % 2 ? arr[i - 1] : arr[i + 1])).join(""));
-  const utf16Like = buf.length > 6 && buf.filter((b, i) => i % 2 === 0 && b === 0).length > buf.length / 4;
-  if (utf16Like) {
-    const swapped = Buffer.alloc(buf.length);
-    for (let i = 0; i < buf.length; i += 2) {
-      swapped[i] = buf[i + 1] || 0;
-      swapped[i + 1] = buf[i] || 0;
-    }
-    return cleanText(swapped.toString("utf16le"));
-  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return cleanText(decodeUtf16Be(buf.subarray(2)));
+  const utf16BeLike = buf.length > 6 && buf.filter((b, i) => i % 2 === 0 && b === 0).length > buf.length / 4;
+  if (utf16BeLike) return cleanText(decodeUtf16Be(buf));
   return cleanText(buf.toString("utf8"));
 }
 
