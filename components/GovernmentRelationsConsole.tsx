@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Loader2, RefreshCw, Upload } from "lucide-react";
+import TaskCheckpointPanel from "./TaskCheckpointPanel";
 
 type Doc = {
   id: string;
@@ -114,6 +115,7 @@ export default function GovernmentRelationsConsole() {
       </section>
 
       <section className="ops-workbench">
+        <TaskCheckpointPanel />
         <form className="ops-card" onSubmit={submit}>
           <span className="eyebrow"><Upload size={16} /> رفع وثيقة</span>
           <h2>رفع وتحليل الوثيقة</h2>
