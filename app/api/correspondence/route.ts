@@ -4,9 +4,11 @@ import {
   archiveCorrespondence,
   canUseRealEmail,
   createDraft,
+  currentEmailProvider,
   hasCorrespondenceDb,
   listCorrespondence,
   sendCorrespondence,
+  syncGmailInbox,
 } from "@/lib/company/correspondence";
 
 export async function GET() {
@@ -17,8 +19,8 @@ export async function GET() {
     readiness: {
       database: hasCorrespondenceDb(),
       realEmail: canUseRealEmail(),
-      provider: process.env.RESEND_API_KEY ? "RESEND" : "NOT_CONFIGURED",
-      fromEmail: process.env.CORRESPONDENCE_FROM_EMAIL || null,
+      provider: currentEmailProvider(),
+      fromEmail: process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || null,
     },
   });
 }
@@ -26,6 +28,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const action = String(body.action || "save");
+
+  if (action === "sync") {
+    const result = await syncGmailInbox();
+    const messages = await listCorrespondence();
+    return NextResponse.json({ ok: true, ...result, messages });
+  }
 
   if (action === "send") {
     const result = await sendCorrespondence(body);
