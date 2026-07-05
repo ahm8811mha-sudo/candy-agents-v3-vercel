@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  approveCorrespondence,
   archiveCorrespondence,
   canUseRealEmail,
   createDraft,
   currentEmailProvider,
+  emailReadiness,
   hasCorrespondenceDb,
   listCorrespondence,
   sendCorrespondence,
@@ -13,6 +13,7 @@ import {
 
 export async function GET() {
   const messages = await listCorrespondence();
+  const gmail = emailReadiness();
   return NextResponse.json({
     ok: true,
     messages,
@@ -21,6 +22,8 @@ export async function GET() {
       realEmail: canUseRealEmail(),
       provider: currentEmailProvider(),
       fromEmail: process.env.GMAIL_SENDER_EMAIL || process.env.CORRESPONDENCE_FROM_EMAIL || null,
+      gmailReady: gmail.ready,
+      missingGmailKeys: gmail.missing,
     },
   });
 }
@@ -36,13 +39,8 @@ export async function POST(req: Request) {
   }
 
   if (action === "send") {
-    const result = await sendCorrespondence(body);
+    const result = await sendCorrespondence({ ...body, needsApproval: false });
     return NextResponse.json({ ok: true, ...result });
-  }
-
-  if (action === "approve") {
-    const message = await approveCorrespondence(String(body.id || ""), String(body.approvedBy || "Owner"));
-    return NextResponse.json({ ok: Boolean(message), message });
   }
 
   if (action === "archive") {
@@ -50,6 +48,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: Boolean(message), message });
   }
 
-  const message = await createDraft(body);
+  const message = await createDraft({ ...body, needsApproval: false });
   return NextResponse.json({ ok: true, message });
 }
