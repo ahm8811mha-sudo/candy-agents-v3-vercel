@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { canUseRealEmail, createDraft, hasCorrespondenceDb, listCorrespondence } from "@/lib/company/correspondence";
+import {
+  approveCorrespondence,
+  archiveCorrespondence,
+  canUseRealEmail,
+  createDraft,
+  hasCorrespondenceDb,
+  listCorrespondence,
+  sendCorrespondence,
+} from "@/lib/company/correspondence";
 
 export async function GET() {
   const messages = await listCorrespondence();
@@ -17,6 +25,23 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
+  const action = String(body.action || "save");
+
+  if (action === "send") {
+    const result = await sendCorrespondence(body);
+    return NextResponse.json({ ok: true, ...result });
+  }
+
+  if (action === "approve") {
+    const message = await approveCorrespondence(String(body.id || ""), String(body.approvedBy || "Owner"));
+    return NextResponse.json({ ok: Boolean(message), message });
+  }
+
+  if (action === "archive") {
+    const message = await archiveCorrespondence(String(body.id || ""));
+    return NextResponse.json({ ok: Boolean(message), message });
+  }
+
   const message = await createDraft(body);
   return NextResponse.json({ ok: true, message });
 }
