@@ -8,6 +8,7 @@ type AgentOptions = {
 type ProviderName = "gemini" | "claude" | "openai" | "fallback";
 
 const DEFAULT_SYSTEM = "أنت موظف ذكاء اصطناعي داخل شركة. نفذ المطلوب عمليًا، واكتب بالعربية، ولا تشرح أنك نموذج ذكاء اصطناعي.";
+const DEFAULT_GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"];
 
 function fallbackAgentOutput(agentName: string) {
   const names: Record<string, string> = {
@@ -29,6 +30,13 @@ function selectedProvider(): ProviderName {
   return "fallback";
 }
 
+function geminiModels() {
+  const configured = [process.env.GEMINI_MODEL, ...(process.env.GEMINI_FALLBACK_MODELS || "").split(",")]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set([...configured, ...DEFAULT_GEMINI_MODELS]));
+}
+
 function extractGeminiText(data: any) {
   const parts = data?.candidates?.[0]?.content?.parts || [];
   return parts.map((part: any) => part?.text || "").filter(Boolean).join("\n").trim();
@@ -39,10 +47,14 @@ function extractClaudeText(data: any) {
   return parts.map((part: any) => part?.text || "").filter(Boolean).join("\n").trim();
 }
 
-async function runGemini(prompt: string, options: AgentOptions) {
+function shouldTryNextGeminiModel(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  return message.includes("high demand") || message.includes("try again later") || message.includes("resource_exhausted") || message.includes("429") || message.includes("quota");
+}
+
+async function runGeminiModel(model: string, prompt: string, options: AgentOptions) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
@@ -50,12 +62,25 @@ async function runGemini(prompt: string, options: AgentOptions) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: options.system || DEFAULT_SYSTEM }] },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.35 },
+      generationConfig: { temperature: 0.25, maxOutputTokens: 900 },
     }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Gemini API error ${res.status}`);
-  return extractGeminiText(data) || "لم يتم إرجاع نتيجة من Gemini.";
+  return extractGeminiText(data) || `لم يتم إرجاع نتيجة من Gemini عبر ${model}.`;
+}
+
+async function runGemini(prompt: string, options: AgentOptions) {
+  let lastError: unknown = null;
+  for (const model of geminiModels()) {
+    try {
+      return await runGeminiModel(model, prompt, options);
+    } catch (error) {
+      lastError = error;
+      if (!shouldTryNextGeminiModel(error)) break;
+    }
+  }
+  throw lastError || new Error("Gemini failed");
 }
 
 async function runClaude(prompt: string, options: AgentOptions) {
@@ -71,8 +96,8 @@ async function runClaude(prompt: string, options: AgentOptions) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1400,
-      temperature: 0.35,
+      max_tokens: 1200,
+      temperature: 0.25,
       system: options.system || DEFAULT_SYSTEM,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -88,7 +113,8 @@ async function runOpenAI(prompt: string, options: AgentOptions) {
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create({
     model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    temperature: 0.35,
+    temperature: 0.25,
+    max_tokens: 900,
     messages: [
       { role: "system", content: options.system || DEFAULT_SYSTEM },
       { role: "user", content: prompt },
@@ -100,12 +126,16 @@ async function runOpenAI(prompt: string, options: AgentOptions) {
 function providerErrorMessage(provider: ProviderName, error: unknown) {
   const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 0;
   const message = error instanceof Error ? error.message : String(error || "");
+  const lower = message.toLowerCase();
   const name = provider === "gemini" ? "Gemini" : provider === "claude" ? "Claude" : "OpenAI";
 
-  if (message.toLowerCase().includes("quota") || message.includes("429") || status === 429) {
+  if (provider === "gemini" && (lower.includes("high demand") || lower.includes("try again later"))) {
+    return "تعذر تنفيذ AI الحقيقي عبر Gemini لأن جميع موديلات Gemini المتاحة مزدحمة مؤقتًا. جرّب بعد دقيقة، أو أضف مزودًا احتياطيًا مثل Groq/Claude لاحقًا.";
+  }
+  if (lower.includes("quota") || lower.includes("resource_exhausted") || message.includes("429") || status === 429) {
     return `تعذر تنفيذ AI الحقيقي عبر ${name} بسبب الرصيد أو حدود الاستخدام. راجع Billing / Usage Limits في حساب المزود ثم أعد المحاولة.`;
   }
-  if (message.toLowerCase().includes("api key") || message.includes("401") || status === 401) {
+  if (lower.includes("api key") || message.includes("401") || status === 401) {
     return `تعذر تنفيذ AI الحقيقي عبر ${name} لأن المفتاح غير صحيح أو غير مضاف في Vercel.`;
   }
   return `تعذر تنفيذ AI الحقيقي عبر ${name}: ${message.slice(0, 240)}`;
@@ -133,9 +163,10 @@ export function getAIProviderStatus() {
     openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
     model:
       provider === "gemini"
-        ? process.env.GEMINI_MODEL || "gemini-2.0-flash"
+        ? geminiModels()[0]
         : provider === "claude"
           ? process.env.ANTHROPIC_MODEL || process.env.CLAUDE_MODEL || "claude-3-5-haiku-latest"
           : process.env.OPENAI_MODEL || "gpt-4o-mini",
+    geminiFallbackModels: provider === "gemini" ? geminiModels().slice(1) : [],
   };
 }
