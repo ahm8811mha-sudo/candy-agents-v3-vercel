@@ -45,7 +45,27 @@ const departments = [
   { href: "/bi-center", label: "مركز BI", icon: BarChart3 },
 ];
 
-const exactLogo = "/orvanta-logo-exact.svg";
+function ExactOrvantaLogo({
+  size = "min(340px, 78vw)",
+  minHeight = 128,
+}: {
+  size?: string;
+  minHeight?: number;
+}) {
+  return (
+    <span
+      aria-label="Orvanta logo"
+      role="img"
+      style={{
+        width: size,
+        aspectRatio: "370 / 226",
+        minHeight,
+        display: "block",
+        background: "var(--orvanta-exact-logo) center / contain no-repeat",
+      }}
+    />
+  );
+}
 
 export default function CompanyOverview() {
   const [dash, setDash] = useState<Dashboard | null>(null);
@@ -90,26 +110,14 @@ export default function CompanyOverview() {
     <main className="page-wrap">
       <header className="hero-scenic">
         <div
-          aria-label="Orvanta logo"
           style={{
-            width: "min(340px, 78vw)",
-            minHeight: 128,
+            width: "100%",
             display: "grid",
             placeItems: "center",
             marginBottom: 10,
           }}
         >
-          <img
-            src={exactLogo}
-            alt="Orvanta"
-            style={{
-              width: "100%",
-              height: "auto",
-              display: "block",
-              objectFit: "contain",
-              borderRadius: 24,
-            }}
-          />
+          <ExactOrvantaLogo />
         </div>
 
         <span className="hero-pill">
@@ -143,17 +151,7 @@ export default function CompanyOverview() {
               padding: "18px 12px",
             }}
           >
-            <img
-              src={exactLogo}
-              alt="Orvanta"
-              style={{
-                width: "min(330px, 76vw)",
-                height: "auto",
-                display: "block",
-                objectFit: "contain",
-                borderRadius: 24,
-              }}
-            />
+            <ExactOrvantaLogo size="min(330px, 76vw)" minHeight={150} />
           </div>
         </div>
 
