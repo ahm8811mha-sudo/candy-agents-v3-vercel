@@ -1,0 +1,67 @@
+/* Use the provided logo file directly. No redraws, no approximations. */
+.orvanta-lockup {
+  gap: 0 !important;
+  justify-content: center;
+}
+
+.orvanta-mark {
+  display: block !important;
+  width: 118px !important;
+  height: 72px !important;
+  border-radius: 0 !important;
+  background: url("/orvanta-logo-exact.svg") center / contain no-repeat !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.orvanta-mark svg,
+.orvanta-wordmark {
+  display: none !important;
+}
+
+.orvanta-hero-brand {
+  margin-bottom: 12px !important;
+}
+
+.hero-scenic .orvanta-hero-brand .orvanta-mark {
+  width: 330px !important;
+  height: 202px !important;
+}
+
+.shell-sidebar__brand .orvanta-mark {
+  width: 132px !important;
+  height: 81px !important;
+}
+
+.orvanta-system-orbit .orvanta-mark {
+  width: 280px !important;
+  height: 171px !important;
+}
+
+.orvanta-system-card {
+  min-height: 260px !important;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(7, 151, 183, 0.1), transparent 30%),
+    linear-gradient(180deg, #ffffff, #f7fafc) !important;
+}
+
+.orvanta-system-orbit::before,
+.orvanta-node {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  .hero-scenic .orvanta-hero-brand .orvanta-mark {
+    width: 250px !important;
+    height: 153px !important;
+  }
+
+  .orvanta-system-orbit .orvanta-mark {
+    width: 220px !important;
+    height: 135px !important;
+  }
+
+  .orvanta-system-card {
+    min-height: 210px !important;
+  }
+}
