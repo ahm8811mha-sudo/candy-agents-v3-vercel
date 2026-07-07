@@ -1,166 +1,21 @@
-/* Orvanta logo safety layer.
-   No external image, no SVG-wrapped bitmap, no WebP data URI.
-   The logo is rendered as inline SVG from components/OrvantaLogo.tsx so it cannot break on iPhone/Safari. */
-
-.orvanta-lockup {
-  direction: ltr;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 18px !important;
-}
-
-.orvanta-mark {
-  display: inline-grid !important;
-  place-items: center !important;
-  flex: 0 0 auto !important;
-  color: #111827 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-}
-
-.orvanta-mark svg {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  overflow: visible !important;
-}
-
-.orvanta-wordmark {
-  display: grid !important;
-  gap: 5px !important;
-  min-width: 0 !important;
-  line-height: 1 !important;
-}
-
-.orvanta-wordmark b {
-  color: #111827 !important;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-  font-weight: 360 !important;
-  letter-spacing: 0.16em !important;
-}
-
-.orvanta-wordmark small:empty {
+/* Logo disabled by request. Keep this file neutral so old logo rules cannot reappear. */
+.orvanta-lockup,
+.orvanta-hero-brand,
+.orvanta-logo-home,
+.orvanta-logo-showcase,
+.orvanta-system-card,
+.shell-sidebar__brand {
   display: none !important;
 }
 
-.orvanta-hero-brand {
-  display: grid !important;
-  place-items: center !important;
-  width: 100% !important;
-  min-height: 172px !important;
-  margin: 0 0 16px !important;
-}
-
-.orvanta-hero-brand::before {
-  content: none !important;
-  display: none !important;
-}
-
-.orvanta-hero-brand > * {
-  display: inline-flex !important;
-}
-
-.orvanta-hero-brand .orvanta-lockup,
-.orvanta-logo-home {
-  flex-direction: column !important;
-  gap: 12px !important;
-}
-
-.orvanta-hero-brand .orvanta-mark {
-  width: 184px !important;
-  height: 126px !important;
-}
-
-.orvanta-hero-brand .orvanta-wordmark b {
-  font-size: clamp(2.45rem, 8vw, 4.3rem) !important;
-  line-height: 0.9 !important;
-}
-
-.orvanta-system-card {
-  min-height: 230px !important;
-  display: grid !important;
-  place-items: center !important;
-  background:
-    radial-gradient(circle at 50% 45%, rgba(7, 151, 183, 0.08), transparent 30%),
-    linear-gradient(180deg, #ffffff, #f7fafc) !important;
-}
-
-.orvanta-system-orbit {
-  display: grid !important;
-  place-items: center !important;
-  min-height: 230px !important;
-  padding: 18px !important;
-}
-
-.orvanta-system-orbit > * {
-  display: inline-flex !important;
-}
-
+.orvanta-mark,
+.orvanta-wordmark,
+.orvanta-hero-brand::before,
+.orvanta-hero-brand::after,
 .orvanta-system-orbit::before,
 .orvanta-system-orbit::after,
 .orvanta-node {
   display: none !important;
   content: none !important;
-}
-
-.orvanta-logo-showcase {
-  flex-direction: column !important;
-  gap: 10px !important;
-}
-
-.orvanta-logo-showcase .orvanta-mark {
-  width: 190px !important;
-  height: 130px !important;
-}
-
-.orvanta-logo-showcase .orvanta-wordmark b {
-  font-size: clamp(2.2rem, 7vw, 3.6rem) !important;
-  line-height: 0.95 !important;
-}
-
-.shell-sidebar__brand .orvanta-lockup {
-  gap: 10px !important;
-}
-
-.shell-sidebar__brand .orvanta-mark {
-  width: 54px !important;
-  height: 38px !important;
-}
-
-.shell-sidebar__brand .orvanta-wordmark b {
-  font-size: 1.05rem !important;
-  font-weight: 520 !important;
-  letter-spacing: 0.02em !important;
-}
-
-@media (max-width: 760px) {
-  .hero-scenic--logo-ready {
-    padding-top: 28px !important;
-  }
-
-  .orvanta-hero-brand {
-    min-height: 142px !important;
-    margin-bottom: 10px !important;
-  }
-
-  .orvanta-hero-brand .orvanta-mark {
-    width: 146px !important;
-    height: 100px !important;
-  }
-
-  .orvanta-hero-brand .orvanta-wordmark b {
-    font-size: clamp(2.25rem, 10vw, 3.15rem) !important;
-  }
-
-  .orvanta-system-card,
-  .orvanta-system-orbit {
-    min-height: 190px !important;
-  }
-
-  .orvanta-logo-showcase .orvanta-mark {
-    width: 150px !important;
-    height: 104px !important;
-  }
+  background: none !important;
 }
