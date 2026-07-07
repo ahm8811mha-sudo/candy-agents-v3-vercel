@@ -15,6 +15,12 @@ export function hasSupabaseEnv() {
   return Boolean(supabaseUrl() && supabaseServerKey());
 }
 
+export function requireSupabaseForWrite() {
+  if (!hasSupabaseEnv()) {
+    throw new Error("النظام في وضع القراءة فقط: لا يمكن تنفيذ قرارات أو إنشاء مشاريع بدون اتصال Supabase ومفتاح الخدمة الخلفي.");
+  }
+}
+
 export function getSupabaseAdmin() {
   const url = supabaseUrl();
   const key = supabaseServerKey();
