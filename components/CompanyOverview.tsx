@@ -22,7 +22,6 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
-import OrvantaLogo from "./OrvantaLogo";
 
 type Dashboard = {
   projects: Array<{ id: string }>;
@@ -45,6 +44,8 @@ const departments = [
   { href: "/departments/government-relations", label: "الحكومية", icon: Landmark },
   { href: "/bi-center", label: "مركز BI", icon: BarChart3 },
 ];
+
+const exactLogo = "/orvanta-logo-exact.svg";
 
 export default function CompanyOverview() {
   const [dash, setDash] = useState<Dashboard | null>(null);
@@ -88,8 +89,27 @@ export default function CompanyOverview() {
   return (
     <main className="page-wrap">
       <header className="hero-scenic">
-        <div className="orvanta-hero-brand">
-          <OrvantaLogo size={58} subtitle="AI Operating System for Business" />
+        <div
+          aria-label="Orvanta logo"
+          style={{
+            width: "min(340px, 78vw)",
+            minHeight: 128,
+            display: "grid",
+            placeItems: "center",
+            marginBottom: 10,
+          }}
+        >
+          <img
+            src={exactLogo}
+            alt="Orvanta"
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              objectFit: "contain",
+              borderRadius: 24,
+            }}
+          />
         </div>
 
         <span className="hero-pill">
@@ -115,12 +135,25 @@ export default function CompanyOverview() {
         </div>
 
         <div className="orvanta-system-card" aria-label="Orvanta AI operating system logo concept">
-          <div className="orvanta-system-orbit">
-            <OrvantaLogo size={112} showWordmark={false} />
-            <i className="orvanta-node n1" />
-            <i className="orvanta-node n2" />
-            <i className="orvanta-node n3" />
-            <i className="orvanta-node n4" />
+          <div
+            style={{
+              minHeight: 210,
+              display: "grid",
+              placeItems: "center",
+              padding: "18px 12px",
+            }}
+          >
+            <img
+              src={exactLogo}
+              alt="Orvanta"
+              style={{
+                width: "min(330px, 76vw)",
+                height: "auto",
+                display: "block",
+                objectFit: "contain",
+                borderRadius: 24,
+              }}
+            />
           </div>
         </div>
 
