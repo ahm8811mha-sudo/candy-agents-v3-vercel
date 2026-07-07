@@ -14,31 +14,31 @@ export default function OrvantaLogo({
   return (
     <span className={`orvanta-lockup ${className}`} aria-label="Orvanta">
       <span className="orvanta-mark" style={{ width: size, height: size }} aria-hidden="true">
-        <svg viewBox="0 0 96 72" role="img" focusable="false">
+        <svg viewBox="0 0 108 74" role="img" focusable="false">
           <path
-            d="M42 18C25.5 18 14 29.7 14 45C14 60.3 25.5 70 42 70"
+            d="M47 12C27 12 12 27 12 46C12 65 27 72 47 72"
             fill="none"
             stroke="currentColor"
-            strokeWidth="7.4"
+            strokeWidth="8"
             strokeLinecap="round"
           />
+          <circle cx="34" cy="44" r="7.8" fill="currentColor" />
           <path
-            d="M36 44C45.5 57.5 62.5 56.7 72 43.4C78 35 84.5 32.6 91 34.8"
+            d="M44 43C54 56 72 56 83 42C89 34 96 31 102 33"
             fill="none"
             stroke="currentColor"
-            strokeWidth="6.4"
+            strokeWidth="7"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <path
-            d="M70 54C72.7 64.8 84.2 70.4 94 64.2"
+            d="M80 55C83 67 96 73 106 66"
             fill="none"
             stroke="var(--orvanta-accent, #0797B7)"
-            strokeWidth="7.4"
+            strokeWidth="8"
             strokeLinecap="round"
           />
-          <circle cx="33" cy="43" r="6.8" fill="currentColor" />
-          <circle cx="88" cy="34" r="6.8" fill="var(--orvanta-accent, #0797B7)" />
+          <circle cx="98" cy="33" r="7.8" fill="var(--orvanta-accent, #0797B7)" />
         </svg>
       </span>
 
