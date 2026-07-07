@@ -31,7 +31,7 @@ export default function OrvantaLogo({
             strokeLinejoin="round"
           />
           <path
-            d="M70 54C73.3 66.8 87.7 72.4 98 64.2"
+            d="M70 54C72.7 64.8 84.2 70.4 94 64.2"
             fill="none"
             stroke="var(--orvanta-accent, #0797B7)"
             strokeWidth="7.4"
