@@ -9,6 +9,7 @@
 import { getAgent } from "./agents";
 
 export type ApprovalTier = "T0" | "T1" | "T2" | "T3";
+export type ServerApprovalRole = "OWNER" | "ADMIN" | "CEO" | "STAFF";
 
 export type TierRule = {
   tier: ApprovalTier;
@@ -71,6 +72,25 @@ export function canSelfApprove(agentId: string, amountSAR: number): boolean {
   if (agent.rank === "OWNER") return true;
   if (agent.rank === "CEO") return tier.tier === "T0" || tier.tier === "T1";
   return tier.tier === "T0" && amountSAR <= agent.authorityLimitSAR;
+}
+
+export function canRoleApprove(role: ServerApprovalRole, amountSAR: number, feasibilityConfirmed = false): boolean {
+  const tier = requiredTier(amountSAR).tier;
+  if (role === "OWNER") return tier !== "T3" || feasibilityConfirmed;
+  if (tier === "T0") return role === "ADMIN" || role === "CEO";
+  if (tier === "T1") return role === "ADMIN" || role === "CEO";
+  return false;
+}
+
+export function assertCanApprove(role: ServerApprovalRole, amountSAR: number, feasibilityConfirmed = false) {
+  const tier = requiredTier(amountSAR);
+  if (!canRoleApprove(role, amountSAR, feasibilityConfirmed)) {
+    if (tier.tier === "T3" && role === "OWNER" && !feasibilityConfirmed) {
+      throw new Error("يتطلب هذا القرار دراسة جدوى ثلاثية قبل اعتماد المالك.");
+    }
+    throw new Error(`لا يملك هذا المستخدم صلاحية اعتماد ${tier.tier}. المطلوب: ${tier.approver}.`);
+  }
+  return tier;
 }
 
 /** True when the amount must reach the owner's decision inbox. */
