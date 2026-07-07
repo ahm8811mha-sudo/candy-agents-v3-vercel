@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "./brand.css";
 import "./orvanta-exact-logo.css";
+import "./orvanta-logo-final.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Orvanta | AI Operating System for Business",
-  description:
-    "أورفانتا — نظام تشغيل ذكي للأعمال والتجارة والاستثمار، يدير القرارات والمشاريع عبر AI Agents.",
+  description: "Orvanta business AI operating system.",
   icons: {
     icon: "/orvanta-logo-exact.svg",
     shortcut: "/orvanta-logo-exact.svg",
@@ -17,8 +17,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Orvanta | AI Operating System for Business",
-    description:
-      "أورفانتا — نظام تشغيل ذكي للأعمال والتجارة والاستثمار، يدير القرارات والمشاريع عبر AI Agents.",
+    description: "Orvanta business AI operating system.",
     images: ["/orvanta-logo-exact.svg"],
   },
 };
