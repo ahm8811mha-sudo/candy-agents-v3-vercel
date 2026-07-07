@@ -22,6 +22,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
+import OrvantaLogo from "./OrvantaLogo";
 
 type Dashboard = {
   projects: Array<{ id: string }>;
@@ -44,28 +45,6 @@ const departments = [
   { href: "/departments/government-relations", label: "الحكومية", icon: Landmark },
   { href: "/bi-center", label: "مركز BI", icon: BarChart3 },
 ];
-
-function ExactOrvantaLogo({
-  size = "min(340px, 78vw)",
-  minHeight = 128,
-}: {
-  size?: string;
-  minHeight?: number;
-}) {
-  return (
-    <span
-      aria-label="Orvanta logo"
-      role="img"
-      style={{
-        width: size,
-        aspectRatio: "370 / 226",
-        minHeight,
-        display: "block",
-        background: "var(--orvanta-exact-logo) center / contain no-repeat",
-      }}
-    />
-  );
-}
 
 export default function CompanyOverview() {
   const [dash, setDash] = useState<Dashboard | null>(null);
@@ -108,16 +87,9 @@ export default function CompanyOverview() {
 
   return (
     <main className="page-wrap">
-      <header className="hero-scenic">
-        <div
-          style={{
-            width: "100%",
-            display: "grid",
-            placeItems: "center",
-            marginBottom: 10,
-          }}
-        >
-          <ExactOrvantaLogo />
+      <header className="hero-scenic hero-scenic--logo-ready">
+        <div className="orvanta-hero-brand" aria-label="Orvanta logo">
+          <OrvantaLogo size={150} subtitle="" className="orvanta-logo-home" />
         </div>
 
         <span className="hero-pill">
@@ -142,16 +114,9 @@ export default function CompanyOverview() {
           <Link className="secondary-btn" href="/office"><Activity size={17} /> المكتب الحيّ</Link>
         </div>
 
-        <div className="orvanta-system-card" aria-label="Orvanta AI operating system logo concept">
-          <div
-            style={{
-              minHeight: 210,
-              display: "grid",
-              placeItems: "center",
-              padding: "18px 12px",
-            }}
-          >
-            <ExactOrvantaLogo size="min(330px, 76vw)" minHeight={150} />
+        <div className="orvanta-system-card" aria-label="Orvanta logo">
+          <div className="orvanta-system-orbit">
+            <OrvantaLogo size={190} subtitle="" className="orvanta-logo-showcase" />
           </div>
         </div>
 
