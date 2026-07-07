@@ -1,8 +1,9 @@
 :root {
-  --orvanta-blue: #3b82f6;
-  --orvanta-cyan: #06b6d4;
-  --orvanta-teal: #14b8a6;
-  --orvanta-ink: #07111f;
+  --orvanta-blue: #0f6fff;
+  --orvanta-cyan: #0797b7;
+  --orvanta-teal: #0aa899;
+  --orvanta-ink: #111827;
+  --orvanta-accent: #0797b7;
   --orvanta-gradient: linear-gradient(135deg, var(--orvanta-blue), var(--orvanta-cyan) 52%, var(--orvanta-teal));
 }
 
@@ -19,18 +20,16 @@
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  border-radius: 18px;
-  background: var(--orvanta-gradient);
-  box-shadow:
-    0 16px 42px rgba(20, 184, 166, 0.24),
-    0 10px 34px rgba(59, 130, 246, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: var(--text-strong, var(--orvanta-ink));
+  background: transparent;
+  border-radius: 999px;
 }
 
 .orvanta-mark svg {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .orvanta-wordmark {
@@ -41,17 +40,17 @@
 }
 
 .orvanta-wordmark b {
-  color: var(--text-strong, #fff);
+  color: var(--text-strong, #111827);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.16rem;
-  font-weight: 800;
-  letter-spacing: -0.035em;
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
 .orvanta-wordmark small {
-  color: var(--muted, #b0bac8);
+  color: var(--muted, #64748b);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 750;
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -65,6 +64,7 @@
 
 .orvanta-hero-brand .orvanta-wordmark b {
   font-size: clamp(1.7rem, 4vw, 2.45rem);
+  letter-spacing: -0.04em;
 }
 
 .orvanta-hero-brand .orvanta-wordmark small {
@@ -75,21 +75,20 @@
   position: relative;
   overflow: hidden;
   min-height: 260px;
-  border: 1px solid rgba(124, 199, 255, 0.18);
+  border: 1px solid rgba(7, 151, 183, 0.16);
   border-radius: 24px;
   background:
-    radial-gradient(circle at 22% 18%, rgba(59, 130, 246, 0.22), transparent 28%),
-    radial-gradient(circle at 80% 80%, rgba(20, 184, 166, 0.18), transparent 34%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+    radial-gradient(circle at 52% 48%, rgba(7, 151, 183, 0.1), transparent 26%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
     var(--panel, #141b25);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
 }
 
 .orvanta-system-card::before {
   content: "";
   position: absolute;
   inset: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 999px;
 }
 
@@ -97,12 +96,12 @@
   content: "";
   position: absolute;
   inset: 50%;
-  width: 150px;
-  height: 150px;
+  width: 120px;
+  height: 120px;
   border-radius: 999px;
-  background: var(--orvanta-gradient);
+  background: rgba(7, 151, 183, 0.18);
   filter: blur(34px);
-  opacity: 0.25;
+  opacity: 0.2;
   transform: translate(-50%, -50%);
 }
 
@@ -118,7 +117,7 @@
 .orvanta-system-orbit .orvanta-mark {
   width: 112px !important;
   height: 112px !important;
-  border-radius: 30px;
+  color: #f8fafc;
 }
 
 .orvanta-node {
@@ -127,8 +126,8 @@
   height: 10px;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow: 0 0 22px rgba(20, 184, 166, 0.65);
-  opacity: 0.86;
+  box-shadow: 0 0 18px rgba(7, 151, 183, 0.45);
+  opacity: 0.72;
 }
 
 .orvanta-node.n1 { top: 18%; left: 28%; }
@@ -155,7 +154,7 @@
 }
 
 .shell-sidebar__brand .orvanta-mark {
-  border-radius: 13px;
+  color: var(--text-strong, #fff);
 }
 
 .shell-sidebar__brand .orvanta-wordmark b {
