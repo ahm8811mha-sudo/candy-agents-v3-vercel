@@ -10,15 +10,9 @@ import AppShell from "@/components/AppShell";
 export const metadata: Metadata = {
   title: "Orvanta | AI Operating System for Business",
   description: "Orvanta business AI operating system.",
-  icons: {
-    icon: "/orvanta-logo-exact.svg",
-    shortcut: "/orvanta-logo-exact.svg",
-    apple: "/orvanta-logo-exact.svg",
-  },
   openGraph: {
     title: "Orvanta | AI Operating System for Business",
     description: "Orvanta business AI operating system.",
-    images: ["/orvanta-logo-exact.svg"],
   },
 };
 
