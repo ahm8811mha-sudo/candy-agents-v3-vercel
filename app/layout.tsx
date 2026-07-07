@@ -9,6 +9,17 @@ export const metadata: Metadata = {
   title: "Orvanta | AI Operating System for Business",
   description:
     "أورفانتا — نظام تشغيل ذكي للأعمال والتجارة والاستثمار، يدير القرارات والمشاريع عبر AI Agents.",
+  icons: {
+    icon: "/orvanta-mark.svg",
+    shortcut: "/orvanta-mark.svg",
+    apple: "/orvanta-mark.svg",
+  },
+  openGraph: {
+    title: "Orvanta | AI Operating System for Business",
+    description:
+      "أورفانتا — نظام تشغيل ذكي للأعمال والتجارة والاستثمار، يدير القرارات والمشاريع عبر AI Agents.",
+    images: ["/orvanta-logo.svg"],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
