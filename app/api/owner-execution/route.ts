@@ -4,9 +4,7 @@ import { runSafeExecution } from "@/lib/safeExecution";
 
 export async function POST(req: NextRequest) {
   try {
-    const actor = await authenticateRequest(req);
-    requireAccess(actor, ["OWNER", "ADMIN"]);
-
+    const actor = requireAccess(await authenticateRequest(req), ["OWNER", "ADMIN"]);
     const body = await req.json();
     const result = await runSafeExecution(String(body?.request || ""), actor);
     return NextResponse.json({ ok: true, ...result });
