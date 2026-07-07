@@ -1,0 +1,11 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Orvanta logo">
+  <rect width="1200" height="520" fill="#F8FAFC"/>
+  <g transform="translate(402 92)">
+    <path d="M118 52C70 52 34 88 34 136C34 184 70 220 118 220" stroke="#111827" stroke-width="24" stroke-linecap="round"/>
+    <path d="M108 138C136 176 184 176 212 138C230 114 254 103 284 110" stroke="#111827" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M218 174C225 210 258 235 295 228C332 221 357 188 350 151" stroke="#0797B7" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="98" cy="138" r="20" fill="#111827"/>
+    <circle cx="284" cy="110" r="20" fill="#0797B7"/>
+  </g>
+  <text x="600" y="402" text-anchor="middle" font-family="Inter, SF Pro Display, Segoe UI, Arial, sans-serif" font-size="88" letter-spacing="7" font-weight="500" fill="#111827">Orvanta</text>
+</svg>
