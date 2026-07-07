@@ -3,44 +3,44 @@
   --orvanta-cyan: #0797b7;
   --orvanta-teal: #0aa899;
   --orvanta-ink: #111827;
-  --orvanta-accent: #46b9d9;
-  --orvanta-soft-text: #a9bbd2;
+  --orvanta-accent: #0797b7;
+  --orvanta-soft-text: #64748b;
   --orvanta-gradient: linear-gradient(135deg, var(--orvanta-blue), var(--orvanta-cyan) 52%, var(--orvanta-teal));
   --orvanta-hero-bg:
-    radial-gradient(circle at 18% 10%, rgba(70, 185, 217, 0.16), transparent 28%),
-    radial-gradient(circle at 84% 20%, rgba(10, 168, 153, 0.13), transparent 25%),
-    radial-gradient(circle at 50% 115%, rgba(70, 185, 217, 0.14), transparent 36%),
-    linear-gradient(145deg, #0d2344 0%, #143463 48%, #0b203e 100%);
+    radial-gradient(circle at 22% 10%, rgba(7, 151, 183, 0.09), transparent 26%),
+    radial-gradient(circle at 84% 18%, rgba(10, 168, 153, 0.08), transparent 24%),
+    linear-gradient(180deg, #ffffff 0%, #f7f9fc 58%, #eef4f8 100%);
 }
 
-/* Hero visual identity override — keeps the new mark readable on dark navy */
 .hero-scenic,
 [data-theme="corporate"] .hero-scenic {
-  border: 1px solid rgba(140, 190, 255, 0.14) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
   border-radius: 34px !important;
   background: var(--orvanta-hero-bg) !important;
+  color: #111827 !important;
   box-shadow:
-    0 22px 70px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+    0 18px 50px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
 }
 
 .hero-scenic::before,
 [data-theme="corporate"] .hero-scenic::before {
-  left: 10% !important;
-  right: 10% !important;
-  bottom: 29% !important;
-  background: linear-gradient(90deg, transparent, rgba(70, 185, 217, 0.38), transparent) !important;
+  left: 12% !important;
+  right: 12% !important;
+  bottom: 28% !important;
+  background: linear-gradient(90deg, transparent, rgba(7, 151, 183, 0.22), transparent) !important;
 }
 
 .hero-scenic::after,
 [data-theme="corporate"] .hero-scenic::after {
-  background: radial-gradient(50% 50% at 50% 50%, rgba(70, 185, 217, 0.18), transparent 70%) !important;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(7, 151, 183, 0.12), transparent 70%) !important;
+  filter: blur(32px) !important;
 }
 
 .orvanta-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   min-width: 0;
   direction: ltr;
 }
@@ -50,7 +50,7 @@
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  color: var(--text-strong, var(--orvanta-ink));
+  color: var(--orvanta-ink);
   background: transparent !important;
   box-shadow: none !important;
   border-radius: 999px;
@@ -65,23 +65,23 @@
 
 .orvanta-wordmark {
   display: grid;
-  gap: 4px;
-  line-height: 1.02;
+  gap: 5px;
+  line-height: 1;
   min-width: 0;
 }
 
 .orvanta-wordmark b {
-  color: var(--text-strong, #111827);
+  color: #111827;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: 1.36rem;
+  font-weight: 520;
+  letter-spacing: 0.02em;
 }
 
 .orvanta-wordmark small {
-  color: var(--muted, #64748b);
-  font-size: 0.76rem;
-  font-weight: 650;
+  color: #667085;
+  font-size: 0.74rem;
+  font-weight: 700;
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -90,47 +90,47 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 18px;
   width: 100%;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
   text-align: center;
 }
 
 .hero-scenic .orvanta-hero-brand .orvanta-mark {
-  width: 74px !important;
-  height: 74px !important;
-  color: #f8fbff !important;
+  width: 92px !important;
+  height: 70px !important;
+  color: #111827 !important;
 }
 
 .hero-scenic .orvanta-hero-brand .orvanta-wordmark b {
-  color: #f8fbff !important;
-  font-size: clamp(2rem, 4vw, 2.9rem);
-  font-weight: 760;
-  letter-spacing: -0.045em;
+  color: #111827 !important;
+  font-size: clamp(2.2rem, 4.4vw, 3.35rem);
+  font-weight: 580;
+  letter-spacing: -0.035em;
 }
 
 .hero-scenic .orvanta-hero-brand .orvanta-wordmark small {
-  color: var(--orvanta-soft-text) !important;
+  color: #667085 !important;
   font-size: 0.95rem;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .hero-pill,
 [data-theme="corporate"] .hero-pill {
-  border-color: rgba(255, 255, 255, 0.18) !important;
-  background: rgba(255, 255, 255, 0.07) !important;
-  color: #d5e8f6 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: rgba(15, 23, 42, 0.09) !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  color: #0f3057 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 
 .hero-title,
 [data-theme="corporate"] .hero-title {
-  color: #ffffff !important;
+  color: #111827 !important;
 }
 
 .hero-title em,
 [data-theme="corporate"] .hero-title em {
-  background: linear-gradient(120deg, #79d7ee, #46b9d9 52%, #f3c969 100%) !important;
+  background: linear-gradient(120deg, #0797b7, #0aa899 56%, #111827 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
@@ -138,32 +138,36 @@
 
 .hero-sub,
 [data-theme="corporate"] .hero-sub {
-  color: #b7c6da !important;
+  color: #667085 !important;
+}
+
+.hero-actions .secondary-btn,
+[data-theme="corporate"] .hero-actions .secondary-btn {
+  color: #182230 !important;
+  border-color: rgba(15, 23, 42, 0.13) !important;
+  background: rgba(255, 255, 255, 0.75) !important;
 }
 
 .hero-logos,
 [data-theme="corporate"] .hero-logos {
-  color: #9fb3cb !important;
+  color: #667085 !important;
 }
 
 .hero-logos i,
 [data-theme="corporate"] .hero-logos i {
-  background: #9fb3cb !important;
+  background: #98a2b3 !important;
 }
 
 .orvanta-system-card {
   position: relative;
   overflow: hidden;
-  min-height: 250px;
-  border: 1px solid rgba(156, 182, 217, 0.16) !important;
-  border-radius: 28px;
+  min-height: 230px;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-radius: 30px;
   background:
-    radial-gradient(circle at 50% 45%, rgba(70, 185, 217, 0.12), transparent 26%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
-    rgba(7, 17, 35, 0.2) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+    radial-gradient(circle at 50% 45%, rgba(7, 151, 183, 0.11), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 250, 253, 0.78)) !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
 }
 
 .orvanta-system-card::before,
@@ -174,7 +178,7 @@
 .orvanta-system-orbit {
   position: relative;
   z-index: 1;
-  min-height: 250px;
+  min-height: 230px;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -183,17 +187,17 @@
 .orvanta-system-orbit::before {
   content: "";
   position: absolute;
-  width: 174px;
-  height: 174px;
+  width: 190px;
+  height: 190px;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(70, 185, 217, 0.24), rgba(70, 185, 217, 0) 70%);
+  background: radial-gradient(circle, rgba(7, 151, 183, 0.16), rgba(7, 151, 183, 0) 70%);
   filter: blur(8px);
 }
 
 .orvanta-system-orbit .orvanta-mark {
-  width: 132px !important;
-  height: 132px !important;
-  color: #eef6ff !important;
+  width: 168px !important;
+  height: 116px !important;
+  color: #111827 !important;
   background: transparent !important;
   box-shadow: none !important;
   z-index: 2;
@@ -204,9 +208,9 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #9fe8ff;
-  box-shadow: 0 0 16px rgba(70, 185, 217, 0.38);
-  opacity: 0.6;
+  background: #0797b7;
+  box-shadow: 0 0 16px rgba(7, 151, 183, 0.26);
+  opacity: 0.32;
   z-index: 2;
 }
 
@@ -225,31 +229,33 @@
 }
 
 .orvanta-brand-strip span {
-  border: 1px solid rgba(156, 182, 217, 0.16);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   padding: 7px 11px;
-  color: #a9bbd2;
-  background: rgba(255, 255, 255, 0.035);
+  color: #667085;
+  background: rgba(255, 255, 255, 0.74);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
 .shell-sidebar__brand .orvanta-mark {
-  color: var(--text-strong, #fff);
+  color: var(--text-strong, #111827);
 }
 
 .shell-sidebar__brand .orvanta-wordmark b {
   font-size: 1.02rem;
+  font-weight: 650;
 }
 
 @media (max-width: 760px) {
   .orvanta-hero-brand {
     align-items: center;
+    gap: 12px;
   }
 
   .hero-scenic .orvanta-hero-brand .orvanta-mark {
-    width: 58px !important;
-    height: 58px !important;
+    width: 64px !important;
+    height: 50px !important;
   }
 
   .hero-scenic .orvanta-hero-brand .orvanta-wordmark b {
@@ -257,19 +263,19 @@
   }
 
   .hero-scenic .orvanta-hero-brand .orvanta-wordmark small {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
 
   .orvanta-system-card {
-    min-height: 210px;
+    min-height: 190px;
   }
 
   .orvanta-system-orbit {
-    min-height: 210px;
+    min-height: 190px;
   }
 
   .orvanta-system-orbit .orvanta-mark {
-    width: 104px !important;
-    height: 104px !important;
+    width: 128px !important;
+    height: 90px !important;
   }
 }
