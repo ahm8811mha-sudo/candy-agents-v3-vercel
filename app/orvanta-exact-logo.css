@@ -1,54 +1,87 @@
-/* Exact Orvanta logo supplied by the user. Only this image is shown. */
-:root {
-  --orvanta-exact-logo: url("data:image/webp;base64,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");
-}
+/* Orvanta logo safety layer.
+   No external image, no SVG-wrapped bitmap, no WebP data URI.
+   The logo is rendered as inline SVG from components/OrvantaLogo.tsx so it cannot break on iPhone/Safari. */
 
 .orvanta-lockup {
-  gap: 0 !important;
+  direction: ltr;
+  display: inline-flex !important;
+  align-items: center !important;
   justify-content: center !important;
+  gap: 18px !important;
 }
 
 .orvanta-mark {
-  display: block !important;
-  width: 120px !important;
-  height: 74px !important;
-  border-radius: 0 !important;
-  background: var(--orvanta-exact-logo) center / contain no-repeat !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+  color: #111827 !important;
+  background: transparent !important;
   box-shadow: none !important;
-  color: transparent !important;
+  border-radius: 0 !important;
 }
 
-.orvanta-mark svg,
+.orvanta-mark svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: visible !important;
+}
+
 .orvanta-wordmark {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  line-height: 1 !important;
+}
+
+.orvanta-wordmark b {
+  color: #111827 !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-weight: 360 !important;
+  letter-spacing: 0.16em !important;
+}
+
+.orvanta-wordmark small:empty {
   display: none !important;
 }
 
 .orvanta-hero-brand {
   display: grid !important;
   place-items: center !important;
-  min-height: 116px !important;
-  margin: 0 0 12px !important;
-}
-
-.orvanta-hero-brand > * {
-  display: none !important;
+  width: 100% !important;
+  min-height: 172px !important;
+  margin: 0 0 16px !important;
 }
 
 .orvanta-hero-brand::before {
-  content: "";
-  display: block;
-  width: min(300px, 78vw);
-  aspect-ratio: 370 / 226;
-  background: var(--orvanta-exact-logo) center / contain no-repeat;
+  content: none !important;
+  display: none !important;
 }
 
-.shell-sidebar__brand .orvanta-mark {
-  width: 118px !important;
-  height: 72px !important;
+.orvanta-hero-brand > * {
+  display: inline-flex !important;
+}
+
+.orvanta-hero-brand .orvanta-lockup,
+.orvanta-logo-home {
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.orvanta-hero-brand .orvanta-mark {
+  width: 184px !important;
+  height: 126px !important;
+}
+
+.orvanta-hero-brand .orvanta-wordmark b {
+  font-size: clamp(2.45rem, 8vw, 4.3rem) !important;
+  line-height: 0.9 !important;
 }
 
 .orvanta-system-card {
-  min-height: 210px !important;
+  min-height: 230px !important;
+  display: grid !important;
+  place-items: center !important;
   background:
     radial-gradient(circle at 50% 45%, rgba(7, 151, 183, 0.08), transparent 30%),
     linear-gradient(180deg, #ffffff, #f7fafc) !important;
@@ -57,40 +90,77 @@
 .orvanta-system-orbit {
   display: grid !important;
   place-items: center !important;
-  min-height: 210px !important;
+  min-height: 230px !important;
+  padding: 18px !important;
 }
 
-.orvanta-system-orbit > *,
+.orvanta-system-orbit > * {
+  display: inline-flex !important;
+}
+
 .orvanta-system-orbit::before,
+.orvanta-system-orbit::after,
 .orvanta-node {
   display: none !important;
+  content: none !important;
 }
 
-.orvanta-system-orbit::after {
-  content: "";
-  display: block;
-  width: min(300px, 76vw);
-  aspect-ratio: 370 / 226;
-  background: var(--orvanta-exact-logo) center / contain no-repeat;
-  position: relative;
-  z-index: 3;
+.orvanta-logo-showcase {
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.orvanta-logo-showcase .orvanta-mark {
+  width: 190px !important;
+  height: 130px !important;
+}
+
+.orvanta-logo-showcase .orvanta-wordmark b {
+  font-size: clamp(2.2rem, 7vw, 3.6rem) !important;
+  line-height: 0.95 !important;
+}
+
+.shell-sidebar__brand .orvanta-lockup {
+  gap: 10px !important;
+}
+
+.shell-sidebar__brand .orvanta-mark {
+  width: 54px !important;
+  height: 38px !important;
+}
+
+.shell-sidebar__brand .orvanta-wordmark b {
+  font-size: 1.05rem !important;
+  font-weight: 520 !important;
+  letter-spacing: 0.02em !important;
 }
 
 @media (max-width: 760px) {
-  .orvanta-hero-brand {
-    min-height: 104px !important;
+  .hero-scenic--logo-ready {
+    padding-top: 28px !important;
   }
 
-  .orvanta-hero-brand::before {
-    width: min(260px, 76vw);
+  .orvanta-hero-brand {
+    min-height: 142px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .orvanta-hero-brand .orvanta-mark {
+    width: 146px !important;
+    height: 100px !important;
+  }
+
+  .orvanta-hero-brand .orvanta-wordmark b {
+    font-size: clamp(2.25rem, 10vw, 3.15rem) !important;
   }
 
   .orvanta-system-card,
   .orvanta-system-orbit {
-    min-height: 184px !important;
+    min-height: 190px !important;
   }
 
-  .orvanta-system-orbit::after {
-    width: min(250px, 74vw);
+  .orvanta-logo-showcase .orvanta-mark {
+    width: 150px !important;
+    height: 104px !important;
   }
 }
