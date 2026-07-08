@@ -295,3 +295,18 @@ alter table ledger_entries    enable row level security;
 alter table zatca_invoices    enable row level security;
 alter table sales_income      enable row level security;
 alter table sales_changes     enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Customizable agents (Roadmap #5) — owner renames/retitles/deactivates
+-- ---------------------------------------------------------------------------
+
+create table if not exists agent_overrides (
+  agent_id   text primary key,
+  name       text,
+  title      text,
+  active     boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+alter table agent_overrides enable row level security;
+
+NOTIFY pgrst, 'reload schema';

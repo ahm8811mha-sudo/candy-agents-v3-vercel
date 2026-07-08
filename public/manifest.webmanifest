@@ -1,0 +1,22 @@
+{
+  "name": "Orvanta — نظام تشغيل الشركات بالذكاء الاصطناعي",
+  "short_name": "Orvanta",
+  "description": "شركة كاملة تعمل بالذكاء الاصطناعي، والقرار الأخير بيدك.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#f5f6f8",
+  "theme_color": "#13315c",
+  "icons": [
+    { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "مركز القرار", "url": "/inbox" },
+    { "name": "الأفكار", "url": "/ideas" },
+    { "name": "حالة النظام", "url": "/status" }
+  ]
+}

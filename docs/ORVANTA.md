@@ -42,10 +42,26 @@ Idea → Study (3 وكلاء) → Aggregate → Approval (مصفوفة T0–T3)
 | دقة توصيات الوكلاء | `agentAccuracy` في حلقة التعلّم |
 | سلامة المحاسبة | ميزان مراجعة متوازن دائماً + فواتير ZATCA |
 
-## 4) الخارطة القادمة
+## 4) الخارطة — الحالة
 
-1. **Realtime:** بث تغييرات Supabase مباشرة للواجهة (بدل polling).
-2. **Multi-tenant:** فصل بيانات كل شركة تعمل على Orvanta (RLS per-tenant).
-3. **Public API + Webhooks** بمفاتيح — معيار Stripe للمطورين.
-4. **تطبيق جوال PWA** بإشعارات push لقرارات SLA المتأخرة.
-5. **وكلاء قابلون للتخصيص:** المالك يوظف/يعيد تشكيل الوكلاء من الواجهة.
+1. ✅ **Realtime-lite:** مؤشر تغييرات خفيف (`/api/company/feed` ~100 بايت) تستطلعه
+   الواجهة وتعيد الجلب فقط عند تغيّر البصمة — مركز القرار وشارة القائمة حيّان
+   (`lib/useLiveRefresh.ts`). الترقية إلى Supabase Realtime تستبدل الخُطّاف فقط.
+2. ✅ **Multi-tenant (الأساس):** كل صف يُختم بـ `tenant_id` والقراءة تُفلتر عليه
+   عند `ORVANTA_MULTI_TENANT=true` بعد تشغيل `docs/supabase-multitenant.sql`
+   (`lib/tenant.ts`). العزل الكامل بسياسات RLS لكل مستأجر هو التالي.
+3. ✅ **Public API v1 + Webhooks:** `/api/public/v1/{status,ideas,decisions}`
+   بمفتاح Bearer، وأحداث صادرة موقّعة HMAC — التفاصيل في `docs/PUBLIC_API.md`.
+4. ✅ **PWA:** manifest + service worker (تثبيت على الجوال، فتح دون اتصال)
+   وتنبيهات محلية عند تجاوز قرارات معلّقة للـ SLA (`components/PwaRegister.tsx`).
+   إشعارات Push من الخادم (VAPID) هي الخطوة التالية.
+5. ✅ **وكلاء قابلون للتخصيص:** المالك يعيد تسمية أي وكيل أو يوقفه من `/company`
+   (زر ✏️) — البنية (الرتب/الصلاحيات/التبعية) تبقى محكومة غير قابلة للتعديل،
+   وكل تخصيص يُسجَّل في سجل التدقيق (`lib/company/agentOverrides.ts`).
+
+## 5) ما بعد الخارطة
+
+- Supabase Realtime كناقل بديل للـ feed cursor.
+- عزل RLS لكل مستأجر + إدارة مستأجرين من واجهة المنصة.
+- Push notifications من الخادم (VAPID) للجوال المقفل.
+- مفاتيح API متعددة بنطاقات (scopes) و rate-limits لكل مفتاح.

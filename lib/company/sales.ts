@@ -28,6 +28,7 @@ import { postSale } from "./ledger";
 import { buildInvoice } from "./zatca";
 import { recordAudit } from "./audit";
 import { persist, fetchRows, hydrateOnce } from "../supabase";
+import { emitWebhook } from "./webhooks";
 
 export type IncomeEntry = {
   id: string;
@@ -201,6 +202,7 @@ export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
   // Post a balanced double-entry (net + VAT) and issue a ZATCA invoice.
   const sale = postSale(amount, entryId, `مداخيل مبيعات معتمدة (${orderIds.length} طلب)`);
   const invoice = buildInvoice({ gross: amount, currency, reference: entryId });
+  emitWebhook("income.recognized", { id: entryId, amount, currency, net: sale.net, vat: sale.vat, invoice: invoice.invoiceNumber });
   recordAudit({
     actor: "المالك",
     role: "OWNER",

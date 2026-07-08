@@ -12,6 +12,7 @@ import {
   Building2,
   Filter,
 } from "lucide-react";
+import { useLiveRefresh } from "@/lib/useLiveRefresh";
 
 type InboxItem = {
   id: string;
@@ -71,6 +72,9 @@ export default function InboxCenter() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Realtime-lite: refetch only when the company feed cursor changes.
+  useLiveRefresh(load);
 
   async function decideSystem(item: InboxItem, decision: "APPROVED" | "REJECTED") {
     setBusy(item.id);
