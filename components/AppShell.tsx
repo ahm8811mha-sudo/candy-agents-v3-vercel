@@ -74,9 +74,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
+    // Realtime-lite: the ~100-byte feed cursor carries the pending count.
     async function load() {
       try {
-        const res = await fetch("/api/inbox", { cache: "no-store" });
+        const res = await fetch("/api/company/feed", { cache: "no-store" });
         const json = await res.json();
         if (alive && json.ok) setPending(json.pending || 0);
       } catch {
@@ -84,7 +85,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
     load();
-    const t = setInterval(load, 60_000);
+    const t = setInterval(load, 15_000);
     return () => {
       alive = false;
       clearInterval(t);

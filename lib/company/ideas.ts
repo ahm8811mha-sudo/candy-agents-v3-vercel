@@ -17,6 +17,7 @@ import { getAgent } from "./agents";
 import { requiredTier, requiresFeasibility } from "./governance";
 import { runAgent } from "../ai";
 import { persist, fetchRows, hydrateOnce } from "../supabase";
+import { emitWebhook } from "./webhooks";
 
 export type IdeaSource = "OWNER" | "TEAM";
 export type IdeaStatus = "UNDER_STUDY" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -215,6 +216,14 @@ function studyAndGate(idea: Idea): Idea {
   idea.approvalId = approval.id;
   idea.status = "PENDING_APPROVAL";
   persistIdea(idea);
+  emitWebhook("idea.submitted", {
+    id: idea.id,
+    title: idea.title,
+    budgetSAR: idea.budgetSAR,
+    tier: idea.tier,
+    verdict: idea.aggregate?.verdict ?? null,
+    source: idea.source,
+  });
   return idea;
 }
 

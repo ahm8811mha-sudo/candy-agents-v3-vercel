@@ -9,6 +9,7 @@
  */
 
 import { persist, fetchRows, hydrateOnce } from "./supabase";
+import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -118,6 +119,7 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
   };
   store.unshift(item);
   persist("company_approvals", toRow(item));
+  emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
   return item;
 }
 
@@ -140,6 +142,7 @@ export function decideApproval(
   item.decidedBy = decidedBy;
   if (note) item.note = note;
   persist("company_approvals", toRow(item));
+  emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
   return item;
 }
 

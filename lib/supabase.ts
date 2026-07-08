@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
+import { withTenant, isMultiTenantEnabled, getTenantId } from "./tenant";
 
 let adminClient: SupabaseClient | null = null;
 
@@ -61,7 +62,7 @@ export function persist(table: string, row: Record<string, unknown>, onConflict 
   const supabase = getSupabaseAdmin();
   if (!supabase) return;
   const write: Promise<void> = Promise.resolve(
-    supabase.from(table).upsert(row, { onConflict })
+    supabase.from(table).upsert(withTenant(row), { onConflict })
   ).then(() => undefined, () => undefined);
   try {
     after(write);
@@ -70,7 +71,8 @@ export function persist(table: string, row: Record<string, unknown>, onConflict 
   }
 }
 
-/** Load rows from a table (newest-first by default); [] on any failure. */
+/** Load rows from a table (newest-first by default); [] on any failure.
+ *  With multi-tenancy enabled, only this tenant's rows are read. */
 export async function fetchRows(
   table: string,
   opts: { orderBy?: string; ascending?: boolean; limit?: number } = {}
@@ -79,6 +81,7 @@ export async function fetchRows(
   if (!supabase) return [];
   try {
     let query = supabase.from(table).select("*");
+    if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
     if (opts.orderBy) query = query.order(opts.orderBy, { ascending: opts.ascending ?? false });
     if (opts.limit) query = query.limit(opts.limit);
     const { data, error } = await query;
