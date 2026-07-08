@@ -23,9 +23,11 @@ import {
   Mail,
   Menu,
   X,
+  Activity,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
+import CommandPalette from "./CommandPalette";
 
 type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number };
 type NavGroup = { title: string; links: NavLink[] };
@@ -42,6 +44,7 @@ const PAGE_TITLES: Array<[string, string]> = [
   ["/dashboard", "لوحة CEO"],
   ["/enterprise-os", "Enterprise OS"],
   ["/bi-center", "مركز الذكاء BI"],
+  ["/status", "حالة النظام"],
   ["/departments/finance", "المالية"],
   ["/departments/marketing", "التسويق"],
   ["/departments/sales", "المبيعات CRM"],
@@ -108,6 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { href: "/dashboard", label: "لوحة CEO", icon: ShieldCheck },
         { href: "/enterprise-os", label: "Enterprise OS", icon: Building2 },
         { href: "/bi-center", label: "مركز الذكاء BI", icon: BarChart3 },
+        { href: "/status", label: "حالة النظام", icon: Activity },
       ],
     },
     {
@@ -174,6 +178,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="shell-topbar__title">{pageTitle}</span>
           </div>
           <div className="shell-topbar__actions">
+            <CommandPalette />
             <NotificationCenter />
             <span className="app-header__status hide-mobile">
               <span className="app-header__dot" />

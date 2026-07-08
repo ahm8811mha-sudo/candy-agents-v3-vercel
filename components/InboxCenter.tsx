@@ -24,6 +24,8 @@ type InboxItem = {
   requestedBy: string;
   status: string;
   createdAt: string;
+  ageLabel?: string;
+  stale?: boolean;
 };
 
 const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
@@ -181,6 +183,8 @@ export default function InboxCenter() {
                 <strong>{item.title}</strong>
                 <small className="inbox-item__meta">
                   {item.channel === "SYSTEM" ? "نظام/تداول" : "إداري"} · {item.type} · من: {item.requestedBy}
+                  {item.ageLabel ? <> · {item.ageLabel}</> : null}
+                  {item.stale ? <b style={{ color: "var(--red)" }}> · متأخر عن SLA ⏰</b> : null}
                 </small>
               </div>
               {item.amount !== undefined && <b className="inbox-item__amount">{currency.format(item.amount)}</b>}
