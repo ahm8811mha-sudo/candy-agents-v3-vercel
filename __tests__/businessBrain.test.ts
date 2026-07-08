@@ -92,18 +92,18 @@ describe("evaluateBusiness", () => {
     expect(result.approval.gate).toBe("AUTO");
   });
 
-  it("sets CFO approval for medium budgets", () => {
-    const result = evaluateBusiness("مشروع بميزانية 30000", {
+  it("sets CEO approval for T1 budgets (authority matrix)", () => {
+    const result = evaluateBusiness("مشروع بميزانية 20000", {
       income: 100000,
       expenses: 40000,
       profit: 60000,
       transactionCount: 10,
     });
 
-    expect(result.approval.gate).toBe("CFO");
+    expect(result.approval.gate).toBe("CEO");
   });
 
-  it("sets CEO approval for large budgets", () => {
+  it("sets OWNER approval above the CEO tier (authority matrix)", () => {
     const result = evaluateBusiness("مشروع بميزانية 100000", {
       income: 200000,
       expenses: 80000,
@@ -111,7 +111,7 @@ describe("evaluateBusiness", () => {
       transactionCount: 20,
     });
 
-    expect(result.approval.gate).toBe("CEO");
+    expect(result.approval.gate).toBe("OWNER");
   });
 
   it("sets RISK approval when company is losing", () => {

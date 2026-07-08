@@ -30,13 +30,32 @@ export type InboxItem = {
   status: string; // PENDING | APPROVED | REJECTED | NOTED | FORWARDED
   createdAt: string;
   metadata?: Record<string, unknown>;
+  /** decision-latency telemetry (Amazon-style operational SLA) */
+  ageHours?: number;
+  ageLabel?: string;
+  stale?: boolean;
 };
 
 function str(value: unknown, fallback = ""): string {
   return typeof value === "string" && value ? value : fallback;
 }
 
-export async function getInbox(): Promise<{ items: InboxItem[]; pending: number }> {
+/** Pending decisions older than this are flagged as stale (SLA breach). */
+export const STALE_AFTER_HOURS = 24;
+
+/** Age of a decision item — pure so the SLA math is unit-testable. */
+export function decisionAge(createdAt: string, now: Date = new Date()): { hours: number; label: string; stale: boolean } {
+  const created = new Date(createdAt).getTime();
+  const hours = Number.isFinite(created) ? Math.max(0, (now.getTime() - created) / 3_600_000) : 0;
+  const rounded = Math.round(hours * 10) / 10;
+  let label: string;
+  if (hours < 1) label = "منذ أقل من ساعة";
+  else if (hours < 24) label = `منذ ${Math.round(hours)} ساعة`;
+  else label = `منذ ${Math.round(hours / 24)} يوم`;
+  return { hours: rounded, label, stale: hours >= STALE_AFTER_HOURS };
+}
+
+export async function getInbox(): Promise<{ items: InboxItem[]; pending: number; stale: number; oldestPendingHours: number }> {
   await hydrateCompany();
   const items: InboxItem[] = [];
 
@@ -84,6 +103,16 @@ export async function getInbox(): Promise<{ items: InboxItem[]; pending: number 
     // repository unavailable — system items still flow.
   }
 
+  // Decision-latency telemetry: every item carries its age; pending items past
+  // the SLA are flagged stale so the owner sees what's been waiting too long.
+  const now = new Date();
+  for (const item of items) {
+    const age = decisionAge(item.createdAt, now);
+    item.ageHours = age.hours;
+    item.ageLabel = age.label;
+    item.stale = item.status === "PENDING" && age.stale;
+  }
+
   // Pending first, newest first within each group.
   items.sort((a, b) => {
     const ap = a.status === "PENDING" ? 0 : 1;
@@ -92,5 +121,11 @@ export async function getInbox(): Promise<{ items: InboxItem[]; pending: number 
     return b.createdAt.localeCompare(a.createdAt);
   });
 
-  return { items, pending: items.filter((i) => i.status === "PENDING").length };
+  const pendingItems = items.filter((i) => i.status === "PENDING");
+  return {
+    items,
+    pending: pendingItems.length,
+    stale: pendingItems.filter((i) => i.stale).length,
+    oldestPendingHours: pendingItems.reduce((max, i) => Math.max(max, i.ageHours ?? 0), 0),
+  };
 }
