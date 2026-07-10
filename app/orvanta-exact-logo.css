@@ -1,21 +1,2 @@
-/* Logo disabled by request. Keep this file neutral so old logo rules cannot reappear. */
-.orvanta-lockup,
-.orvanta-hero-brand,
-.orvanta-logo-home,
-.orvanta-logo-showcase,
-.orvanta-system-card,
-.shell-sidebar__brand {
-  display: none !important;
-}
-
-.orvanta-mark,
-.orvanta-wordmark,
-.orvanta-hero-brand::before,
-.orvanta-hero-brand::after,
-.orvanta-system-orbit::before,
-.orvanta-system-orbit::after,
-.orvanta-node {
-  display: none !important;
-  content: none !important;
-  background: none !important;
-}
+/* Compatibility shim retained for older imports.
+   The active Orvanta identity is defined in orvanta-logo-final.css. */
