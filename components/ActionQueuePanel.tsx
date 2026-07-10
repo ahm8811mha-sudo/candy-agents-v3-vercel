@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, RefreshCcw } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  Play,
+  PlugZap,
+  RefreshCcw,
+} from "lucide-react";
 
 type ActionPayload = {
   confidence?: number;
@@ -9,6 +18,15 @@ type ActionPayload = {
   evidence?: Array<{ summary?: string }>;
   blockedBy?: string[];
   priority?: string;
+};
+
+type IntegrationResult = {
+  operation?: string;
+  executedAt?: string;
+  messageId?: string;
+  spreadsheetUrl?: string;
+  webViewLink?: string;
+  alreadyExisted?: boolean;
 };
 
 type CompanyAction = {
@@ -22,9 +40,27 @@ type CompanyAction = {
   requires_approval?: boolean;
   approval_status?: string;
   payload?: ActionPayload;
+  result?: { integration?: IntegrationResult };
   attempts?: number;
   error?: string;
   created_at?: string;
+};
+
+type IntegrationPlan = {
+  capability: "gmail" | "sheets" | "drive";
+  operation: string;
+  label: string;
+};
+
+type IntegrationStatus = {
+  googleWorkspace: {
+    enabled: boolean;
+    credentialsConfigured: boolean;
+    capabilities: Record<"gmail" | "sheets" | "drive", boolean>;
+    missingEnvironmentVariables: string[];
+  };
+  supportedActionTypes: string[];
+  actionPlans: Record<string, IntegrationPlan | null>;
 };
 
 const statusLabels: Record<string, string> = {
@@ -44,23 +80,66 @@ function statusIcon(status: string) {
   return <Clock3 size={16} />;
 }
 
+function integrationLink(result?: IntegrationResult) {
+  return result?.spreadsheetUrl || result?.webViewLink || null;
+}
+
 export default function ActionQueuePanel() {
   const [actions, setActions] = useState<CompanyAction[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [executingId, setExecutingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/company/actions?limit=50", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "تعذر تحميل قائمة الأفعال.");
-      setActions(data.actions || []);
+      const [actionsResponse, integrationResponse] = await Promise.all([
+        fetch("/api/company/actions?limit=50", { cache: "no-store" }),
+        fetch("/api/integrations/status", { cache: "no-store" }),
+      ]);
+      const actionsData = await actionsResponse.json();
+      if (!actionsResponse.ok || !actionsData.ok) {
+        throw new Error(actionsData.error || "تعذر تحميل قائمة الأفعال.");
+      }
+      setActions(actionsData.actions || []);
+
+      const integrationData = await integrationResponse.json().catch(() => null);
+      if (integrationResponse.ok && integrationData?.ok) {
+        setIntegrationStatus(integrationData as IntegrationStatus);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل قائمة الأفعال.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function execute(action: CompanyAction) {
+    setExecutingId(action.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/company/actions/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: action.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        const missing = Array.isArray(data.missingEnvironmentVariables)
+          ? ` المتغيرات الناقصة: ${data.missingEnvironmentVariables.join(", ")}`
+          : "";
+        throw new Error(`${data.error || "تعذر تنفيذ التكامل."}${missing}`);
+      }
+      setMessage(data.reused ? "الإجراء منفذ مسبقاً؛ لم يتم تكرار الأثر الخارجي." : "تم تنفيذ التكامل الخارجي وتسجيل النتيجة.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر تنفيذ التكامل.");
+    } finally {
+      setExecutingId(null);
     }
   }
 
@@ -76,6 +155,11 @@ export default function ActionQueuePanel() {
     return { waiting, running, done, failed };
   }, [actions]);
 
+  const googleReady = Boolean(
+    integrationStatus?.googleWorkspace.enabled &&
+      integrationStatus.googleWorkspace.credentialsConfigured
+  );
+
   return (
     <section className="delivery-panel fade-in">
       <div className="delivery-header">
@@ -89,7 +173,22 @@ export default function ActionQueuePanel() {
         </button>
       </div>
 
+      {integrationStatus && (
+        <div className={`notice ${googleReady ? "done" : "warning"}`}>
+          <PlugZap size={17} />
+          <div>
+            <strong>{googleReady ? "Google Workspace جاهز للتنفيذ" : "Google Workspace يحتاج إعداد البيئة"}</strong>
+            <p>
+              {googleReady
+                ? "يمكن الآن إنشاء مسودات Gmail، وتسجيل الأفعال في Sheets، وحفظ الملفات في Drive من نفس قائمة التنفيذ."
+                : `الكود جاهز، والمتبقي إضافة: ${integrationStatus.googleWorkspace.missingEnvironmentVariables.join(", ")}`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {error && <p className="notice error">{error}</p>}
+      {message && <p className="notice done">{message}</p>}
 
       <div className="finance-summary" style={{ marginBottom: 16 }}>
         <Metric title="بانتظار" value={summary.waiting} />
@@ -110,6 +209,12 @@ export default function ActionQueuePanel() {
             const confidence = action.payload?.confidence;
             const blockedBy = action.payload?.blockedBy || [];
             const evidence = action.payload?.evidence || [];
+            const plan = integrationStatus?.actionPlans[action.action_type] || null;
+            const executableStatus = ["WAITING_INTEGRATION", "QUEUED", "FAILED"].includes(action.status);
+            const capabilityReady = plan ? integrationStatus?.googleWorkspace.capabilities[plan.capability] : false;
+            const result = action.result?.integration;
+            const resultUrl = integrationLink(result);
+
             return (
               <article className="report-card" key={action.id}>
                 <h3 style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
@@ -124,8 +229,32 @@ export default function ActionQueuePanel() {
                   typeof confidence === "number" ? `الثقة: ${confidence}%` : null,
                   blockedBy.length ? `المعوقات: ${blockedBy.join(" | ")}` : "المعوقات: لا توجد معوقات مسجلة",
                   evidence.length ? `الدليل: ${evidence.map((item) => item.summary).filter(Boolean).join(" | ").slice(0, 500)}` : "الدليل: غير مسجل",
+                  action.attempts ? `محاولات التنفيذ: ${action.attempts}` : null,
+                  result?.operation ? `نتيجة التكامل: ${result.operation}${result.alreadyExisted ? " — لم يُكرر" : ""}` : null,
                   action.error ? `الخطأ: ${action.error}` : null,
                 ].filter(Boolean).join("\n")}</pre>
+
+                {(plan || resultUrl) && (
+                  <div className="inbox-item__actions">
+                    {plan && executableStatus && (
+                      <button
+                        className="primary-btn btn-sm"
+                        type="button"
+                        onClick={() => execute(action)}
+                        disabled={!capabilityReady || executingId === action.id}
+                        title={!capabilityReady ? "أكمل متغيرات Google Workspace في Vercel أولاً" : plan.label}
+                      >
+                        {executingId === action.id ? <RefreshCcw className="spin" size={15} /> : <Play size={15} />}
+                        {executingId === action.id ? "جارٍ التنفيذ..." : plan.label}
+                      </button>
+                    )}
+                    {resultUrl && (
+                      <a className="secondary-btn btn-sm" href={resultUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink size={14} /> فتح الناتج
+                      </a>
+                    )}
+                  </div>
+                )}
               </article>
             );
           })}

@@ -1,5 +1,6 @@
 import { hasSupabaseEnv } from "../supabase";
 import { isAuthEnabled } from "../auth";
+import { getGoogleWorkspaceStatus } from "../integrations/googleWorkspace";
 
 export type ReadinessSeverity = "PASS" | "WARN" | "FAIL";
 
@@ -37,6 +38,24 @@ export function getProductionReadiness(): ProductionReadiness {
   const mode = process.env.NODE_ENV === "production" ? "production" : process.env.NODE_ENV === "test" ? "test" : "development";
   const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
   const hasPublicAnonServerWriteFallback = Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const googleWorkspace = getGoogleWorkspaceStatus();
+  const googleWorkspaceCheck = googleWorkspace.enabled
+    ? check(
+        "google-workspace",
+        "Google Workspace execution",
+        googleWorkspace.credentialsConfigured,
+        googleWorkspace.credentialsConfigured
+          ? "Google Workspace is enabled and OAuth credentials are configured for Gmail, Sheets, and Drive."
+          : `Google Workspace is enabled but missing: ${googleWorkspace.missingEnvironmentVariables.join(", ")}`,
+        true
+      )
+    : check(
+        "google-workspace",
+        "Google Workspace execution",
+        false,
+        "Google Workspace execution is disabled. External actions remain safely blocked until GOOGLE_INTEGRATIONS_ENABLED=true.",
+        false
+      );
 
   const checks: ReadinessCheck[] = [
     check(
@@ -82,6 +101,7 @@ export function getProductionReadiness(): ProductionReadiness {
         : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints.",
       false
     ),
+    googleWorkspaceCheck,
   ];
 
   return {
