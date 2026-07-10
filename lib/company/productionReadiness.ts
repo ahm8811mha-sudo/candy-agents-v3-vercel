@@ -63,8 +63,16 @@ export function getProductionReadiness(): ProductionReadiness {
       "Production authentication gate",
       isAuthEnabled(),
       isAuthEnabled()
-        ? "AUTH_ENABLED=true. Sensitive approval routes enforce role checks."
-        : "AUTH_ENABLED is not true. Single-owner fallback is acceptable only for local/demo use."
+        ? "AUTH_ENABLED=true. Sensitive routes require authenticated roles and tenant context."
+        : "AUTH_ENABLED is not true. The development owner fallback is forbidden in production."
+    ),
+    check(
+      "basic-auth-disabled",
+      "No production Basic Auth",
+      process.env.NODE_ENV === "production" || process.env.ALLOW_BASIC_AUTH !== "true",
+      process.env.ALLOW_BASIC_AUTH === "true"
+        ? "ALLOW_BASIC_AUTH=true is accepted only in local development and is ignored in production."
+        : "Basic Auth is disabled. Supabase bearer sessions or trusted system credentials are required."
     ),
     check(
       "supabase-service-role",
@@ -72,7 +80,63 @@ export function getProductionReadiness(): ProductionReadiness {
       hasSupabaseEnv() && hasServiceRole,
       hasServiceRole
         ? "SUPABASE_SERVICE_ROLE_KEY is configured for server-only writes."
-        : "SUPABASE_SERVICE_ROLE_KEY is missing. Projects, approvals, audit, actions, and ledger cannot be durable."
+        : "SUPABASE_SERVICE_ROLE_KEY is missing. Projects, approvals, audit, actions, workflow state, and ledger cannot be durable."
+    ),
+    check(
+      "core-schema-ready",
+      "Company OS core schema",
+      process.env.ORVANTA_CORE_SCHEMA_READY === "true",
+      process.env.ORVANTA_CORE_SCHEMA_READY === "true"
+        ? "Core completion migration is confirmed as applied."
+        : "Apply docs/supabase-core-completion.sql in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
+    ),
+    check(
+      "tenant-rls-ready",
+      "Tenant claims and RLS",
+      process.env.ORVANTA_MULTI_TENANT === "true" && process.env.ORVANTA_RLS_READY === "true",
+      process.env.ORVANTA_RLS_READY === "true"
+        ? "Tenant-scoped RLS is confirmed and cross-tenant tests can run."
+        : "Set JWT app_metadata.tenant_id, enable ORVANTA_MULTI_TENANT, apply RLS policies, and set ORVANTA_RLS_READY=true."
+    ),
+    check(
+      "workflow-runtime",
+      "Durable workflow runtime",
+      process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true",
+      process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true"
+        ? "Durable workflow instances, steps, retries, approvals, and restart recovery are enabled."
+        : "ORVANTA_WORKFLOW_RUNTIME_ENABLED is not true. Long-running company workflows remain blocked."
+    ),
+    check(
+      "outbox-publisher",
+      "Transactional outbox publisher",
+      process.env.ORVANTA_OUTBOX_ENABLED === "true" && Boolean(process.env.CRON_SECRET),
+      process.env.ORVANTA_OUTBOX_ENABLED === "true" && process.env.CRON_SECRET
+        ? "Outbox publishing and scheduler authentication are enabled."
+        : "Enable ORVANTA_OUTBOX_ENABLED and configure CRON_SECRET before publishing external events."
+    ),
+    check(
+      "reconciliation-required",
+      "External receipt and reconciliation",
+      process.env.ORVANTA_RECONCILIATION_REQUIRED === "true",
+      process.env.ORVANTA_RECONCILIATION_REQUIRED === "true"
+        ? "External actions cannot complete without evidence and reconciliation."
+        : "Set ORVANTA_RECONCILIATION_REQUIRED=true after applying the reconciliation schema."
+    ),
+    check(
+      "api-secret",
+      "Internal API secret",
+      Boolean(process.env.API_SECRET_KEY),
+      process.env.API_SECRET_KEY
+        ? "API_SECRET_KEY is configured for trusted system calls."
+        : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints."
+    ),
+    check(
+      "cron-secret",
+      "Scheduler authentication",
+      Boolean(process.env.CRON_SECRET),
+      process.env.CRON_SECRET
+        ? "CRON_SECRET is configured for workflow and outbox workers."
+        : "CRON_SECRET is missing. Background workers cannot be securely invoked."
     ),
     check(
       "openai-key",
@@ -88,17 +152,8 @@ export function getProductionReadiness(): ProductionReadiness {
       "No public anon server write fallback",
       !hasPublicAnonServerWriteFallback,
       hasPublicAnonServerWriteFallback
-        ? "Anon keys are present in env. They are ignored by server persistence, but should not be used for sensitive tables."
+        ? "Anon keys are present in env. They are ignored by server persistence and must never write governance or finance tables."
         : "No anon write fallback is configured for server persistence.",
-      false
-    ),
-    check(
-      "api-secret",
-      "Internal API secret",
-      Boolean(process.env.API_SECRET_KEY),
-      process.env.API_SECRET_KEY
-        ? "API_SECRET_KEY is configured for trusted system calls."
-        : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints.",
       false
     ),
     googleWorkspaceCheck,
