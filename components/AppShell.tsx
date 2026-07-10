@@ -67,8 +67,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
 
@@ -81,7 +88,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const json = await res.json();
         if (alive && json.ok) setPending(json.pending || 0);
       } catch {
-        // silent
+        // Keep navigation usable if telemetry is temporarily unavailable.
       }
     }
     load();
@@ -136,11 +143,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell-root">
+      <a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a>
       <div className={`shell-backdrop ${open ? "open" : ""}`} onClick={() => setOpen(false)} />
 
       <aside className={`shell-sidebar ${open ? "open" : ""}`} aria-label="التنقل الرئيسي">
-        <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)}>
-          <OrvantaLogo size={42} subtitle="AI Operating System" />
+        <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)} aria-label="Orvanta — الصفحة الرئيسية">
+          <OrvantaLogo size={154} subtitle="AI Business Operating System" priority />
         </Link>
 
         {groups.map((group) => (
@@ -148,16 +156,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="shell-group">{group.title}</div>
             {group.links.map((link) => {
               const Icon = link.icon;
+              const active = isActive(link.href);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`shell-link ${isActive(link.href) ? "is-active" : ""}`}
+                  className={`shell-link ${active ? "is-active" : ""}`}
                   onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
                 >
-                  <Icon size={16} />
+                  <Icon size={16} aria-hidden="true" />
                   {link.label}
-                  {link.badge ? <span className="shell-link__badge">{link.badge}</span> : null}
+                  {link.badge ? <span className="shell-link__badge" aria-label={`${link.badge} عناصر بانتظار القرار`}>{link.badge}</span> : null}
                 </Link>
               );
             })}
@@ -167,7 +177,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="shell-main">
         <div className="shell-topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="shell-topbar__identity">
             <button
               className="shell-menu-btn"
               onClick={() => setOpen(!open)}
@@ -176,7 +186,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               {open ? <X size={18} /> : <Menu size={18} />}
             </button>
-            <span className="shell-topbar__title">{pageTitle}</span>
+            <Link href="/" className="shell-topbar__brand" aria-label="Orvanta — الصفحة الرئيسية">
+              <OrvantaLogo size={30} showWordmark={false} />
+              <span className="shell-topbar__brand-name">Orvanta</span>
+            </Link>
+            <span className="shell-topbar__title" title={pageTitle}>{pageTitle}</span>
           </div>
           <div className="shell-topbar__actions">
             <CommandPalette />
@@ -188,7 +202,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="shell-content">{children}</div>
+        <div id="main-content" className="shell-content" tabIndex={-1}>{children}</div>
       </div>
     </div>
   );
