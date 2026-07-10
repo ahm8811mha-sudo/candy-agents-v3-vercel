@@ -25,10 +25,15 @@ Orvanta uses an abstract **O/V monogram**:
 Core brand files:
 
 ```txt
+public/orvanta-logo.svg
+public/orvanta-mark.svg
 components/OrvantaLogo.tsx
 app/brand.css
+app/orvanta-logo-final.css
 app/icon.svg
 ```
+
+The full logo is stored as production-safe vector paths so it renders consistently in Safari, PWA mode, and social previews without depending on external fonts or embedded bitmap images.
 
 ## Agent Flow
 
@@ -79,6 +84,7 @@ app/api/approvals/decisions/route.ts
 docs/OPERATING_MODEL.md
 docs/CONSULTING_AUDIT_ACTION_PLAN.md
 docs/IMPLEMENTATION_STATUS.md
+docs/PROJECT_AUDIT_2026-07.md
 ```
 
 ## Environment
@@ -181,9 +187,10 @@ POST /api/company/actions
 
 ## Consulting Audit
 
-The full consulting-level critique and action plan is stored at:
+The current project critique, risks, and 30/60/90-day roadmap are stored at:
 
 ```txt
+docs/PROJECT_AUDIT_2026-07.md
 docs/CONSULTING_AUDIT_ACTION_PLAN.md
 docs/IMPLEMENTATION_STATUS.md
 ```
@@ -195,6 +202,7 @@ Approved IDEA → Project + Tasks + KPIs + Business Actions + Business Memory + 
 Business recommendation → confidence + assumptions + evidence + blockedBy
 Manual transaction → balanced Ledger entry
 Action → governed status transition
+Global Orvanta identity → sidebar + topbar + mobile + PWA + error/loading states
 ```
 
 ## iOS App
