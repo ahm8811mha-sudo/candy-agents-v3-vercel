@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest, isAuthEnabled, requireAuth } from "@/lib/auth";
+import { NextResponse } from "next/server";
 import {
   getCompanyActionIntegrationPlan,
   SUPPORTED_INTEGRATION_ACTION_TYPES,
@@ -9,13 +8,11 @@ import { getGoogleWorkspaceStatus } from "@/lib/integrations/googleWorkspace";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
-  const user = await authenticateRequest(req);
-  if (isAuthEnabled()) {
-    const authError = requireAuth(user, "VIEWER");
-    if (authError) return authError;
-  }
-
+/**
+ * Safe readiness endpoint. It exposes only booleans and missing variable names,
+ * never credential values, so the Action Queue can explain why a connector is blocked.
+ */
+export async function GET() {
   const googleWorkspace = getGoogleWorkspaceStatus();
   const actionPlans = Object.fromEntries(
     SUPPORTED_INTEGRATION_ACTION_TYPES.map((actionType) => [
