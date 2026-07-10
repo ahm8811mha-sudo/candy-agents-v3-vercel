@@ -75,16 +75,21 @@ lib/company/ideas.ts
 lib/company/ideaExecution.ts
 lib/company/governance.ts
 lib/company/productionReadiness.ts
+lib/integrations/googleWorkspace.ts
+lib/integrations/companyActionExecutor.ts
 components/OrvantaLogo.tsx
 components/ActionQueuePanel.tsx
 app/api/company/route.ts
 app/api/company-execution/route.ts
 app/api/company/actions/route.ts
+app/api/company/actions/execute/route.ts
+app/api/integrations/status/route.ts
 app/api/approvals/decisions/route.ts
 docs/OPERATING_MODEL.md
 docs/CONSULTING_AUDIT_ACTION_PLAN.md
 docs/IMPLEMENTATION_STATUS.md
 docs/PROJECT_AUDIT_2026-07.md
+docs/GOOGLE_WORKSPACE_INTEGRATION.md
 ```
 
 ## Environment
@@ -98,6 +103,22 @@ SUPABASE_SERVICE_ROLE_KEY=<server-only service role key>
 
 AUTH_ENABLED=true
 API_SECRET_KEY=<strong internal api secret>
+
+GOOGLE_INTEGRATIONS_ENABLED=false
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REFRESH_TOKEN=...
+```
+
+Optional Google Workspace defaults:
+
+```env
+GOOGLE_GMAIL_SENDER=owner@example.com
+GOOGLE_DEFAULT_REVIEW_EMAIL=owner@example.com
+GOOGLE_SHEETS_SPREADSHEET_ID=
+GOOGLE_SHEETS_NAME=Orvanta Action Queue
+GOOGLE_SHEETS_TAB=Actions
+GOOGLE_DRIVE_FOLDER_ID=
 ```
 
 Important security rule:
@@ -106,8 +127,33 @@ Important security rule:
 - Do not use `SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` for governance, approvals, ledger, audit, or execution writes.
 - Keep `AUTH_ENABLED=true` in production.
 - `/api/health` exposes production readiness checks. Production should not be considered ready unless `productionReady=true`.
+- Google OAuth secrets and refresh tokens must remain server-only and must never use a `NEXT_PUBLIC_*` name.
+- Keep `GOOGLE_INTEGRATIONS_ENABLED=false` until OAuth is configured and tested.
 
 Without Supabase, the app still runs in memory/demo mode. That is acceptable for development only. Production needs Supabase persistence.
+
+## Google Workspace Integrations
+
+The first production integration layer connects governed Action Queue items to Gmail, Google Sheets, and Google Drive:
+
+```txt
+SALES_OUTREACH          → Gmail draft
+EMAIL_SEND              → Gmail send
+SUPPLIER_SHORTLIST      → Google Sheets append
+MARKETING_CAMPAIGN_DRAFT → Google Drive artifact
+```
+
+Generate a user OAuth refresh token locally:
+
+```bash
+GOOGLE_CLIENT_ID="..." GOOGLE_CLIENT_SECRET="..." npm run google:oauth
+```
+
+Full configuration, scopes, safety behavior, and acceptance tests:
+
+```txt
+docs/GOOGLE_WORKSPACE_INTEGRATION.md
+```
 
 ## Database
 
@@ -155,6 +201,12 @@ Health endpoint:
 /api/health
 ```
 
+Integration readiness endpoint:
+
+```txt
+GET /api/integrations/status
+```
+
 Company API:
 
 ```txt
@@ -183,6 +235,9 @@ Action Queue API:
 GET /api/company/actions
 POST /api/company/actions
 { "id": "<action-id>", "status": "RUNNING" }
+
+POST /api/company/actions/execute
+{ "id": "<action-id>" }
 ```
 
 ## Consulting Audit
@@ -203,6 +258,7 @@ Business recommendation → confidence + assumptions + evidence + blockedBy
 Manual transaction → balanced Ledger entry
 Action → governed status transition
 Global Orvanta identity → sidebar + topbar + mobile + PWA + error/loading states
+Action Queue → Gmail + Sheets + Drive governed execution
 ```
 
 ## iOS App
