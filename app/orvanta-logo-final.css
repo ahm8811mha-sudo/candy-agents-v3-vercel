@@ -1,21 +1,271 @@
-/* Logo disabled by request: no brand image, no mark, no injected pseudo-logo. */
-.orvanta-lockup,
-.orvanta-hero-brand,
-.shell-sidebar__brand,
-.orvanta-logo-home,
-.orvanta-logo-showcase,
-.orvanta-system-card {
-  display: none !important;
+/* Orvanta unified identity — final override loaded after all legacy themes. */
+
+:root {
+  --orvanta-ink: #17212b;
+  --orvanta-navy: #12314f;
+  --orvanta-blue: #0f6fff;
+  --orvanta-cyan: #0797b7;
+  --orvanta-teal: #0aa899;
+  --orvanta-accent: #0797b7;
+  --orvanta-soft: #eef8fb;
+  --orvanta-line: rgba(7, 151, 183, 0.16);
+  --orvanta-brand-gradient: linear-gradient(135deg, #12314f 0%, #0f6fff 54%, #0797b7 100%);
 }
 
-.orvanta-mark,
-.orvanta-wordmark,
-.orvanta-hero-brand::before,
-.orvanta-hero-brand::after,
+[data-theme="corporate"] {
+  --primary: var(--orvanta-blue);
+  --primary-2: var(--orvanta-cyan);
+  --accent-sky: var(--orvanta-cyan);
+  --accent-sky-soft: rgba(7, 151, 183, 0.1);
+  --brand-gradient: var(--orvanta-brand-gradient);
+  --action-bg: var(--orvanta-brand-gradient);
+  --gs-gold: var(--orvanta-cyan);
+  --gs-gold-text: #067f9a;
+}
+
+.orvanta-lockup {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  direction: ltr;
+  color: var(--orvanta-ink);
+}
+
+.orvanta-lockup--full {
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.orvanta-logo-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.orvanta-logo-subtitle {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.orvanta-lockup--mark {
+  flex: 0 0 auto;
+  color: var(--orvanta-ink);
+}
+
+.orvanta-mark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.shell-sidebar__brand {
+  display: grid !important;
+  place-items: center;
+  min-height: 94px;
+  margin: 0 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--orvanta-line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff, #f7fbfd);
+  box-shadow: 0 10px 28px rgba(18, 49, 79, 0.07);
+}
+
+.shell-sidebar__brand .orvanta-lockup--full {
+  width: 154px !important;
+}
+
+.shell-topbar__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.shell-topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-inline-end: 10px;
+  border-inline-end: 1px solid var(--line);
+  color: var(--orvanta-ink);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.shell-topbar__brand-name {
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.shell-topbar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orvanta-hero-brand {
+  display: grid !important;
+  place-items: center;
+  width: 100%;
+  margin: 0 0 8px;
+}
+
+.orvanta-hero-brand .orvanta-lockup--full {
+  width: min(330px, 78vw) !important;
+}
+
+.orvanta-system-card {
+  display: grid !important;
+  place-items: center;
+  width: min(420px, 100%);
+  min-height: 210px;
+  border: 1px solid var(--orvanta-line) !important;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(7, 151, 183, 0.12), transparent 34%),
+    linear-gradient(180deg, #ffffff, #f4fafc) !important;
+  box-shadow: 0 16px 44px rgba(18, 49, 79, 0.08);
+}
+
+.orvanta-system-orbit {
+  display: grid !important;
+  place-items: center;
+  min-height: 210px;
+  padding: 20px;
+}
+
 .orvanta-system-orbit::before,
 .orvanta-system-orbit::after,
 .orvanta-node {
   display: none !important;
   content: none !important;
-  background: none !important;
+}
+
+.orvanta-logo-showcase {
+  color: var(--orvanta-ink);
+}
+
+.shell-link.is-active {
+  background: var(--orvanta-brand-gradient) !important;
+  box-shadow: 0 8px 22px rgba(15, 111, 255, 0.18) !important;
+}
+
+.primary-btn,
+[data-theme="corporate"] .primary-btn {
+  background: var(--orvanta-brand-gradient) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 22px rgba(15, 111, 255, 0.16);
+}
+
+.bento-kicker,
+.eyebrow,
+.department-badge strong {
+  color: var(--orvanta-cyan) !important;
+}
+
+:focus-visible {
+  outline-color: var(--orvanta-cyan) !important;
+}
+
+.brand-loading,
+.brand-error,
+.brand-not-found {
+  min-height: min(74vh, 760px);
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+}
+
+.brand-state-card {
+  width: min(520px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 42px);
+  text-align: center;
+  border: 1px solid var(--orvanta-line);
+  border-radius: 28px;
+  background: linear-gradient(180deg, #fff, #f6fbfd);
+  box-shadow: 0 20px 60px rgba(18, 49, 79, 0.09);
+}
+
+.brand-state-card h1,
+.brand-state-card p {
+  margin: 0;
+}
+
+.brand-state-card p {
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.brand-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(7, 151, 183, 0.18);
+  border-top-color: var(--orvanta-cyan);
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  inset-inline-start: 8px;
+  z-index: 2000;
+  transform: translateY(-160%);
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--orvanta-ink);
+  color: #fff;
+  font-weight: 800;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (max-width: 980px) {
+  .shell-topbar__brand-name {
+    display: none;
+  }
+
+  .shell-topbar__brand {
+    padding-inline-end: 7px;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell-topbar {
+    padding-inline: 12px !important;
+  }
+
+  .shell-topbar__identity {
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .shell-topbar__title {
+    max-width: 43vw;
+  }
+
+  .orvanta-hero-brand .orvanta-lockup--full {
+    width: min(270px, 76vw) !important;
+  }
+
+  .orvanta-system-card,
+  .orvanta-system-orbit {
+    min-height: 176px;
+  }
 }

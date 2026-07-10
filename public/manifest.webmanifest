@@ -1,22 +1,25 @@
 {
-  "name": "Orvanta — نظام تشغيل الشركات بالذكاء الاصطناعي",
+  "name": "Orvanta — نظام تشغيل الأعمال بالذكاء الاصطناعي",
   "short_name": "Orvanta",
-  "description": "شركة كاملة تعمل بالذكاء الاصطناعي، والقرار الأخير بيدك.",
+  "description": "من القرار إلى التنفيذ عبر وكلاء ذكاء اصطناعي، حوكمة تشغيلية، ومركز قرار موحّد.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "dir": "rtl",
-  "lang": "ar",
+  "lang": "ar-SA",
   "background_color": "#f5f6f8",
-  "theme_color": "#13315c",
+  "theme_color": "#12314f",
+  "categories": ["business", "productivity", "finance"],
   "icons": [
     { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "مركز القرار", "url": "/inbox" },
-    { "name": "الأفكار", "url": "/ideas" },
-    { "name": "حالة النظام", "url": "/status" }
+    { "name": "مركز القرار", "short_name": "القرارات", "url": "/inbox" },
+    { "name": "الأفكار", "short_name": "الأفكار", "url": "/ideas" },
+    { "name": "Crisis Room", "short_name": "الأزمات", "url": "/recovery-center" },
+    { "name": "حالة النظام", "short_name": "الحالة", "url": "/status" }
   ]
 }

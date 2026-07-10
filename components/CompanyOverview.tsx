@@ -54,6 +54,7 @@ export default function CompanyOverview() {
   const [pulse, setPulse] = useState<Pulse | null>(null);
   const [learning, setLearning] = useState<Learning | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -66,6 +67,7 @@ export default function CompanyOverview() {
           fetch("/api/company/pulse", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
           fetch("/api/company/learning", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
         ]);
+        if (![d, i, a, b, p, l].some(Boolean)) setLoadError(true);
         if (d?.ok) setDash(d);
         if (i?.ok) setPending(i.pending || 0);
         if (a?.ok && a.account) setAccount(a.account);
@@ -73,7 +75,7 @@ export default function CompanyOverview() {
         if (p?.ok) setPulse(p);
         if (l?.ok) setLearning(l);
       } catch {
-        // silent
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -89,7 +91,7 @@ export default function CompanyOverview() {
     <main className="page-wrap">
       <header className="hero-scenic hero-scenic--logo-ready">
         <div className="orvanta-hero-brand" aria-label="Orvanta logo">
-          <OrvantaLogo size={150} subtitle="" className="orvanta-logo-home" />
+          <OrvantaLogo size={320} className="orvanta-logo-home" priority />
         </div>
 
         <span className="hero-pill">
@@ -114,9 +116,9 @@ export default function CompanyOverview() {
           <Link className="secondary-btn" href="/office"><Activity size={17} /> المكتب الحيّ</Link>
         </div>
 
-        <div className="orvanta-system-card" aria-label="Orvanta logo">
+        <div className="orvanta-system-card" aria-label="Orvanta operating-system mark">
           <div className="orvanta-system-orbit">
-            <OrvantaLogo size={190} subtitle="" className="orvanta-logo-showcase" />
+            <OrvantaLogo size={168} showWordmark={false} className="orvanta-logo-showcase" />
           </div>
         </div>
 
@@ -139,6 +141,12 @@ export default function CompanyOverview() {
       {loading && (
         <div className="bento-card bento-full" style={{ placeItems: "center", padding: 24 }}>
           <Loader2 className="spin" size={22} style={{ color: "var(--muted)" }} />
+        </div>
+      )}
+
+      {loadError && !loading && (
+        <div className="notice error" role="status">
+          تعذّر تحميل بعض مؤشرات Orvanta الآن. يمكنك متابعة استخدام الأقسام والمحاولة مجددًا بعد قليل.
         </div>
       )}
 
@@ -264,7 +272,7 @@ function DigestCard() {
       const json = await res.json();
       if (json.ok) setSent(json.dispatch.reason);
     } catch {
-      // silent
+      // The dashboard remains usable when dispatch temporarily fails.
     } finally {
       setSending(false);
     }
