@@ -1,3 +1,8 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="116" fill="#F8FAFC"/>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Orvanta app icon">
+  <rect width="512" height="512" rx="116" fill="#FFFFFF"/>
+  <path d="M236 160C188 160 152 196 152 244C152 292 188 328 236 328" stroke="#17212B" stroke-width="28" stroke-linecap="round"/>
+  <path d="M226 246C254 284 302 284 330 246C348 222 372 211 402 218" stroke="#17212B" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M336 282C343 318 376 343 413 336C450 329 475 296 468 259" stroke="#0797B7" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="216" cy="246" r="22" fill="#17212B"/>
+  <circle cx="402" cy="218" r="22" fill="#0797B7"/>
 </svg>
