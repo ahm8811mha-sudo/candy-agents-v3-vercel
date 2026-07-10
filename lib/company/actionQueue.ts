@@ -50,6 +50,8 @@ const validTransitions: Record<CompanyActionStatus, CompanyActionStatus[]> = {
   CANCELLED: [],
 };
 
+const executableStatuses: CompanyActionStatus[] = ["QUEUED", "WAITING_INTEGRATION", "FAILED"];
+
 export function normalizeActionInitialStatus(input: {
   requiresApproval?: boolean;
   executionMode?: string;
@@ -74,6 +76,68 @@ export async function listCompanyActions(limit = 50): Promise<CompanyAction[]> {
   return (data || []) as CompanyAction[];
 }
 
+export async function getCompanyAction(id: string): Promise<CompanyAction | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is required to load a company action.");
+
+  const { data, error } = await supabase
+    .from("business_actions")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as CompanyAction | null) || null;
+}
+
+/**
+ * Atomically claims an action for external execution.
+ * The optimistic status predicate prevents two browser clicks or workers from
+ * executing the same external side effect at the same time.
+ */
+export async function claimCompanyActionForExecution(id: string, actor = "system"): Promise<CompanyAction> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is required to execute a company action.");
+
+  const current = await getCompanyAction(id);
+  if (!current) throw new Error("Action not found.");
+  if (current.status === "DONE") return current;
+  if (!executableStatuses.includes(current.status)) {
+    throw new Error(`Action cannot be executed while its status is ${current.status}.`);
+  }
+  if (current.requires_approval && !["APPROVED", "NOT_REQUIRED"].includes(String(current.approval_status || ""))) {
+    throw new Error("Action approval is required before external execution.");
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("business_actions")
+    .update({
+      status: "RUNNING",
+      attempts: Number(current.attempts || 0) + 1,
+      last_attempt_at: now,
+      error: null,
+      updated_at: now,
+    })
+    .eq("id", id)
+    .eq("status", current.status)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("Action is already being executed by another request.");
+
+  recordAudit({
+    actor,
+    action: "ACTION_EXECUTION_CLAIMED",
+    entityType: "business_action",
+    entityId: id,
+    detail: `${current.status} → RUNNING — external execution claimed`,
+  });
+  invalidateCache("dashboard-data");
+  return data as CompanyAction;
+}
+
 export async function updateCompanyActionStatus(input: ActionTransitionInput): Promise<CompanyAction> {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required to update action status.");
@@ -93,7 +157,9 @@ export async function updateCompanyActionStatus(input: ActionTransitionInput): P
     throw new Error(`Invalid action transition: ${currentStatus} → ${input.status}`);
   }
 
-  const attempts = input.status === "RUNNING" || input.status === "FAILED"
+  // Attempts are counted when execution starts. Marking the same attempt as
+  // failed must not increment the counter a second time.
+  const attempts = input.status === "RUNNING"
     ? Number(current.attempts || 0) + 1
     : Number(current.attempts || 0);
 
