@@ -25,6 +25,7 @@ import {
   Megaphone,
   Landmark,
   CornerDownRight,
+  Radar,
 } from "lucide-react";
 
 type Entry = {
@@ -39,6 +40,7 @@ type Entry = {
 
 const DESTINATIONS: Entry[] = [
   { id: "nav-home", title: "نظرة عامة", hint: "الصفحة الرئيسية", href: "/", group: "الوجهات", icon: LayoutDashboard },
+  { id: "nav-control-room", title: "مركز قيادة الشركة", hint: "الدورة والحوكمة والمجلس والهندسة", href: "/control-room", group: "الوجهات", icon: Radar },
   { id: "nav-inbox", title: "مركز القرار", hint: "اعتماد ورفض القرارات", href: "/inbox", group: "الوجهات", icon: Inbox },
   { id: "nav-ideas", title: "الأفكار", hint: "تقديم فكرة · دراسات الجدوى", href: "/ideas", group: "الوجهات", icon: Lightbulb },
   { id: "nav-office", title: "المكتب الحيّ", hint: "نبض الوكلاء الآن", href: "/office", group: "الوجهات", icon: Building2 },
@@ -78,7 +80,6 @@ export default function CommandPalette() {
   const loadedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ⌘K / Ctrl+K opens; Esc closes.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -133,7 +134,7 @@ export default function CommandPalette() {
         }
         setLive(entries);
       } catch {
-        // silent — static destinations still work
+        // Static destinations remain available if live data is temporarily unavailable.
       }
     })();
   }, [open]);
