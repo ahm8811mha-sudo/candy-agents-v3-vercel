@@ -4,6 +4,7 @@ import {
   updateCompanyActionStatus,
   type CompanyAction,
 } from "../company/actionQueue";
+import { reconcileCompanyAction } from "../company-os/reconciliation";
 import {
   appendActionToSheet,
   createGmailDraft,
@@ -167,7 +168,12 @@ function safeFileName(value: string) {
   return `${compact.slice(0, 90) || "Orvanta Action"}.md`;
 }
 
-function externalResult(action: CompanyAction, plan: CompanyActionIntegrationPlan, output: Record<string, unknown>) {
+function externalResult(
+  action: CompanyAction,
+  plan: CompanyActionIntegrationPlan,
+  output: Record<string, unknown>,
+  reconciliation: Record<string, unknown>
+) {
   return {
     integration: {
       provider: plan.provider,
@@ -176,6 +182,7 @@ function externalResult(action: CompanyAction, plan: CompanyActionIntegrationPla
       executedAt: new Date().toISOString(),
       ...output,
     },
+    reconciliation,
   };
 }
 
@@ -192,9 +199,10 @@ export type CompanyActionExecutionResult = {
 
 export async function executeCompanyActionIntegration(
   id: string,
-  actor = "system"
+  actor = "system",
+  tenantId?: string
 ): Promise<CompanyActionExecutionResult> {
-  const current = await getCompanyAction(id);
+  const current = await getCompanyAction(id, tenantId);
   if (!current) throw new Error("Action not found.");
 
   const plan = getCompanyActionIntegrationPlan(current);
@@ -210,7 +218,7 @@ export async function executeCompanyActionIntegration(
     throw new GoogleWorkspaceConfigurationError(plan.capability, status.missingEnvironmentVariables);
   }
 
-  const claimed = await claimCompanyActionForExecution(id, actor);
+  const claimed = await claimCompanyActionForExecution(id, actor, tenantId);
   const claimedPriorIntegration = asRecord(asRecord(claimed.result)?.integration);
   if (claimed.status === "DONE" && claimedPriorIntegration) {
     return { action: claimed, reused: true, plan };
@@ -266,17 +274,27 @@ export async function executeCompanyActionIntegration(
       }
     });
 
+    const reconciliation = await reconcileCompanyAction({
+      tenantId: tenantId || claimed.tenant_id || process.env.ORVANTA_TENANT_ID || "golden-star",
+      action: claimed,
+      output,
+      actor,
+    });
+    const result = externalResult(claimed, plan, output, reconciliation as unknown as Record<string, unknown>);
     const action = await updateCompanyActionStatus({
       id: claimed.id,
-      status: "DONE",
+      tenantId,
+      status: reconciliation.reconciled ? "DONE" : "WAITING_RECONCILIATION",
       actor,
-      result: externalResult(claimed, plan, output),
-      note: `${plan.label} completed`,
+      result,
+      error: reconciliation.reconciled ? undefined : `Reconciliation exception: ${reconciliation.exceptions.join(", ")}`,
+      note: reconciliation.reconciled ? `${plan.label} completed and reconciled` : `${plan.label} executed; reconciliation required`,
     });
     return { action, reused: false, plan };
   } catch (error) {
     await updateCompanyActionStatus({
       id: claimed.id,
+      tenantId,
       status: "FAILED",
       actor,
       error: errorMessage(error),
