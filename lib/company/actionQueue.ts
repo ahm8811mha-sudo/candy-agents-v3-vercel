@@ -1,5 +1,6 @@
 import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
+import { isMultiTenantEnabled, getTenantId } from "../tenant";
 import { recordAudit } from "./audit";
 
 export type CompanyActionStatus =
@@ -7,13 +8,16 @@ export type CompanyActionStatus =
   | "WAITING_APPROVAL"
   | "WAITING_INTEGRATION"
   | "RUNNING"
+  | "WAITING_RECONCILIATION"
   | "DONE"
   | "FAILED"
   | "CANCELLED";
 
 export type CompanyAction = {
   id: string;
+  tenant_id?: string | null;
   project_id?: string | null;
+  workflow_instance_id?: string | null;
   action_type: string;
   title: string;
   description?: string | null;
@@ -35,22 +39,28 @@ export type ActionTransitionInput = {
   id: string;
   status: CompanyActionStatus;
   actor?: string;
+  tenantId?: string;
   result?: Record<string, unknown>;
   error?: string;
   note?: string;
 };
 
 const validTransitions: Record<CompanyActionStatus, CompanyActionStatus[]> = {
-  QUEUED: ["WAITING_APPROVAL", "WAITING_INTEGRATION", "RUNNING", "DONE", "FAILED", "CANCELLED"],
+  QUEUED: ["WAITING_APPROVAL", "WAITING_INTEGRATION", "RUNNING", "WAITING_RECONCILIATION", "DONE", "FAILED", "CANCELLED"],
   WAITING_APPROVAL: ["QUEUED", "RUNNING", "CANCELLED", "FAILED"],
   WAITING_INTEGRATION: ["QUEUED", "RUNNING", "CANCELLED", "FAILED"],
-  RUNNING: ["DONE", "FAILED", "CANCELLED"],
+  RUNNING: ["WAITING_RECONCILIATION", "DONE", "FAILED", "CANCELLED"],
+  WAITING_RECONCILIATION: ["DONE", "FAILED", "CANCELLED"],
   DONE: [],
   FAILED: ["QUEUED", "RUNNING", "CANCELLED"],
   CANCELLED: [],
 };
 
 const executableStatuses: CompanyActionStatus[] = ["QUEUED", "WAITING_INTEGRATION", "FAILED"];
+
+function tenantFor(tenantId?: string) {
+  return tenantId?.trim() || (isMultiTenantEnabled() ? getTenantId() : undefined);
+}
 
 export function normalizeActionInitialStatus(input: {
   requiresApproval?: boolean;
@@ -62,29 +72,31 @@ export function normalizeActionInitialStatus(input: {
   return "QUEUED";
 }
 
-export async function listCompanyActions(limit = 50): Promise<CompanyAction[]> {
+export async function listCompanyActions(limit = 50, tenantId?: string): Promise<CompanyAction[]> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("business_actions")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
+  const tenant = tenantFor(tenantId);
+  if (tenant) query = query.eq("tenant_id", tenant);
 
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []) as CompanyAction[];
 }
 
-export async function getCompanyAction(id: string): Promise<CompanyAction | null> {
+export async function getCompanyAction(id: string, tenantId?: string): Promise<CompanyAction | null> {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required to load a company action.");
 
-  const { data, error } = await supabase
-    .from("business_actions")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  let query = supabase.from("business_actions").select("*").eq("id", id);
+  const tenant = tenantFor(tenantId);
+  if (tenant) query = query.eq("tenant_id", tenant);
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return (data as CompanyAction | null) || null;
@@ -95,11 +107,12 @@ export async function getCompanyAction(id: string): Promise<CompanyAction | null
  * The optimistic status predicate prevents two browser clicks or workers from
  * executing the same external side effect at the same time.
  */
-export async function claimCompanyActionForExecution(id: string, actor = "system"): Promise<CompanyAction> {
+export async function claimCompanyActionForExecution(id: string, actor = "system", tenantId?: string): Promise<CompanyAction> {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required to execute a company action.");
 
-  const current = await getCompanyAction(id);
+  const tenant = tenantFor(tenantId);
+  const current = await getCompanyAction(id, tenant);
   if (!current) throw new Error("Action not found.");
   if (current.status === "DONE") return current;
   if (!executableStatuses.includes(current.status)) {
@@ -110,7 +123,7 @@ export async function claimCompanyActionForExecution(id: string, actor = "system
   }
 
   const now = new Date().toISOString();
-  const { data, error } = await supabase
+  let update = supabase
     .from("business_actions")
     .update({
       status: "RUNNING",
@@ -120,9 +133,9 @@ export async function claimCompanyActionForExecution(id: string, actor = "system
       updated_at: now,
     })
     .eq("id", id)
-    .eq("status", current.status)
-    .select("*")
-    .maybeSingle();
+    .eq("status", current.status);
+  if (tenant) update = update.eq("tenant_id", tenant);
+  const { data, error } = await update.select("*").maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("Action is already being executed by another request.");
@@ -142,11 +155,10 @@ export async function updateCompanyActionStatus(input: ActionTransitionInput): P
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required to update action status.");
 
-  const { data: current, error: currentError } = await supabase
-    .from("business_actions")
-    .select("*")
-    .eq("id", input.id)
-    .single();
+  const tenant = tenantFor(input.tenantId);
+  let currentQuery = supabase.from("business_actions").select("*").eq("id", input.id);
+  if (tenant) currentQuery = currentQuery.eq("tenant_id", tenant);
+  const { data: current, error: currentError } = await currentQuery.single();
 
   if (currentError) throw currentError;
   if (!current) throw new Error("Action not found.");
@@ -157,25 +169,23 @@ export async function updateCompanyActionStatus(input: ActionTransitionInput): P
     throw new Error(`Invalid action transition: ${currentStatus} → ${input.status}`);
   }
 
-  // Attempts are counted when execution starts. Marking the same attempt as
-  // failed must not increment the counter a second time.
   const attempts = input.status === "RUNNING"
     ? Number(current.attempts || 0) + 1
     : Number(current.attempts || 0);
 
-  const { data, error } = await supabase
+  let update = supabase
     .from("business_actions")
     .update({
       status: input.status,
       result: input.result ?? current.result ?? null,
       error: input.error ?? null,
       attempts,
-      last_attempt_at: ["RUNNING", "FAILED", "DONE"].includes(input.status) ? new Date().toISOString() : current.last_attempt_at,
+      last_attempt_at: ["RUNNING", "FAILED", "DONE", "WAITING_RECONCILIATION"].includes(input.status) ? new Date().toISOString() : current.last_attempt_at,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", input.id)
-    .select("*")
-    .single();
+    .eq("id", input.id);
+  if (tenant) update = update.eq("tenant_id", tenant);
+  const { data, error } = await update.select("*").single();
 
   if (error) throw error;
 
