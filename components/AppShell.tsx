@@ -24,6 +24,7 @@ import {
   Menu,
   X,
   Activity,
+  Radar,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
@@ -33,6 +34,7 @@ type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number
 type NavGroup = { title: string; links: NavLink[] };
 
 const PAGE_TITLES: Array<[string, string]> = [
+  ["/control-room", "مركز قيادة الشركة"],
   ["/inbox", "مركز القرار"],
   ["/ideas", "الأفكار"],
   ["/correspondence-center", "مركز المخاطبات"],
@@ -81,7 +83,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    // Realtime-lite: the ~100-byte feed cursor carries the pending count.
     async function load() {
       try {
         const res = await fetch("/api/company/feed", { cache: "no-store" });
@@ -101,19 +102,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const groups: NavGroup[] = [
     {
-      title: "الرئيسية",
+      title: "القيادة",
       links: [
         { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
+        { href: "/control-room", label: "مركز قيادة الشركة", icon: Radar },
         { href: "/inbox", label: "مركز القرار", icon: Inbox, badge: pending },
         { href: "/ideas", label: "الأفكار", icon: Lightbulb },
-        { href: "/correspondence-center", label: "مركز المخاطبات", icon: Mail },
-        { href: "/recovery-center", label: "Crisis Room", icon: AlertTriangle },
-        { href: "/operations", label: "التشغيل", icon: Send },
+        { href: "/operations", label: "التنفيذ", icon: Send },
       ],
     },
     {
-      title: "اللوحات",
+      title: "المراكز",
       links: [
+        { href: "/correspondence-center", label: "مركز المخاطبات", icon: Mail },
+        { href: "/recovery-center", label: "Crisis Room", icon: AlertTriangle },
         { href: "/office", label: "المكتب", icon: Building2 },
         { href: "/company", label: "الهيكل الإداري", icon: Users },
         { href: "/dashboard", label: "لوحة CEO", icon: ShieldCheck },
@@ -123,13 +125,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       ],
     },
     {
-      title: "الأقسام",
+      title: "محركات الأعمال",
       links: [
         { href: "/departments/executive", label: "المكتب التنفيذي", icon: ShieldCheck },
         { href: "/sales", label: "نظام المبيعات (المتجر)", icon: ShoppingBag },
         { href: "/departments/finance", label: "المالية", icon: Calculator },
-        { href: "/departments/marketing", label: "التسويق", icon: Megaphone },
-        { href: "/departments/sales", label: "المبيعات CRM", icon: Users },
+        { href: "/departments/marketing", label: "النمو والتسويق", icon: Megaphone },
+        { href: "/departments/sales", label: "العميل والمبيعات CRM", icon: Users },
         { href: "/departments/operations", label: "العمليات", icon: Settings2 },
         { href: "/departments/procurement", label: "المشتريات", icon: PackageSearch },
         { href: "/departments/government-relations", label: "العلاقات الحكومية", icon: Landmark },
@@ -148,7 +150,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className={`shell-sidebar ${open ? "open" : ""}`} aria-label="التنقل الرئيسي">
         <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)} aria-label="Orvanta — الصفحة الرئيسية">
-          <OrvantaLogo size={154} subtitle="AI Business Operating System" priority />
+          <OrvantaLogo size={154} subtitle="AI Company Operating System" priority />
         </Link>
 
         {groups.map((group) => (
