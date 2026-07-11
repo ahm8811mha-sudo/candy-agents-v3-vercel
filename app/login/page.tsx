@@ -57,6 +57,7 @@ export default function LoginPage() {
   const firstOwnerSetup = setupState === "FIRST_OWNER_SETUP";
   const ownerSetupBusy = setupState === "SETUP_IN_PROGRESS";
   const registrationMode = (mode === "owner" && firstOwnerSetup) || mode === "company" || mode === "invite";
+  const ownerSessionMode = mode === "owner" || mode === "company";
 
   useEffect(() => {
     const candidate = new URLSearchParams(window.location.search).get("next");
@@ -104,6 +105,7 @@ export default function LoginPage() {
 
   function resetFeedback(nextMode: AuthMode) {
     setMode(nextMode);
+    setRememberDevice(nextMode === "owner" || nextMode === "company");
     setError("");
     setMessage("");
     setPassword("");
@@ -149,7 +151,7 @@ export default function LoginPage() {
           password,
           activationCode,
           inviteCode,
-          rememberDevice,
+          rememberDevice: ownerSessionMode ? rememberDevice : false,
         }),
       });
       const json = await response.json().catch(() => ({}));
@@ -365,33 +367,35 @@ export default function LoginPage() {
                 </label>
               )}
 
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  padding: 12,
-                  borderRadius: 14,
-                  border: "1px solid var(--line)",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={rememberDevice}
-                  onChange={(event) => setRememberDevice(event.target.checked)}
-                  style={{ marginTop: 4 }}
-                />
-                <span>
-                  <strong>اعتبر هذا الجهاز موثوقًا</strong>
-                  <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>
-                    يحفظ دخول المالك حتى 180 يومًا. لا تستخدمه على جهاز مشترك.
-                  </small>
-                </span>
-              </label>
+              {ownerSessionMode && (
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    padding: 12,
+                    borderRadius: 14,
+                    border: "1px solid var(--line)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={(event) => setRememberDevice(event.target.checked)}
+                    style={{ marginTop: 4 }}
+                  />
+                  <span>
+                    <strong>اعتبر هذا الجهاز موثوقًا</strong>
+                    <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>
+                      يحفظ دخول المالك حتى 180 يومًا. لا تستخدمه على جهاز مشترك.
+                    </small>
+                  </span>
+                </label>
+              )}
 
               {ownerSetupBusy && mode === "owner" && (
-                <div className="notice" style={{ color: "var(--orange)" }}>
+                <div className="notice" style={{ color: "var(--red)" }}>
                   توجد عملية إعداد أخرى قيد التنفيذ حاليًا. يعاد فتح التسجيل تلقائيًا إذا لم تكتمل خلال 15 دقيقة.
                 </div>
               )}
