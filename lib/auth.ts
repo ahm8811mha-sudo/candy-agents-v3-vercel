@@ -117,14 +117,10 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
     if (user) return user;
   }
 
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
-  if (refreshToken) {
-    const user = await verifySupabaseRefreshToken(refreshToken);
-    if (user) return user;
-  }
+  // Refresh tokens are rotated only by /api/auth, which can also replace both
+  // HttpOnly cookies. A generic API request must never consume a refresh token
+  // without returning the replacement token to the browser.
 
-  // Basic authentication is deliberately restricted to explicit local/dev use.
-  // It must never be part of the production user journey.
   if (process.env.NODE_ENV !== "production" && process.env.ALLOW_BASIC_AUTH === "true") {
     const basic = parseBasicAuth(authHeader);
     if (basic) return verifyCredentials(basic.email, basic.password);
@@ -133,7 +129,7 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
   return null;
 }
 
-async function userFromSupabaseUser(dataUser: {
+export async function authUserFromSupabaseUser(dataUser: {
   id: string;
   email?: string | null;
   app_metadata?: Record<string, unknown>;
@@ -173,15 +169,7 @@ async function verifySupabaseToken(token: string): Promise<AuthUser | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return null;
-  return userFromSupabaseUser(data.user);
-}
-
-async function verifySupabaseRefreshToken(refreshToken: string): Promise<AuthUser | null> {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data.user) return null;
-  return userFromSupabaseUser(data.user);
+  return authUserFromSupabaseUser(data.user);
 }
 
 async function verifyCredentials(email: string, password: string): Promise<AuthUser | null> {
@@ -189,7 +177,7 @@ async function verifyCredentials(email: string, password: string): Promise<AuthU
   if (!supabase) return null;
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) return null;
-  const user = await userFromSupabaseUser(data.user);
+  const user = await authUserFromSupabaseUser(data.user);
   return { ...user, authMethod: "BASIC_DEV" };
 }
 
