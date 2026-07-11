@@ -129,6 +129,12 @@ export async function POST(req: NextRequest) {
           .eq("tenant_id", auth.context.tenantId)
           .eq("workflow_instance_id", decision.workflow_instance_id)
           .eq("step_key", "WAIT_FOR_APPROVAL");
+
+        await supabase
+          .from("workflow_instances")
+          .update({ status: "PENDING", next_wake_at: now, updated_at: now })
+          .eq("tenant_id", auth.context.tenantId)
+          .eq("id", decision.workflow_instance_id);
       }
     }
 
