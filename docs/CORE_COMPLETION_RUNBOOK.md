@@ -4,21 +4,26 @@ This runbook activates the governed company runtime introduced by PR #17.
 
 ## 1. Migration order
 
-Run in a staging Supabase project first:
+Run in a staging Supabase project first. Existing Orvanta installations already contain `database/schema.sql`; verify it before continuing.
 
 ```text
-1. docs/supabase-schema.sql
-2. docs/supabase-multitenant.sql
-3. docs/enable-pgvector.sql
-4. docs/supabase-world-class-os.sql
+1. database/schema.sql (existing operational schema; verify/apply when absent)
+2. docs/supabase-schema.sql
+3. docs/supabase-multitenant.sql
+4. docs/supabase-world-class-os-v2.sql
 5. docs/supabase-core-completion.sql
+6. docs/supabase-security-hardening.sql
 ```
 
-Do not set the readiness flags until the migration finishes without errors and the tests below pass.
+`supabase-world-class-os-v2.sql` is compatible with the existing production `opportunities.id TEXT` schema. Do not use the original UUID-oriented migration on an existing Orvanta database.
+
+The final security migration removes permissive legacy policies, applies tenant-claim RLS to every company table, moves pgvector out of the public schema, and restricts the event append function to the service role.
+
+Do not set readiness flags until every migration finishes without errors, Supabase Security Advisor returns no findings, and the acceptance tests below pass.
 
 ## 2. Supabase user claims
 
-Every interactive user must have a tenant claim in `app_metadata`:
+Every interactive user must have a tenant claim and role in `app_metadata`:
 
 ```json
 {
@@ -27,7 +32,7 @@ Every interactive user must have a tenant claim in `app_metadata`:
 }
 ```
 
-Supported application roles are `ADMIN`, `CEO`, `CFO`, `MANAGER`, `EMPLOYEE`, and `VIEWER`.
+Supported roles are `ADMIN`, `OWNER`, `CEO`, `CFO`, `COO`, `CRO`, `CGO`, `MANAGER`, `EMPLOYEE`, and `VIEWER`.
 
 A browser request cannot override its JWT tenant with `x-orvanta-tenant-id`. The header is accepted only for trusted API-key or scheduler calls.
 
@@ -48,7 +53,7 @@ ORVANTA_OUTBOX_ENABLED=true
 ORVANTA_RECONCILIATION_REQUIRED=true
 ```
 
-Google Workspace remains behind its own kill switch and OAuth variables.
+Set `ORVANTA_CORE_SCHEMA_READY` and `ORVANTA_RLS_READY` only after database verification and cross-tenant tests. Google Workspace remains behind its own kill switch and OAuth variables.
 
 ## 4. Runtime APIs
 
@@ -57,6 +62,7 @@ POST /api/company-os/workflows
 GET  /api/company-os/workflows
 GET|POST /api/company-os/workflows/tick
 GET|POST /api/company-os/outbox/publish
+POST /api/company-os/decisions/approve
 GET  /api/company-os/health
 GET|POST /api/company-os/knowledge
 POST /api/company-os/reconcile
@@ -80,10 +86,11 @@ x-orvanta-tenant-id: golden-star
 ### Tenant isolation
 
 1. Create users for `tenant-a` and `tenant-b`.
-2. Insert one project and one action for each tenant.
-3. Use each user's access token to query tenant-scoped routes.
-4. Confirm neither user can read, update, execute, or reconcile the other tenant's records.
-5. Attempt to send a conflicting `x-orvanta-tenant-id`; expect HTTP 403.
+2. Add the matching `tenant_id` and `role` to each user's `app_metadata`.
+3. Insert one project and one action for each tenant.
+4. Use each user's session to query tenant-scoped routes.
+5. Confirm neither user can read, update, execute, approve, or reconcile the other tenant's records.
+6. Attempt to send a conflicting `x-orvanta-tenant-id`; expect HTTP 403.
 
 ### Workflow restart and idempotency
 
@@ -92,14 +99,16 @@ x-orvanta-tenant-id: golden-star
 3. Run one worker tick.
 4. Redeploy or restart the server.
 5. Continue worker ticks and confirm execution resumes from the persisted current step.
-6. Verify only one decision packet, one project, one budget commitment, and one action set exist.
+6. Verify only one decision packet, project, budget commitment, and action set exist.
 
-### Approval pause
+### Approval pause and quorum
 
 1. Start a MEDIUM/HIGH workflow.
 2. Confirm the workflow enters `WAITING_APPROVAL`.
-3. Approve all required rows in `decision_approvals` through governed approval routes.
-4. Run the worker again and confirm it resumes.
+3. Vote through `/api/company-os/decisions/approve` using each required executive role.
+4. Confirm the workflow remains paused until quorum is complete.
+5. Run the worker again and confirm it resumes.
+6. Reject a separate decision and confirm its workflow is cancelled.
 
 ### Outbox reliability
 
@@ -117,6 +126,12 @@ x-orvanta-tenant-id: golden-star
 3. Confirm `execution_reconciliations.status=RECONCILED` before the action becomes `DONE`.
 4. For a financial action, omit the ledger reference; expect `WAITING_RECONCILIATION`.
 5. Add a balanced ledger entry and reconcile again; expect `DONE`.
+
+### Security Advisor
+
+1. Run the Supabase Security Advisor after all migrations.
+2. Confirm there are no `rls_enabled_no_policy`, `rls_policy_always_true`, `function_search_path_mutable`, `extension_in_public`, or `security_definer_function` findings.
+3. Confirm anonymous access returns no company data.
 
 ### Production readiness
 
