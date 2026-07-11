@@ -7,6 +7,7 @@ export type CompanyOperation =
   | "READ"
   | "CREATE_OPPORTUNITY"
   | "CREATE_DECISION"
+  | "CAST_APPROVAL"
   | "APPROVE_DECISION"
   | "RESERVE_BUDGET"
   | "EXECUTE_EXTERNAL_ACTION"
@@ -74,11 +75,11 @@ export function evaluateCompanyPolicy(input: PolicyInput): PolicyDecision {
     reasons.push("TENANT_MISMATCH");
   }
 
-  if (input.proposerId && input.proposerId === input.actor.id && riskLevel !== "LOW" && input.operation === "APPROVE_DECISION") {
+  if (input.proposerId && input.proposerId === input.actor.id && riskLevel !== "LOW" && ["CAST_APPROVAL", "APPROVE_DECISION"].includes(input.operation)) {
     reasons.push("SEPARATION_OF_DUTIES_REQUIRED");
   }
 
-  if ((input.evidenceCount || 0) < 1 && ["CREATE_DECISION", "APPROVE_DECISION", "RESERVE_BUDGET"].includes(input.operation)) {
+  if ((input.evidenceCount || 0) < 1 && ["CREATE_DECISION", "CAST_APPROVAL", "APPROVE_DECISION", "RESERVE_BUDGET"].includes(input.operation)) {
     reasons.push("EVIDENCE_REQUIRED");
   }
 
@@ -89,7 +90,7 @@ export function evaluateCompanyPolicy(input: PolicyInput): PolicyDecision {
   }
 
   const missingApprovals = requiredApprovals.filter((role) => !approved.has(role));
-  if (missingApprovals.length > 0 && input.operation !== "CREATE_DECISION") {
+  if (missingApprovals.length > 0 && !["CREATE_DECISION", "CAST_APPROVAL"].includes(input.operation)) {
     reasons.push("MISSING_REQUIRED_APPROVALS");
   }
 
