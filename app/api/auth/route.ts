@@ -39,20 +39,41 @@ function clearSessionCookies(response: NextResponse) {
   response.cookies.set(REFRESH_COOKIE, "", { httpOnly: true, secure: secureCookie, sameSite: "lax", path: "/", maxAge: 0 });
 }
 
+function userPayload(user: AuthUser) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    tenantId: user.tenantId,
+    departmentId: user.departmentId,
+  };
+}
+
 function sessionResponse(user: AuthUser, refreshed = false) {
   return NextResponse.json({
     ok: true,
     authenticated: true,
     refreshed,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      tenantId: user.tenantId,
-      departmentId: user.departmentId,
-    },
+    registrationAvailable: false,
+    user: userPayload(user),
   });
+}
+
+async function isFirstOwnerRegistrationAvailable(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
+  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
+  if (error) return false;
+  return data.users.length === 0;
+}
+
+async function unauthenticatedResponse(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const registrationAvailable = supabase ? await isFirstOwnerRegistrationAvailable(supabase) : false;
+  const response = NextResponse.json(
+    { ok: false, authenticated: false, registrationAvailable },
+    { status: 401 }
+  );
+  clearSessionCookies(response);
+  return response;
 }
 
 export async function GET(req: NextRequest) {
@@ -61,18 +82,10 @@ export async function GET(req: NextRequest) {
 
   const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
   const supabase = getSupabaseAdmin();
-  if (!refreshToken || !supabase) {
-    const response = NextResponse.json({ ok: false, authenticated: false }, { status: 401 });
-    clearSessionCookies(response);
-    return response;
-  }
+  if (!refreshToken || !supabase) return unauthenticatedResponse(supabase);
 
   const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data.session || !data.user) {
-    const response = NextResponse.json({ ok: false, authenticated: false }, { status: 401 });
-    clearSessionCookies(response);
-    return response;
-  }
+  if (error || !data.session || !data.user) return unauthenticatedResponse(supabase);
 
   const refreshedUser = await authUserFromSupabaseUser(data.user);
   const response = sessionResponse(refreshedUser, true);
@@ -103,28 +116,96 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "register") {
+      if (password.length < 10) {
+        return NextResponse.json(
+          { ok: false, error: "كلمة المرور يجب ألا تقل عن 10 أحرف." },
+          { status: 400 }
+        );
+      }
+
+      const firstOwnerSetup = await isFirstOwnerRegistrationAvailable(supabase);
       const caller = await authenticateRequest(req);
       const publicDevRegistration = process.env.NODE_ENV !== "production" && process.env.ALLOW_PUBLIC_REGISTRATION === "true";
-      if (!publicDevRegistration && (!caller || !hasPermission(caller.role, "ADMIN"))) {
+      if (!firstOwnerSetup && !publicDevRegistration && (!caller || !hasPermission(caller.role, "ADMIN"))) {
         return NextResponse.json(
-          { ok: false, error: "إنشاء المستخدمين متاح فقط لمدير النظام." },
+          { ok: false, error: "انتهى إعداد حساب المالك الأول. إنشاء المستخدمين الجدد متاح فقط لمدير النظام." },
           { status: 403 }
         );
       }
 
-      const tenantId = normalizeTenantId(String(body.tenantId || caller?.tenantId || ""));
+      const name = String(body.name || email.split("@")[0] || "مالك Orvanta").trim();
+      const tenantId = firstOwnerSetup
+        ? normalizeTenantId(process.env.ORVANTA_TENANT_ID || "golden-star")
+        : normalizeTenantId(String(body.tenantId || caller?.tenantId || ""));
       const requestedRole = String(body.role || "VIEWER").toUpperCase() as UserRole;
       const allowedRoles: UserRole[] = ["ADMIN", "OWNER", "CEO", "CFO", "COO", "CRO", "CGO", "MANAGER", "EMPLOYEE", "VIEWER"];
-      const role = allowedRoles.includes(requestedRole) ? requestedRole : "VIEWER";
+      const role: UserRole = firstOwnerSetup
+        ? "OWNER"
+        : allowedRoles.includes(requestedRole)
+          ? requestedRole
+          : "VIEWER";
+
       const { data, error } = await supabase.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
         app_metadata: { tenant_id: tenantId, role },
-        user_metadata: { full_name: String(body.name || email) },
+        user_metadata: { full_name: name, tenant_id: tenantId },
       });
 
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+
+      if (firstOwnerSetup) {
+        const employeeId = `owner-${data.user.id}`;
+        const { error: employeeError } = await supabase.from("employees").upsert({
+          id: employeeId,
+          auth_user_id: data.user.id,
+          tenant_id: tenantId,
+          full_name: name,
+          email,
+          role: "OWNER",
+          job_title: "مالك الشركة",
+          status: "ACTIVE",
+          joined_at: new Date().toISOString().slice(0, 10),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "email" });
+
+        if (employeeError) {
+          await supabase.auth.admin.deleteUser(data.user.id);
+          return NextResponse.json(
+            { ok: false, error: `تعذر إكمال ملف المالك: ${employeeError.message}` },
+            { status: 500 }
+          );
+        }
+
+        const signedIn = await supabase.auth.signInWithPassword({ email, password });
+        if (signedIn.error || !signedIn.data.session || !signedIn.data.user) {
+          return NextResponse.json({
+            ok: true,
+            authenticated: false,
+            setupCompleted: true,
+            requiresLogin: true,
+            registrationAvailable: false,
+          }, { status: 201 });
+        }
+
+        const user = await authUserFromSupabaseUser(signedIn.data.user);
+        const response = NextResponse.json({
+          ok: true,
+          authenticated: true,
+          setupCompleted: true,
+          registrationAvailable: false,
+          user: userPayload(user),
+        }, { status: 201 });
+        setSessionCookies(
+          response,
+          signedIn.data.session.access_token,
+          signedIn.data.session.refresh_token,
+          signedIn.data.session.expires_in
+        );
+        return response;
+      }
+
       return NextResponse.json({
         ok: true,
         user: { id: data.user.id, email: data.user.email, tenantId, role },
