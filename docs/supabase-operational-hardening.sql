@@ -70,7 +70,7 @@ begin
     raise exception 'invalid rate-limit limit';
   end if;
 
-  perform pg_advisory_xact_lock(hashtext(p_key));
+  perform pg_advisory_xact_lock(hashtextextended(p_key, 0));
 
   select window_started_at, request_count
     into v_window_start, v_count
@@ -174,6 +174,8 @@ declare
   v_entry_id public.accounting_journal_entries.id%type;
   v_account_id public.accounting_accounts.id%type;
   v_line jsonb;
+  v_debit numeric;
+  v_credit numeric;
   v_total_debit numeric := 0;
   v_total_credit numeric := 0;
 begin
@@ -183,11 +185,14 @@ begin
   if coalesce(length(trim(p_entry_number)), 0) = 0 then
     raise exception 'entry number is required';
   end if;
+  if coalesce(length(trim(p_memo)), 0) = 0 then
+    raise exception 'journal memo is required';
+  end if;
   if jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) < 2 then
     raise exception 'at least two journal lines are required';
   end if;
 
-  perform pg_advisory_xact_lock(hashtext(p_tenant_id || ':' || p_entry_number));
+  perform pg_advisory_xact_lock(hashtextextended(p_tenant_id || ':' || p_entry_number, 0));
 
   select id into v_entry_id
   from public.accounting_journal_entries
@@ -201,11 +206,16 @@ begin
 
   for v_line in select value from jsonb_array_elements(p_lines)
   loop
-    v_total_debit := v_total_debit + coalesce((v_line->>'debit')::numeric, 0);
-    v_total_credit := v_total_credit + coalesce((v_line->>'credit')::numeric, 0);
-    if coalesce((v_line->>'debit')::numeric, 0) < 0 or coalesce((v_line->>'credit')::numeric, 0) < 0 then
+    v_debit := coalesce((v_line->>'debit')::numeric, 0);
+    v_credit := coalesce((v_line->>'credit')::numeric, 0);
+    if v_debit < 0 or v_credit < 0 then
       raise exception 'journal amounts cannot be negative';
     end if;
+    if (v_debit > 0 and v_credit > 0) or (v_debit = 0 and v_credit = 0) then
+      raise exception 'each journal line must contain exactly one debit or credit amount';
+    end if;
+    v_total_debit := v_total_debit + v_debit;
+    v_total_credit := v_total_credit + v_credit;
   end loop;
 
   if round(v_total_debit, 2) <= 0 or round(v_total_debit, 2) <> round(v_total_credit, 2) then
@@ -218,14 +228,16 @@ begin
     entry_date,
     memo,
     source,
-    status
+    status,
+    cost_center_id
   ) values (
     p_tenant_id,
     p_entry_number,
-    coalesce(p_entry_date, now()),
+    coalesce(p_entry_date, now())::date,
     p_memo,
     coalesce(p_source, 'system'),
-    'POSTED'
+    'POSTED',
+    nullif(trim(p_cost_center_id), '')
   ) returning id into v_entry_id;
 
   for v_line in select value from jsonb_array_elements(p_lines)
