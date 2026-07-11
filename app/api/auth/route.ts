@@ -13,6 +13,8 @@ import { normalizeTenantId } from "@/lib/tenant";
 
 const secureCookie = process.env.NODE_ENV === "production";
 
+type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
+
 function setSessionCookies(response: NextResponse, accessToken?: string | null, refreshToken?: string | null, expiresIn?: number | null) {
   if (accessToken) {
     response.cookies.set(ACCESS_COOKIE, accessToken, {
@@ -60,10 +62,45 @@ function sessionResponse(user: AuthUser, refreshed = false) {
   });
 }
 
-async function isFirstOwnerRegistrationAvailable(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
+async function hasAuthUsers(supabase: SupabaseAdmin) {
   const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
+  if (error) return true;
+  return data.users.length > 0;
+}
+
+async function isFirstOwnerRegistrationAvailable(supabase: SupabaseAdmin) {
+  if (await hasAuthUsers(supabase)) return false;
+
+  const { data, error } = await supabase
+    .from("auth_bootstrap_claims")
+    .select("status,expires_at")
+    .eq("id", "first-owner")
+    .maybeSingle();
+
   if (error) return false;
-  return data.users.length === 0;
+  if (!data) return true;
+  if (data.status === "COMPLETED") return false;
+
+  const expiresAt = new Date(String(data.expires_at || ""));
+  return Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() <= Date.now();
+}
+
+async function claimFirstOwnerBootstrap(supabase: SupabaseAdmin, email: string) {
+  const { data, error } = await supabase.rpc("claim_orvanta_first_owner", { p_email: email });
+  if (error || typeof data !== "string" || !data) return null;
+  return data;
+}
+
+async function completeFirstOwnerBootstrap(supabase: SupabaseAdmin, token: string, userId: string) {
+  const { data, error } = await supabase.rpc("complete_orvanta_first_owner", {
+    p_token: token,
+    p_user_id: userId,
+  });
+  return !error && data === true;
+}
+
+async function releaseFirstOwnerBootstrap(supabase: SupabaseAdmin, token: string) {
+  await supabase.rpc("release_orvanta_first_owner", { p_token: token });
 }
 
 async function unauthenticatedResponse(supabase: ReturnType<typeof getSupabaseAdmin>) {
@@ -123,12 +160,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const firstOwnerSetup = await isFirstOwnerRegistrationAvailable(supabase);
       const caller = await authenticateRequest(req);
       const publicDevRegistration = process.env.NODE_ENV !== "production" && process.env.ALLOW_PUBLIC_REGISTRATION === "true";
+      let firstOwnerSetup = false;
+      let bootstrapToken: string | null = null;
+
+      if (!caller && !publicDevRegistration) {
+        bootstrapToken = await claimFirstOwnerBootstrap(supabase, email);
+        if (!bootstrapToken) {
+          return NextResponse.json(
+            { ok: false, error: "انتهى إعداد حساب المالك الأول أو توجد عملية إعداد أخرى قيد التنفيذ." },
+            { status: 403 }
+          );
+        }
+        firstOwnerSetup = true;
+      } else if (!caller && publicDevRegistration && await isFirstOwnerRegistrationAvailable(supabase)) {
+        bootstrapToken = await claimFirstOwnerBootstrap(supabase, email);
+        firstOwnerSetup = Boolean(bootstrapToken);
+      }
+
       if (!firstOwnerSetup && !publicDevRegistration && (!caller || !hasPermission(caller.role, "ADMIN"))) {
         return NextResponse.json(
-          { ok: false, error: "انتهى إعداد حساب المالك الأول. إنشاء المستخدمين الجدد متاح فقط لمدير النظام." },
+          { ok: false, error: "إنشاء المستخدمين الجدد متاح فقط لمدير النظام." },
           { status: 403 }
         );
       }
@@ -153,9 +206,12 @@ export async function POST(req: NextRequest) {
         user_metadata: { full_name: name, tenant_id: tenantId },
       });
 
-      if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      if (error) {
+        if (bootstrapToken) await releaseFirstOwnerBootstrap(supabase, bootstrapToken);
+        return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      }
 
-      if (firstOwnerSetup) {
+      if (firstOwnerSetup && bootstrapToken) {
         const employeeId = `owner-${data.user.id}`;
         const { error: employeeError } = await supabase.from("employees").upsert({
           id: employeeId,
@@ -172,11 +228,14 @@ export async function POST(req: NextRequest) {
 
         if (employeeError) {
           await supabase.auth.admin.deleteUser(data.user.id);
+          await releaseFirstOwnerBootstrap(supabase, bootstrapToken);
           return NextResponse.json(
             { ok: false, error: `تعذر إكمال ملف المالك: ${employeeError.message}` },
             { status: 500 }
           );
         }
+
+        await completeFirstOwnerBootstrap(supabase, bootstrapToken, data.user.id);
 
         const signedIn = await supabase.auth.signInWithPassword({ email, password });
         if (signedIn.error || !signedIn.data.session || !signedIn.data.user) {
