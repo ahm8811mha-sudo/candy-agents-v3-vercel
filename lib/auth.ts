@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "./supabase";
 import { DEFAULT_TENANT_ID } from "./tenant";
 
+export const ACCESS_COOKIE = "orvanta_access_token";
+export const REFRESH_COOKIE = "orvanta_refresh_token";
+
 export type UserRole =
   | "ADMIN"
   | "OWNER"
@@ -108,6 +111,18 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
     return verifySupabaseToken(token);
   }
 
+  const cookieToken = req.cookies.get(ACCESS_COOKIE)?.value;
+  if (cookieToken) {
+    const user = await verifySupabaseToken(cookieToken);
+    if (user) return user;
+  }
+
+  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+  if (refreshToken) {
+    const user = await verifySupabaseRefreshToken(refreshToken);
+    if (user) return user;
+  }
+
   // Basic authentication is deliberately restricted to explicit local/dev use.
   // It must never be part of the production user journey.
   if (process.env.NODE_ENV !== "production" && process.env.ALLOW_BASIC_AUTH === "true") {
@@ -118,62 +133,64 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
   return null;
 }
 
-async function verifySupabaseToken(token: string): Promise<AuthUser | null> {
+async function userFromSupabaseUser(dataUser: {
+  id: string;
+  email?: string | null;
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
+}): Promise<AuthUser> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
+  if (!supabase) throw new Error("Authentication service unavailable.");
 
   const { data: employee } = await supabase
     .from("employees")
     .select("id, full_name, role, department_id")
-    .eq("email", data.user.email)
+    .eq("email", dataUser.email)
     .maybeSingle();
 
-  const metadataRole = String(data.user.app_metadata?.role || "").toUpperCase();
+  const metadataRole = String(dataUser.app_metadata?.role || "").toUpperCase();
   const employeeRole = String(employee?.role || "").toUpperCase();
   const resolvedRole: UserRole = isUserRole(metadataRole)
     ? metadataRole
     : isUserRole(employeeRole)
       ? employeeRole
       : "VIEWER";
-  const tenantId = normalizeTenant(data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id);
+  const tenantId = normalizeTenant(dataUser.app_metadata?.tenant_id || dataUser.user_metadata?.tenant_id);
 
   return {
-    id: employee?.id || data.user.id,
-    email: data.user.email || "",
+    id: employee?.id || dataUser.id,
+    email: dataUser.email || "",
     role: resolvedRole,
-    name: employee?.full_name || data.user.user_metadata?.full_name || data.user.email || "",
+    name: employee?.full_name || String(dataUser.user_metadata?.full_name || dataUser.email || ""),
     tenantId,
     departmentId: employee?.department_id,
     authMethod: "SUPABASE",
   };
 }
 
+async function verifySupabaseToken(token: string): Promise<AuthUser | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
+  return userFromSupabaseUser(data.user);
+}
+
+async function verifySupabaseRefreshToken(refreshToken: string): Promise<AuthUser | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+  if (error || !data.user) return null;
+  return userFromSupabaseUser(data.user);
+}
+
 async function verifyCredentials(email: string, password: string): Promise<AuthUser | null> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
-
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) return null;
-
-  const { data: employee } = await supabase
-    .from("employees")
-    .select("id, full_name, role, department_id")
-    .eq("email", data.user.email)
-    .maybeSingle();
-  const employeeRole = String(employee?.role || "").toUpperCase();
-
-  return {
-    id: employee?.id || data.user.id,
-    email: data.user.email || "",
-    role: isUserRole(employeeRole) ? employeeRole : "VIEWER",
-    name: employee?.full_name || data.user.email || "",
-    tenantId: normalizeTenant(data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id),
-    departmentId: employee?.department_id,
-    authMethod: "BASIC_DEV",
-  };
+  const user = await userFromSupabaseUser(data.user);
+  return { ...user, authMethod: "BASIC_DEV" };
 }
 
 export function requireAuth(user: AuthUser | null, minRole: UserRole = "VIEWER"): NextResponse | null {
