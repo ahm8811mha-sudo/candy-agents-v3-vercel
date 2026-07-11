@@ -211,7 +211,20 @@ export async function middleware(req: NextRequest) {
   }
 
   if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
-  if (process.env.AUTH_ENABLED !== "true") return NextResponse.next();
+
+  if (process.env.AUTH_ENABLED !== "true") {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AUTH_NOT_CONFIGURED",
+          error: "تم إيقاف الوصول لأن المصادقة الإنتاجية غير مفعلة.",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.next();
+  }
 
   if (!(await hasValidAuthentication(req))) {
     return NextResponse.json(
