@@ -12,11 +12,14 @@ Run in a staging Supabase project first. Existing Orvanta installations already 
 3. docs/supabase-multitenant.sql
 4. docs/supabase-world-class-os-v2.sql
 5. docs/supabase-core-completion.sql
+6. docs/supabase-security-hardening.sql
 ```
 
-`supabase-world-class-os-v2.sql` includes pgvector activation and is compatible with the existing production `opportunities.id TEXT` schema. Do not use the original UUID-oriented migration on an existing Orvanta database.
+`supabase-world-class-os-v2.sql` is compatible with the existing production `opportunities.id TEXT` schema. Do not use the original UUID-oriented migration on an existing Orvanta database.
 
-Do not set readiness flags until every migration finishes without errors and the acceptance tests below pass.
+The final security migration removes permissive legacy policies, applies tenant-claim RLS to every company table, moves pgvector out of the public schema, and restricts the event append function to the service role.
+
+Do not set readiness flags until every migration finishes without errors, Supabase Security Advisor returns no findings, and the acceptance tests below pass.
 
 ## 2. Supabase user claims
 
@@ -123,6 +126,12 @@ x-orvanta-tenant-id: golden-star
 3. Confirm `execution_reconciliations.status=RECONCILED` before the action becomes `DONE`.
 4. For a financial action, omit the ledger reference; expect `WAITING_RECONCILIATION`.
 5. Add a balanced ledger entry and reconcile again; expect `DONE`.
+
+### Security Advisor
+
+1. Run the Supabase Security Advisor after all migrations.
+2. Confirm there are no `rls_enabled_no_policy`, `rls_policy_always_true`, `function_search_path_mutable`, `extension_in_public`, or `security_definer_function` findings.
+3. Confirm anonymous access returns no company data.
 
 ### Production readiness
 
