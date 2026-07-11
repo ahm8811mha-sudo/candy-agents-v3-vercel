@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { enforceCompanyPolicy } from "@/lib/company-os/policy";
+import { advanceWorkflowUntilBlocked } from "@/lib/company-os/runtimeRunner";
 import {
   listWorkflowInstances,
   startIdeaToInvestmentWorkflow,
@@ -10,6 +11,7 @@ import { withTelemetrySpan } from "@/lib/company-os/telemetry";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const auth = await requireCompanyContext(req, "VIEWER");
@@ -66,8 +68,28 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    const workflowInstanceId = String((result.instance as { id?: unknown }).id || "");
+    const progress = workflowInstanceId
+      ? await withTelemetrySpan(
+          {
+            tenantId: auth.context.tenantId,
+            correlationId: auth.context.correlationId,
+            operation: "workflow.idea-to-investment.advance",
+            category: "WORKFLOW",
+            actorId: auth.context.actor.id,
+            attributes: { workflowInstanceId },
+          },
+          () => advanceWorkflowUntilBlocked({
+            tenantId: auth.context.tenantId,
+            workflowInstanceId,
+            maxCycles: 10,
+            batchLimit: 50,
+          })
+        )
+      : null;
+
     return NextResponse.json(
-      { ok: true, ...result, policy, requestId: auth.context.requestId },
+      { ok: true, ...result, progress, policy, requestId: auth.context.requestId },
       { status: result.reused ? 200 : 202 }
     );
   } catch (error) {

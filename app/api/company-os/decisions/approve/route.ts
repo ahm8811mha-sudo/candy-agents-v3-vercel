@@ -4,10 +4,12 @@ import { requireCompanyContext } from "@/lib/company-os/context";
 import { actorExecutiveRole, enforceCompanyPolicy } from "@/lib/company-os/policy";
 import { createCompanyEvent } from "@/lib/company-os/events";
 import { appendCompanyEvent } from "@/lib/company-os/outboxPublisher";
+import { advanceWorkflowUntilBlocked } from "@/lib/company-os/runtimeRunner";
 import type { ExecutiveRole, RiskLevel } from "@/lib/company-os/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const auth = await requireCompanyContext(req, "MANAGER");
@@ -127,6 +129,12 @@ export async function POST(req: NextRequest) {
           .eq("tenant_id", auth.context.tenantId)
           .eq("workflow_instance_id", decision.workflow_instance_id)
           .eq("step_key", "WAIT_FOR_APPROVAL");
+
+        await supabase
+          .from("workflow_instances")
+          .update({ status: "PENDING", next_wake_at: now, updated_at: now })
+          .eq("tenant_id", auth.context.tenantId)
+          .eq("id", decision.workflow_instance_id);
       }
     }
 
@@ -148,6 +156,23 @@ export async function POST(req: NextRequest) {
     });
     await appendCompanyEvent(event);
 
+    let workflowProgress: unknown = null;
+    if (quorum && decision.workflow_instance_id) {
+      try {
+        workflowProgress = await advanceWorkflowUntilBlocked({
+          tenantId: auth.context.tenantId,
+          workflowInstanceId: String(decision.workflow_instance_id),
+          maxCycles: 10,
+          batchLimit: 50,
+        });
+      } catch (progressError) {
+        workflowProgress = {
+          settled: false,
+          error: progressError instanceof Error ? progressError.message : "Workflow resume failed",
+        };
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       decisionId,
@@ -157,6 +182,7 @@ export async function POST(req: NextRequest) {
       quorum,
       policy,
       approvals: allVotes || [],
+      workflowProgress,
       requestId: auth.context.requestId,
     });
   } catch (error) {
