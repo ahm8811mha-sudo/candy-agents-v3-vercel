@@ -1,9 +1,10 @@
 -- ORVANTA Company OS — core completion migration
 -- Apply after:
---   1) docs/supabase-schema.sql
---   2) docs/supabase-multitenant.sql
---   3) docs/enable-pgvector.sql
---   4) docs/supabase-world-class-os.sql
+--   1) database/schema.sql and the existing production schema
+--   2) docs/supabase-schema.sql
+--   3) docs/supabase-multitenant.sql
+--   4) docs/enable-pgvector.sql
+--   5) docs/supabase-world-class-os.sql
 --
 -- Review in a staging Supabase project first. This migration is designed to be
 -- re-runnable. Service-role server calls bypass RLS; browser clients do not.
@@ -14,7 +15,14 @@ create extension if not exists pgcrypto;
 -- Tenant columns on every operational table used by the company core.
 -- Existing rows are assigned to tenant zero.
 -- ---------------------------------------------------------------------------
+alter table if exists departments add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists employees add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists task_comments add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists daily_logs add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists approvals add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists notifications add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists activity_logs add column if not exists tenant_id text not null default 'golden-star';
+alter table if exists external_sync_logs add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists projects add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists tasks add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists business_kpis add column if not exists tenant_id text not null default 'golden-star';
@@ -22,13 +30,29 @@ alter table if exists business_alerts add column if not exists tenant_id text no
 alter table if exists business_actions add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists business_memory add column if not exists tenant_id text not null default 'golden-star';
 alter table if exists financial_decisions add column if not exists tenant_id text not null default 'golden-star';
-alter table if exists employees add column if not exists tenant_id text not null default 'golden-star';
 
 alter table if exists projects add column if not exists workflow_instance_id uuid;
 alter table if exists business_actions add column if not exists workflow_instance_id uuid;
 alter table if exists decision_packets add column if not exists workflow_instance_id uuid;
 
+-- Expand employee roles to the complete executive board and operating roles.
+do $$
+begin
+  if to_regclass('public.employees') is not null then
+    alter table public.employees drop constraint if exists employees_role_check;
+    alter table public.employees add constraint employees_role_check
+      check (role in ('ADMIN','OWNER','CEO','CFO','COO','CRO','CGO','MANAGER','EMPLOYEE','VIEWER'));
+  end if;
+end $$;
+
+create index if not exists departments_tenant_idx on departments (tenant_id, id);
+create index if not exists employees_tenant_idx on employees (tenant_id, email);
+create index if not exists task_comments_tenant_idx on task_comments (tenant_id, task_id, created_at desc);
+create index if not exists daily_logs_tenant_idx on daily_logs (tenant_id, employee_id, log_date desc);
 create index if not exists approvals_tenant_idx on approvals (tenant_id, status, created_at desc);
+create index if not exists notifications_tenant_idx on notifications (tenant_id, employee_id, read_at);
+create index if not exists activity_logs_tenant_idx on activity_logs (tenant_id, created_at desc);
+create index if not exists external_sync_logs_tenant_idx on external_sync_logs (tenant_id, provider, created_at desc);
 create index if not exists projects_tenant_idx on projects (tenant_id, status, created_at desc);
 create index if not exists tasks_tenant_idx on tasks (tenant_id, project_id, status);
 create index if not exists business_kpis_tenant_idx on business_kpis (tenant_id, project_id, status);
@@ -36,12 +60,11 @@ create index if not exists business_alerts_tenant_idx on business_alerts (tenant
 create index if not exists business_actions_tenant_idx on business_actions (tenant_id, status, created_at desc);
 create index if not exists business_memory_tenant_idx on business_memory (tenant_id, created_at desc);
 create index if not exists financial_decisions_tenant_idx on financial_decisions (tenant_id, created_at desc);
-create index if not exists employees_tenant_idx on employees (tenant_id, email);
 create unique index if not exists projects_workflow_instance_uidx on projects (tenant_id, workflow_instance_id) where workflow_instance_id is not null;
 create index if not exists business_actions_workflow_idx on business_actions (tenant_id, workflow_instance_id, status) where workflow_instance_id is not null;
 create unique index if not exists decision_packets_workflow_uidx on decision_packets (tenant_id, workflow_instance_id) where workflow_instance_id is not null;
 
--- Required by the reconciliation and knowledge upsert contracts.
+-- Required by reconciliation and knowledge upsert contracts.
 create unique index if not exists execution_reconciliations_action_uidx
   on execution_reconciliations (tenant_id, action_id) where action_id is not null;
 create unique index if not exists knowledge_edges_relation_uidx
@@ -93,8 +116,7 @@ create index if not exists operational_telemetry_correlation_idx on operational_
 create index if not exists operational_telemetry_errors_idx on operational_telemetry (tenant_id, status, created_at desc);
 
 -- ---------------------------------------------------------------------------
--- Atomic event + outbox append. The same transaction either records both rows
--- or records neither. Server code calls this via Supabase RPC.
+-- Atomic event + outbox append. Both rows commit or neither commits.
 -- ---------------------------------------------------------------------------
 create or replace function public.orvanta_append_event(p_event jsonb, p_outbox jsonb)
 returns void
@@ -107,18 +129,11 @@ begin
     id, tenant_id, event_type, event_version, actor_id, actor_type,
     entity_type, entity_id, correlation_id, causation_id, payload, occurred_at
   ) values (
-    p_event->>'id',
-    p_event->>'tenant_id',
-    p_event->>'event_type',
-    coalesce((p_event->>'event_version')::integer, 1),
-    p_event->>'actor_id',
-    p_event->>'actor_type',
-    p_event->>'entity_type',
-    p_event->>'entity_id',
-    p_event->>'correlation_id',
-    nullif(p_event->>'causation_id', ''),
-    coalesce(p_event->'payload', '{}'::jsonb),
-    (p_event->>'occurred_at')::timestamptz
+    p_event->>'id', p_event->>'tenant_id', p_event->>'event_type',
+    coalesce((p_event->>'event_version')::integer, 1), p_event->>'actor_id',
+    p_event->>'actor_type', p_event->>'entity_type', p_event->>'entity_id',
+    p_event->>'correlation_id', nullif(p_event->>'causation_id', ''),
+    coalesce(p_event->'payload', '{}'::jsonb), (p_event->>'occurred_at')::timestamptz
   ) on conflict (id) do nothing;
 
   insert into event_outbox (
@@ -126,19 +141,11 @@ begin
     correlation_id, causation_id, payload, status, attempts,
     available_at, created_at, updated_at
   ) values (
-    p_outbox->>'id',
-    p_outbox->>'tenant_id',
-    p_outbox->>'event_type',
-    p_outbox->>'aggregate_type',
-    p_outbox->>'aggregate_id',
-    p_outbox->>'correlation_id',
-    nullif(p_outbox->>'causation_id', ''),
-    coalesce(p_outbox->'payload', '{}'::jsonb),
-    coalesce(p_outbox->>'status', 'PENDING'),
-    coalesce((p_outbox->>'attempts')::integer, 0),
-    (p_outbox->>'available_at')::timestamptz,
-    (p_outbox->>'created_at')::timestamptz,
-    now()
+    p_outbox->>'id', p_outbox->>'tenant_id', p_outbox->>'event_type',
+    p_outbox->>'aggregate_type', p_outbox->>'aggregate_id', p_outbox->>'correlation_id',
+    nullif(p_outbox->>'causation_id', ''), coalesce(p_outbox->'payload', '{}'::jsonb),
+    coalesce(p_outbox->>'status', 'PENDING'), coalesce((p_outbox->>'attempts')::integer, 0),
+    (p_outbox->>'available_at')::timestamptz, (p_outbox->>'created_at')::timestamptz, now()
   ) on conflict (id) do nothing;
 end;
 $$;
@@ -176,10 +183,11 @@ do $$
 declare
   table_name text;
   tenant_tables text[] := array[
+    'departments','employees','task_comments','daily_logs','notifications','activity_logs','external_sync_logs',
     'audit_log','company_approvals','company_decisions','approvals','company_ideas',
     'projects','tasks','business_kpis','business_alerts','business_actions',
     'business_memory','financial_decisions','ledger_entries','zatca_invoices',
-    'sales_income','sales_changes','employees','company_objectives','opportunities',
+    'sales_income','sales_changes','company_objectives','opportunities',
     'decision_packets','decision_approvals','risk_register','workflow_instances',
     'workflow_steps','company_events','event_outbox','knowledge_nodes','knowledge_edges',
     'lessons_learned','budget_commitments','execution_reconciliations',
@@ -213,13 +221,13 @@ begin
   end loop;
 end $$;
 
--- The workflow definition catalogue is global read-only configuration.
+-- Global workflow definitions are authenticated read-only configuration.
 alter table if exists workflow_definitions enable row level security;
 drop policy if exists orvanta_workflow_definition_read on workflow_definitions;
-create policy orvanta_workflow_definition_read on workflow_definitions for select using (auth.uid() is not null or auth.role() = 'service_role');
+create policy orvanta_workflow_definition_read on workflow_definitions
+  for select using (auth.uid() is not null or auth.role() = 'service_role');
 
--- Prevent browser roles from calling the atomic append function or touching the
--- outbox as a publisher. RLS still permits tenant reads for operational UI.
+-- Publisher and audit infrastructure remain server-only for writes.
 revoke insert, update, delete on event_outbox from anon, authenticated;
 revoke insert, update, delete on company_events from anon, authenticated;
 revoke insert, update, delete on policy_decisions from anon, authenticated;
