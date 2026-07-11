@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
-import { publishOutboxBatch } from "@/lib/company-os/outboxPublisher";
+import { runCoreRuntimeSweep } from "@/lib/company-os/runtimeRunner";
 import { withTelemetrySpan } from "@/lib/company-os/telemetry";
-import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,38 +18,34 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   const url = new URL(req.url);
-  const workflowLimit = boundedLimit(url.searchParams.get("workflowLimit"), 5, 25);
-  const outboxLimit = boundedLimit(url.searchParams.get("outboxLimit"), 10, 50);
+  const maxWorkflowCycles = boundedLimit(url.searchParams.get("workflowCycles"), 8, 16);
+  const workflowBatchLimit = boundedLimit(url.searchParams.get("workflowLimit"), 25, 50);
+  const outboxLimit = boundedLimit(url.searchParams.get("outboxLimit"), 25, 100);
   const startedAt = Date.now();
 
   try {
-    const workflow = await withTelemetrySpan(
+    const sweep = await withTelemetrySpan(
       {
         tenantId: auth.context.tenantId,
         correlationId: auth.context.correlationId,
-        operation: "runtime.cron.workflow",
+        operation: "runtime.cron.sweep",
         category: "WORKFLOW",
         actorId: auth.context.actor.id,
+        attributes: { maxWorkflowCycles, workflowBatchLimit, outboxLimit },
       },
-      () => runWorkflowTick({ tenantId: auth.context.tenantId, limit: workflowLimit })
-    );
-
-    const outbox = await withTelemetrySpan(
-      {
-        tenantId: auth.context.tenantId,
-        correlationId: auth.context.correlationId,
-        operation: "runtime.cron.outbox",
-        category: "WORKFLOW",
-        actorId: auth.context.actor.id,
-      },
-      () => publishOutboxBatch({ tenantId: auth.context.tenantId, limit: outboxLimit })
+      () =>
+        runCoreRuntimeSweep({
+          tenantId: auth.context.tenantId,
+          maxWorkflowCycles,
+          workflowBatchLimit,
+          outboxLimit,
+        })
     );
 
     return NextResponse.json({
       ok: true,
       tenantId: auth.context.tenantId,
-      workflow,
-      outbox,
+      ...sweep,
       durationMs: Date.now() - startedAt,
       schedule: req.headers.get("x-vercel-cron-schedule"),
       requestId: auth.context.requestId,
