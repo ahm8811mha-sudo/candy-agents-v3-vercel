@@ -4,6 +4,7 @@ import { runWorkflowTick } from "./workflowRuntime";
 
 const BLOCKING_OR_TERMINAL_STATUSES = new Set([
   "WAITING_APPROVAL",
+  "RETRY",
   "COMPLETED",
   "FAILED",
   "CANCELLED",
@@ -19,8 +20,8 @@ type WorkflowSnapshot = {
 };
 
 function bounded(value: number | undefined, fallback: number, maximum: number) {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(Math.max(Math.trunc(value as number), 1), maximum);
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.trunc(value), 1), maximum);
 }
 
 async function loadWorkflow(tenantId: string, workflowInstanceId: string): Promise<WorkflowSnapshot> {
@@ -37,6 +38,21 @@ async function loadWorkflow(tenantId: string, workflowInstanceId: string): Promi
   if (error) throw error;
   if (!data) throw new Error("Workflow instance not found in this tenant.");
   return data as WorkflowSnapshot;
+}
+
+async function prioritizePendingStep(tenantId: string, workflow: WorkflowSnapshot) {
+  if (workflow.status !== "PENDING" || !workflow.current_step) return;
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is required for durable workflow execution.");
+
+  const { error } = await supabase
+    .from("workflow_steps")
+    .update({ available_at: "1970-01-01T00:00:00.000Z", updated_at: new Date().toISOString() })
+    .eq("tenant_id", tenantId)
+    .eq("workflow_instance_id", workflow.id)
+    .eq("step_key", workflow.current_step)
+    .in("status", ["PENDING", "WAITING_APPROVAL"]);
+  if (error) throw error;
 }
 
 export async function advanceWorkflowUntilBlocked(options: {
@@ -56,6 +72,7 @@ export async function advanceWorkflowUntilBlocked(options: {
       return { workflow: before, cycles: cycle, totalProcessed, ticks, settled: true };
     }
 
+    await prioritizePendingStep(options.tenantId, before);
     const tick = await runWorkflowTick({ tenantId: options.tenantId, limit: batchLimit });
     ticks.push({ processed: tick.processed });
     totalProcessed += tick.processed;
