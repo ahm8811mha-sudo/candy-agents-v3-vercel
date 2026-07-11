@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ACCESS_COOKIE, REFRESH_COOKIE, authenticateRequest, hasPermission, type UserRole } from "@/lib/auth";
+import {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  authenticateRequest,
+  authUserFromSupabaseUser,
+  hasPermission,
+  type AuthUser,
+  type UserRole,
+} from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { normalizeTenantId } from "@/lib/tenant";
 
@@ -31,12 +39,11 @@ function clearSessionCookies(response: NextResponse) {
   response.cookies.set(REFRESH_COOKIE, "", { httpOnly: true, secure: secureCookie, sameSite: "lax", path: "/", maxAge: 0 });
 }
 
-export async function GET(req: NextRequest) {
-  const user = await authenticateRequest(req);
-  if (!user) return NextResponse.json({ ok: false, authenticated: false }, { status: 401 });
+function sessionResponse(user: AuthUser, refreshed = false) {
   return NextResponse.json({
     ok: true,
     authenticated: true,
+    refreshed,
     user: {
       id: user.id,
       email: user.email,
@@ -46,6 +53,31 @@ export async function GET(req: NextRequest) {
       departmentId: user.departmentId,
     },
   });
+}
+
+export async function GET(req: NextRequest) {
+  const user = await authenticateRequest(req);
+  if (user) return sessionResponse(user);
+
+  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+  const supabase = getSupabaseAdmin();
+  if (!refreshToken || !supabase) {
+    const response = NextResponse.json({ ok: false, authenticated: false }, { status: 401 });
+    clearSessionCookies(response);
+    return response;
+  }
+
+  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+  if (error || !data.session || !data.user) {
+    const response = NextResponse.json({ ok: false, authenticated: false }, { status: 401 });
+    clearSessionCookies(response);
+    return response;
+  }
+
+  const refreshedUser = await authUserFromSupabaseUser(data.user);
+  const response = sessionResponse(refreshedUser, true);
+  setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in);
+  return response;
 }
 
 export async function POST(req: NextRequest) {
@@ -104,15 +136,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "بيانات الدخول غير صحيحة." }, { status: 401 });
     }
 
-    const response = NextResponse.json({
-      ok: true,
-      user: {
-        id: data.user.id,
-        email: data.user.email,
-        tenantId: data.user.app_metadata?.tenant_id || null,
-        role: data.user.app_metadata?.role || "VIEWER",
-      },
-    });
+    const user = await authUserFromSupabaseUser(data.user);
+    const response = sessionResponse(user);
     setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in);
     return response;
   } catch (error) {
