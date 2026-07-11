@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const PRIVATE_OWNER_ONLY = process.env.ORVANTA_PRIVATE_OWNER_ONLY !== "false";
+const OWNER_TENANT_ID = (process.env.ORVANTA_TENANT_ID || "golden-star").trim();
 const PUBLIC_PATHS = [
   "/api/health",
   "/api/auth",
-  "/api/public/v1",
   "/api/webhooks",
 ];
 const PUBLIC_METHODS = ["OPTIONS"];
@@ -68,7 +69,7 @@ function inMemoryRateLimit(key: string, limit: number, windowSeconds: number) {
 function rateLimitPolicy(pathname: string) {
   if (pathname.startsWith("/api/auth")) return { limit: 10, windowSeconds: 60 };
   if (pathname.startsWith("/api/company-execution")) return { limit: 20, windowSeconds: 60 };
-  if (pathname.startsWith("/api/public/v1")) return { limit: 60, windowSeconds: 60 };
+  if (pathname.startsWith("/api/public/v1")) return { limit: 20, windowSeconds: 60 };
   return { limit: 120, windowSeconds: 60 };
 }
 
@@ -127,6 +128,18 @@ function secureStringEqual(left: string | null | undefined, right: string | null
   return mismatch === 0;
 }
 
+function isAllowedPrivateOwner(payload: unknown) {
+  if (!PRIVATE_OWNER_ONLY) return true;
+  if (!payload || typeof payload !== "object") return false;
+
+  const user = payload as { app_metadata?: Record<string, unknown> };
+  const metadata = user.app_metadata || {};
+  const role = String(metadata.role || "").toUpperCase();
+  const tenantId = String(metadata.tenant_id || "").trim();
+  const platformOwner = metadata.platform_owner === true || String(metadata.platform_owner).toLowerCase() === "true";
+  return role === "OWNER" && tenantId === OWNER_TENANT_ID && platformOwner;
+}
+
 async function validateSupabaseAccessToken(token: string) {
   if (!token) return false;
 
@@ -151,6 +164,9 @@ async function validateSupabaseAccessToken(token: string) {
       signal: controller.signal,
     });
     if (!response.ok) return false;
+
+    const payload = await response.json().catch(() => null);
+    if (!isAllowedPrivateOwner(payload)) return false;
 
     tokenValidationCache.set(tokenKey, Date.now() + 15_000);
     return true;
@@ -206,6 +222,13 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  if (PRIVATE_OWNER_ONLY && req.nextUrl.pathname.startsWith("/api/public/v1")) {
+    return NextResponse.json(
+      { ok: false, code: "PRIVATE_OWNER_ONLY", error: "الواجهة العامة متوقفة في النسخة الخاصة." },
+      { status: 403 }
+    );
+  }
+
   if (req.nextUrl.pathname === "/api/company-execution" && !canRunCompanyCommand(req)) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
@@ -230,8 +253,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        code: "AUTH_INVALID",
-        error: "جلسة المصادقة مفقودة أو غير صالحة. يرجى تسجيل الدخول مجددًا.",
+        code: PRIVATE_OWNER_ONLY ? "OWNER_AUTH_REQUIRED" : "AUTH_INVALID",
+        error: PRIVATE_OWNER_ONLY
+          ? "هذه النسخة خاصة بالمالك. يرجى تسجيل الدخول بحساب المالك."
+          : "جلسة المصادقة مفقودة أو غير صالحة. يرجى تسجيل الدخول مجددًا.",
       },
       { status: 401 }
     );
