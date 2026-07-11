@@ -13,11 +13,12 @@ Run in a staging Supabase project first. Existing Orvanta installations already 
 4. docs/supabase-world-class-os-v2.sql
 5. docs/supabase-core-completion.sql
 6. docs/supabase-security-hardening.sql
+7. docs/supabase-performance-indexes.sql
 ```
 
 `supabase-world-class-os-v2.sql` is compatible with the existing production `opportunities.id TEXT` schema. Do not use the original UUID-oriented migration on an existing Orvanta database.
 
-The final security migration removes permissive legacy policies, applies tenant-claim RLS to every company table, moves pgvector out of the public schema, and restricts the event append function to the service role.
+The final security migration removes permissive legacy policies, applies tenant-claim RLS to every company table, moves pgvector out of the public schema, and restricts the event append function to the service role. The performance migration adds covering indexes for the durable workflow, decision, knowledge, approval, and operational paths.
 
 Do not set readiness flags until every migration finishes without errors, Supabase Security Advisor returns no findings, and the acceptance tests below pass.
 
@@ -62,6 +63,7 @@ POST /api/company-os/workflows
 GET  /api/company-os/workflows
 GET|POST /api/company-os/workflows/tick
 GET|POST /api/company-os/outbox/publish
+GET  /api/company-os/runtime/cron
 POST /api/company-os/decisions/approve
 GET  /api/company-os/health
 GET|POST /api/company-os/knowledge
@@ -80,6 +82,8 @@ or:
 x-api-key: <API_SECRET_KEY>
 x-orvanta-tenant-id: golden-star
 ```
+
+The Vercel scheduler invokes `/api/company-os/runtime/cron` every five minutes. That endpoint advances a bounded batch of durable workflow steps first, then publishes a bounded outbox batch so events created during the same tick can be delivered immediately. Vercel supplies `Authorization: Bearer <CRON_SECRET>` automatically when `CRON_SECRET` is configured.
 
 ## 5. Acceptance tests
 
@@ -109,6 +113,14 @@ x-orvanta-tenant-id: golden-star
 4. Confirm the workflow remains paused until quorum is complete.
 5. Run the worker again and confirm it resumes.
 6. Reject a separate decision and confirm its workflow is cancelled.
+
+### Scheduler smoke test
+
+1. Configure `CRON_SECRET`, deploy to production, and confirm the Vercel cron appears for `/api/company-os/runtime/cron`.
+2. Trigger the cron manually or wait for the next five-minute window.
+3. Confirm HTTP 200 and a response containing both `workflow` and `outbox` summaries.
+4. Confirm the request actor is `cron`, the tenant is `golden-star`, and a telemetry span is written for both phases.
+5. Confirm an invalid bearer token returns HTTP 401.
 
 ### Outbox reliability
 
