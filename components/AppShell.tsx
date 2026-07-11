@@ -29,6 +29,7 @@ import {
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
+import SessionControl from "./SessionControl";
 
 type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number };
 type NavGroup = { title: string; links: NavLink[] };
@@ -60,6 +61,7 @@ const PAGE_TITLES: Array<[string, string]> = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const authPage = pathname.startsWith("/login");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(0);
 
@@ -68,6 +70,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    if (authPage) return;
     document.body.style.overflow = open ? "hidden" : "";
 
     function onKeyDown(event: KeyboardEvent) {
@@ -79,13 +82,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, authPage]);
 
   useEffect(() => {
+    if (authPage) return;
     let alive = true;
     async function load() {
       try {
         const res = await fetch("/api/company/feed", { cache: "no-store" });
+        if (res.status === 401) return;
         const json = await res.json();
         if (alive && json.ok) setPending(json.pending || 0);
       } catch {
@@ -98,7 +103,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       alive = false;
       clearInterval(t);
     };
-  }, [pathname]);
+  }, [pathname, authPage]);
 
   const groups: NavGroup[] = [
     {
@@ -142,6 +147,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   const pageTitle = PAGE_TITLES.find(([p]) => (p === "/" ? pathname === "/" : pathname.startsWith(p)))?.[1] || "Orvanta";
+
+  if (authPage) return <>{children}</>;
 
   return (
     <div className="shell-root">
@@ -197,6 +204,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="shell-topbar__actions">
             <CommandPalette />
             <NotificationCenter />
+            <SessionControl />
             <span className="app-header__status hide-mobile">
               <span className="app-header__dot" />
               Orvanta جاهز
