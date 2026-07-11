@@ -3,7 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "./supabase";
 import { DEFAULT_TENANT_ID } from "./tenant";
 
-export type UserRole = "ADMIN" | "CEO" | "CFO" | "MANAGER" | "EMPLOYEE" | "VIEWER";
+export type UserRole =
+  | "ADMIN"
+  | "OWNER"
+  | "CEO"
+  | "CFO"
+  | "COO"
+  | "CRO"
+  | "CGO"
+  | "MANAGER"
+  | "EMPLOYEE"
+  | "VIEWER";
 
 export type AuthUser = {
   id: string;
@@ -17,12 +27,20 @@ export type AuthUser = {
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
   ADMIN: 100,
+  OWNER: 100,
   CEO: 90,
   CFO: 80,
+  COO: 80,
+  CRO: 80,
+  CGO: 80,
   MANAGER: 60,
   EMPLOYEE: 40,
   VIEWER: 10,
 };
+
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(ROLE_HIERARCHY, value);
+}
 
 export function hasPermission(userRole: UserRole, requiredRole: UserRole): boolean {
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
@@ -113,9 +131,13 @@ async function verifySupabaseToken(token: string): Promise<AuthUser | null> {
     .eq("email", data.user.email)
     .maybeSingle();
 
-  const metadataRole = String(data.user.app_metadata?.role || "").toUpperCase() as UserRole;
-  const role = employee?.role as UserRole | undefined;
-  const resolvedRole = role && ROLE_HIERARCHY[role] ? role : ROLE_HIERARCHY[metadataRole] ? metadataRole : "VIEWER";
+  const metadataRole = String(data.user.app_metadata?.role || "").toUpperCase();
+  const employeeRole = String(employee?.role || "").toUpperCase();
+  const resolvedRole: UserRole = isUserRole(metadataRole)
+    ? metadataRole
+    : isUserRole(employeeRole)
+      ? employeeRole
+      : "VIEWER";
   const tenantId = normalizeTenant(data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id);
 
   return {
@@ -141,11 +163,12 @@ async function verifyCredentials(email: string, password: string): Promise<AuthU
     .select("id, full_name, role, department_id")
     .eq("email", data.user.email)
     .maybeSingle();
+  const employeeRole = String(employee?.role || "").toUpperCase();
 
   return {
     id: employee?.id || data.user.id,
     email: data.user.email || "",
-    role: (employee?.role as UserRole) || "VIEWER",
+    role: isUserRole(employeeRole) ? employeeRole : "VIEWER",
     name: employee?.full_name || data.user.email || "",
     tenantId: normalizeTenant(data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id),
     departmentId: employee?.department_id,
