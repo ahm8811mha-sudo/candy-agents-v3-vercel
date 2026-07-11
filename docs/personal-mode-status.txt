@@ -1,0 +1,1 @@
+Orvanta is running as a personal single-user owner workspace. Login, logout, employee, invitation and company registration flows are disabled in this build.
