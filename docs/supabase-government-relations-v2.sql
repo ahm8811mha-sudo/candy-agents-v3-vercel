@@ -37,6 +37,47 @@ set tenant_id = d.tenant_id
 from public.gov_documents d
 where a.document_id = d.id and a.tenant_id is distinct from d.tenant_id;
 
+-- Preserve legacy uploads and expose their actual analysis state instead of
+-- leaving them indefinitely marked PENDING after this migration.
+with latest as (
+  select distinct on (x.document_id, x.tenant_id)
+    x.document_id,
+    x.tenant_id,
+    x.extraction_engine,
+    x.error_message,
+    x.created_at
+  from public.gov_document_extractions x
+  order by x.document_id, x.tenant_id, x.created_at desc
+)
+update public.gov_documents d
+set analysis_status = case
+      when coalesce(d.extraction_confidence, 0) >= 0.75
+       and coalesce(array_length(d.missing_fields, 1), 0) = 0
+      then 'COMPLETED'
+      else 'NEEDS_REVIEW'
+    end,
+    analysis_engine = latest.extraction_engine,
+    analysis_error = latest.error_message,
+    analyzed_at = coalesce(latest.created_at, d.updated_at, d.created_at),
+    automation_status = case
+      when exists (
+        select 1
+        from public.tasks t
+        where t.tenant_id = d.tenant_id
+          and t.source_table = 'gov_documents'
+          and t.source_id = d.id::text
+      ) then 'COMPLETED'
+      else 'PENDING'
+    end,
+    automation_summary = jsonb_build_object(
+      'backfilled', true,
+      'reviewRequired', coalesce(array_length(d.missing_fields, 1), 0) > 0
+    )
+from latest
+where latest.document_id = d.id
+  and latest.tenant_id = d.tenant_id
+  and d.analysis_status = 'PENDING';
+
 create index if not exists gov_documents_tenant_created_idx
   on public.gov_documents (tenant_id, created_at desc);
 create index if not exists gov_documents_tenant_status_idx
