@@ -1,46 +1,28 @@
-import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
   authenticateRequest,
   authUserFromSupabaseUser,
-  hasPermission,
   type AuthUser,
-  type UserRole,
 } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_TENANT_ID, normalizeTenantId } from "@/lib/tenant";
 
 const secureCookie = process.env.NODE_ENV === "production";
 const TRUSTED_DEVICE_COOKIE = "orvanta_trusted_device";
-const DEFAULT_OWNER_SESSION_DAYS = 180;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_OWNER_SESSION_DAYS = 365;
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 type SetupState = "FIRST_OWNER_SETUP" | "SETUP_IN_PROGRESS" | "READY" | "UNAVAILABLE";
-type WorkspaceMode = "FOUNDER" | "COMPANY";
 
 type ProvisionInput = {
   userId: string;
   employeeId: string;
   workspaceId: string;
   workspaceName: string;
-  workspaceMode: WorkspaceMode;
-  plan: string;
   name: string;
   email: string;
-  role: UserRole;
-  createWorkspace: boolean;
-};
-
-type ClaimedAccess = {
-  id: string;
-  claimToken: string;
-  workspaceId: string;
-  workspaceName: string;
-  plan?: string;
-  role?: UserRole;
 };
 
 class AuthRequestError extends Error {
@@ -53,13 +35,17 @@ class AuthRequestError extends Error {
   }
 }
 
+function ownerTenantId() {
+  return normalizeTenantId(process.env.ORVANTA_TENANT_ID || DEFAULT_TENANT_ID);
+}
+
 function ownerSessionDays() {
   const configured = Number(process.env.ORVANTA_OWNER_SESSION_DAYS || DEFAULT_OWNER_SESSION_DAYS);
   return Number.isFinite(configured) && configured >= 30 ? Math.min(configured, 365) : DEFAULT_OWNER_SESSION_DAYS;
 }
 
-function canUseTrustedDevice(user: AuthUser) {
-  return user.role === "OWNER" || user.role === "ADMIN";
+function isPrivateOwner(user: AuthUser) {
+  return user.authMethod === "SUPABASE" && user.role === "OWNER" && user.tenantId === ownerTenantId();
 }
 
 function setTrustedDeviceCookie(response: NextResponse, trustedDevice: boolean) {
@@ -87,8 +73,7 @@ function setSessionCookies(
   response: NextResponse,
   accessToken?: string | null,
   refreshToken?: string | null,
-  expiresIn?: number | null,
-  trustedDevice = false
+  expiresIn?: number | null
 ) {
   if (accessToken) {
     response.cookies.set(ACCESS_COOKIE, accessToken, {
@@ -100,18 +85,17 @@ function setSessionCookies(
     });
   }
 
-  const refreshDays = trustedDevice ? ownerSessionDays() : 30;
   if (refreshToken) {
     response.cookies.set(REFRESH_COOKIE, refreshToken, {
       httpOnly: true,
       secure: secureCookie,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * refreshDays,
+      maxAge: 60 * 60 * 24 * ownerSessionDays(),
     });
   }
 
-  setTrustedDeviceCookie(response, trustedDevice);
+  setTrustedDeviceCookie(response, true);
 }
 
 function clearSessionCookies(response: NextResponse) {
@@ -131,13 +115,13 @@ function userPayload(user: AuthUser) {
   };
 }
 
-function sessionResponse(user: AuthUser, refreshed = false, trustedDeviceRequested = false) {
-  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
+function sessionResponse(user: AuthUser, refreshed = false) {
   return NextResponse.json({
     ok: true,
     authenticated: true,
     refreshed,
-    trustedDevice,
+    trustedDevice: true,
+    ownerOnly: true,
     registrationAvailable: false,
     setupState: "READY" satisfies SetupState,
     user: userPayload(user),
@@ -148,79 +132,28 @@ function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeCode(value: unknown) {
-  return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
-}
-
-function hashCode(value: string) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asClaim(value: unknown): ClaimedAccess | null {
-  const record = asRecord(value);
-  if (!record) return null;
-  const id = String(record.id || "");
-  const claimToken = String(record.claimToken || "");
-  const workspaceId = String(record.workspaceId || "");
-  const workspaceName = String(record.workspaceName || "");
-  if (!id || !claimToken || !workspaceId || !workspaceName) return null;
-  return {
-    id,
-    claimToken,
-    workspaceId,
-    workspaceName,
-    plan: record.plan ? String(record.plan) : undefined,
-    role: record.role ? String(record.role).toUpperCase() as UserRole : undefined,
-  };
-}
-
 function safeWorkspaceName(value: unknown, fallback: string) {
   const name = String(value || "").trim();
   return name.slice(0, 120) || fallback;
 }
 
-function slugifyWorkspace(value: string) {
-  const ascii = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  const base = ascii || "company";
-  return normalizeTenantId(`${base}-${randomBytes(3).toString("hex")}`);
+function validatePassword(password: string) {
+  if (password.length < 10) throw new AuthRequestError("كلمة المرور يجب ألا تقل عن 10 أحرف.");
 }
 
-function randomAccessCode(prefix: string) {
-  return `${prefix}-${randomBytes(5).toString("hex").toUpperCase()}`;
-}
-
-async function resolveAuthUserId(supabase: SupabaseAdmin, caller: AuthUser) {
-  if (UUID_PATTERN.test(caller.id)) return caller.id;
-  const { data, error } = await supabase
-    .from("employees")
-    .select("auth_user_id")
-    .eq("id", caller.id)
-    .eq("tenant_id", caller.tenantId)
-    .maybeSingle();
-  if (error) throw new Error(`تعذر التحقق من هوية مصدر الإجراء: ${error.message}`);
-  const authUserId = String(data?.auth_user_id || "");
-  return UUID_PATTERN.test(authUserId) ? authUserId : null;
-}
-
-async function hasAuthUsers(supabase: SupabaseAdmin) {
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
-  if (error) return true;
-  return data.users.length > 0;
+function validateRequired(email: string, password: string) {
+  if (!email || !password) throw new AuthRequestError("البريد الإلكتروني وكلمة المرور مطلوبان.");
 }
 
 async function getSetupState(supabase: SupabaseAdmin): Promise<SetupState> {
-  if (await hasAuthUsers(supabase)) return "READY";
+  const rpc = await supabase.rpc("orvanta_owner_setup_state");
+  const state = String(rpc.data || "").toUpperCase();
+  if (!rpc.error && ["FIRST_OWNER_SETUP", "SETUP_IN_PROGRESS", "READY"].includes(state)) {
+    return state as SetupState;
+  }
+
+  const users = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
+  if (!users.error && users.data.users.length > 0) return "READY";
 
   const { data, error } = await supabase
     .from("auth_bootstrap_claims")
@@ -229,8 +162,7 @@ async function getSetupState(supabase: SupabaseAdmin): Promise<SetupState> {
     .maybeSingle();
 
   if (error) return "UNAVAILABLE";
-  if (!data) return "FIRST_OWNER_SETUP";
-  if (data.status === "COMPLETED") return "READY";
+  if (!data || data.status !== "CLAIMED") return "FIRST_OWNER_SETUP";
 
   const expiresAt = new Date(String(data.expires_at || ""));
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) return "FIRST_OWNER_SETUP";
@@ -255,47 +187,32 @@ async function releaseFirstOwnerBootstrap(supabase: SupabaseAdmin, token: string
   await supabase.rpc("release_orvanta_first_owner", { p_token: token });
 }
 
-async function provisionWorkspaceUser(supabase: SupabaseAdmin, input: ProvisionInput) {
+async function provisionOwner(supabase: SupabaseAdmin, input: ProvisionInput) {
   const { data, error } = await supabase.rpc("provision_orvanta_workspace_user", {
     p_user_id: input.userId,
     p_employee_id: input.employeeId,
     p_workspace_id: input.workspaceId,
     p_workspace_name: input.workspaceName,
-    p_workspace_mode: input.workspaceMode,
-    p_plan: input.plan,
+    p_workspace_mode: "FOUNDER",
+    p_plan: "FOUNDER",
     p_name: input.name,
     p_email: input.email,
-    p_role: input.role,
-    p_create_workspace: input.createWorkspace,
+    p_role: "OWNER",
+    p_create_workspace: true,
   });
-  if (error || data !== true) throw new Error(error?.message || "تعذر تجهيز مساحة العمل.");
+  if (error || data !== true) throw new Error(error?.message || "تعذر تجهيز مساحة المالك.");
 }
 
-async function cleanupProvisionedUser(
-  supabase: SupabaseAdmin,
-  userId: string,
-  workspaceId: string,
-  createWorkspace: boolean
-) {
+async function cleanupProvisionedOwner(supabase: SupabaseAdmin, userId: string, workspaceId: string) {
   await supabase.from("workspace_memberships").delete().eq("user_id", userId).eq("workspace_id", workspaceId);
   await supabase.from("employees").delete().eq("auth_user_id", userId);
-  if (createWorkspace) {
-    await supabase.from("orvanta_workspaces").delete().eq("id", workspaceId).eq("owner_user_id", userId);
-  }
+  await supabase.from("orvanta_workspaces").delete().eq("id", workspaceId).eq("owner_user_id", userId);
   await supabase.auth.admin.deleteUser(userId);
 }
 
-async function createAuthIdentity(
+async function createOwnerIdentity(
   supabase: SupabaseAdmin,
-  input: {
-    email: string;
-    password: string;
-    name: string;
-    tenantId: string;
-    role: UserRole;
-    workspaceMode: WorkspaceMode;
-    platformOwner?: boolean;
-  }
+  input: { email: string; password: string; name: string; tenantId: string }
 ) {
   const { data, error } = await supabase.auth.admin.createUser({
     email: input.email,
@@ -303,25 +220,25 @@ async function createAuthIdentity(
     email_confirm: true,
     app_metadata: {
       tenant_id: input.tenantId,
-      role: input.role,
-      workspace_mode: input.workspaceMode,
-      platform_owner: Boolean(input.platformOwner),
+      role: "OWNER",
+      workspace_mode: "FOUNDER",
+      platform_owner: true,
+      private_owner_only: true,
     },
     user_metadata: {
       full_name: input.name,
       tenant_id: input.tenantId,
-      workspace_mode: input.workspaceMode,
+      workspace_mode: "FOUNDER",
     },
   });
-  if (error || !data.user) throw new AuthRequestError(error?.message || "تعذر إنشاء هوية المستخدم.", 400);
+  if (error || !data.user) throw new AuthRequestError(error?.message || "تعذر إنشاء هوية المالك.", 400);
   return data.user;
 }
 
-async function signInResponse(
+async function privateSignInResponse(
   supabase: SupabaseAdmin,
   email: string,
   password: string,
-  trustedDeviceRequested: boolean,
   setupCompleted = false
 ) {
   const signedIn = await supabase.auth.signInWithPassword({ email, password });
@@ -337,12 +254,21 @@ async function signInResponse(
   }
 
   const user = await authUserFromSupabaseUser(signedIn.data.user);
-  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
+  if (!isPrivateOwner(user)) {
+    const denied = NextResponse.json(
+      { ok: false, error: "هذه النسخة خاصة بمالك Orvanta فقط." },
+      { status: 403 }
+    );
+    clearSessionCookies(denied);
+    return denied;
+  }
+
   const response = NextResponse.json({
     ok: true,
     authenticated: true,
     setupCompleted,
-    trustedDevice,
+    trustedDevice: true,
+    ownerOnly: true,
     registrationAvailable: false,
     setupState: "READY" satisfies SetupState,
     user: userPayload(user),
@@ -351,32 +277,29 @@ async function signInResponse(
     response,
     signedIn.data.session.access_token,
     signedIn.data.session.refresh_token,
-    signedIn.data.session.expires_in,
-    trustedDevice
+    signedIn.data.session.expires_in
   );
   return response;
 }
 
 async function unauthenticatedResponse(supabase: ReturnType<typeof getSupabaseAdmin>) {
   const setupState = supabase ? await getSetupState(supabase) : "UNAVAILABLE";
-  const registrationAvailable = setupState === "FIRST_OWNER_SETUP";
   const response = NextResponse.json(
     {
       ok: false,
       authenticated: false,
-      registrationAvailable,
+      ownerOnly: true,
+      registrationAvailable: setupState === "FIRST_OWNER_SETUP",
       setupState,
       accessModes: {
         owner: true,
-        employee: true,
-        licensedCompany: true,
-        invitation: true,
+        employee: false,
+        licensedCompany: false,
+        invitation: false,
       },
       policy: {
-        owner: "إعداد واحد ثم دخول تلقائي على الجهاز الموثوق.",
-        employee: "دخول بحساب أنشأه مالك الشركة.",
-        licensedCompany: "إنشاء مساحة شركة جديدة برمز تفعيل مرخّص.",
-        invitation: "الانضمام إلى شركة قائمة برمز دعوة.",
+        owner: "حساب مالك واحد وجهاز موثوق لمدة تصل إلى سنة.",
+        commercialAccess: "مؤجل إلى مرحلة الإطلاق التجاري.",
       },
     },
     { status: 401 }
@@ -385,23 +308,9 @@ async function unauthenticatedResponse(supabase: ReturnType<typeof getSupabaseAd
   return response;
 }
 
-function validatePassword(password: string) {
-  if (password.length < 10) throw new AuthRequestError("كلمة المرور يجب ألا تقل عن 10 أحرف.");
-}
-
-function validateRequired(email: string, password: string) {
-  if (!email || !password) throw new AuthRequestError("البريد الإلكتروني وكلمة المرور مطلوبان.");
-}
-
 export async function GET(req: NextRequest) {
-  const trustedDeviceRequested = req.cookies.get(TRUSTED_DEVICE_COOKIE)?.value === "1";
   const user = await authenticateRequest(req);
-  if (user) {
-    const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
-    const response = sessionResponse(user, false, trustedDevice);
-    if (trustedDeviceRequested && !trustedDevice) setTrustedDeviceCookie(response, false);
-    return response;
-  }
+  if (user && isPrivateOwner(user)) return sessionResponse(user, false);
 
   const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
   const supabase = getSupabaseAdmin();
@@ -411,9 +320,10 @@ export async function GET(req: NextRequest) {
   if (error || !data.session || !data.user) return unauthenticatedResponse(supabase);
 
   const refreshedUser = await authUserFromSupabaseUser(data.user);
-  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(refreshedUser);
-  const response = sessionResponse(refreshedUser, true, trustedDevice);
-  setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in, trustedDevice);
+  if (!isPrivateOwner(refreshedUser)) return unauthenticatedResponse(supabase);
+
+  const response = sessionResponse(refreshedUser, true);
+  setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in);
   return response;
 }
 
@@ -423,7 +333,6 @@ export async function POST(req: NextRequest) {
     const action = String(body.action || "login");
     const email = normalizeEmail(body.email);
     const password = String(body.password || "");
-    const trustedDeviceRequested = Boolean(body.rememberDevice);
     const supabase = getSupabaseAdmin();
 
     if (!supabase) {
@@ -436,10 +345,19 @@ export async function POST(req: NextRequest) {
       if (error || !data.session || !data.user) {
         return NextResponse.json({ ok: false, error: "بيانات الدخول غير صحيحة." }, { status: 401 });
       }
+
       const user = await authUserFromSupabaseUser(data.user);
-      const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
-      const response = sessionResponse(user, false, trustedDevice);
-      setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in, trustedDevice);
+      if (!isPrivateOwner(user)) {
+        const denied = NextResponse.json(
+          { ok: false, error: "هذا الحساب غير مخول بدخول النسخة الخاصة." },
+          { status: 403 }
+        );
+        clearSessionCookies(denied);
+        return denied;
+      }
+
+      const response = sessionResponse(user, false);
+      setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in);
       return response;
     }
 
@@ -451,228 +369,44 @@ export async function POST(req: NextRequest) {
       if (!bootstrapToken) {
         return NextResponse.json({
           ok: false,
-          error: "تم إنشاء مالك النظام مسبقًا أو توجد عملية إعداد أخرى قيد التنفيذ.",
+          error: "تم إنشاء حساب المالك مسبقًا أو توجد عملية إعداد أخرى قيد التنفيذ.",
         }, { status: 403 });
       }
 
       const name = safeWorkspaceName(body.name, email.split("@")[0] || "مالك Orvanta");
-      const tenantId = normalizeTenantId(process.env.ORVANTA_TENANT_ID || DEFAULT_TENANT_ID);
-      const workspaceName = safeWorkspaceName(body.workspaceName, "مساحة مؤسس Orvanta");
+      const tenantId = ownerTenantId();
+      const workspaceName = safeWorkspaceName(body.workspaceName, "مساحة المالك الخاصة");
       let userId = "";
 
       try {
-        const user = await createAuthIdentity(supabase, {
-          email,
-          password,
-          name,
-          tenantId,
-          role: "OWNER",
-          workspaceMode: "FOUNDER",
-          platformOwner: true,
-        });
-        userId = user.id;
-        await provisionWorkspaceUser(supabase, {
+        const createdUser = await createOwnerIdentity(supabase, { email, password, name, tenantId });
+        userId = createdUser.id;
+        await provisionOwner(supabase, {
           userId,
           employeeId: `owner-${userId}`,
           workspaceId: tenantId,
           workspaceName,
-          workspaceMode: "FOUNDER",
-          plan: "FOUNDER",
           name,
           email,
-          role: "OWNER",
-          createWorkspace: true,
         });
 
         const completed = await completeFirstOwnerBootstrap(supabase, bootstrapToken, userId);
-        if (!completed) throw new Error("تعذر تثبيت إعداد المالك الأول.");
-        return signInResponse(supabase, email, password, true, true);
+        if (!completed) throw new Error("تعذر تثبيت إعداد حساب المالك.");
+        return privateSignInResponse(supabase, email, password, true);
       } catch (error) {
-        if (userId) await cleanupProvisionedUser(supabase, userId, tenantId, true);
+        if (userId) await cleanupProvisionedOwner(supabase, userId, tenantId);
         await releaseFirstOwnerBootstrap(supabase, bootstrapToken);
         throw error;
       }
     }
 
-    if (action === "register_company") {
-      validateRequired(email, password);
-      validatePassword(password);
-      const activationCode = normalizeCode(body.activationCode);
-      if (!activationCode) throw new AuthRequestError("رمز تفعيل الشركة مطلوب.");
-
-      const { data, error } = await supabase.rpc("claim_orvanta_activation_code", {
-        p_code_hash: hashCode(activationCode),
-        p_email: email,
-      });
-      const claim = !error ? asClaim(data) : null;
-      if (!claim) {
-        return NextResponse.json({ ok: false, error: "رمز التفعيل غير صالح أو مستخدم أو منتهي." }, { status: 403 });
-      }
-
-      const name = safeWorkspaceName(body.name, email.split("@")[0] || "مالك الشركة");
-      const companyName = safeWorkspaceName(body.companyName, claim.workspaceName);
-      const tenantId = normalizeTenantId(claim.workspaceId);
-      let userId = "";
-
-      try {
-        const user = await createAuthIdentity(supabase, {
-          email,
-          password,
-          name,
-          tenantId,
-          role: "OWNER",
-          workspaceMode: "COMPANY",
-        });
-        userId = user.id;
-        await provisionWorkspaceUser(supabase, {
-          userId,
-          employeeId: `owner-${userId}`,
-          workspaceId: tenantId,
-          workspaceName: companyName,
-          workspaceMode: "COMPANY",
-          plan: claim.plan || "COMPANY",
-          name,
-          email,
-          role: "OWNER",
-          createWorkspace: true,
-        });
-
-        const completed = await supabase.rpc("complete_orvanta_activation_code", {
-          p_id: claim.id,
-          p_claim_token: claim.claimToken,
-          p_user_id: userId,
-        });
-        if (completed.error || completed.data !== true) throw new Error("تعذر تثبيت ترخيص مساحة الشركة.");
-        return signInResponse(supabase, email, password, trustedDeviceRequested, true);
-      } catch (error) {
-        if (userId) await cleanupProvisionedUser(supabase, userId, tenantId, true);
-        await supabase.rpc("release_orvanta_activation_code", {
-          p_id: claim.id,
-          p_claim_token: claim.claimToken,
-        });
-        throw error;
-      }
-    }
-
-    if (action === "join_company") {
-      validateRequired(email, password);
-      validatePassword(password);
-      const inviteCode = normalizeCode(body.inviteCode);
-      if (!inviteCode) throw new AuthRequestError("رمز الدعوة مطلوب.");
-
-      const { data, error } = await supabase.rpc("claim_orvanta_workspace_invite", {
-        p_code_hash: hashCode(inviteCode),
-        p_email: email,
-      });
-      const claim = !error ? asClaim(data) : null;
-      if (!claim) {
-        return NextResponse.json({ ok: false, error: "رمز الدعوة غير صالح أو لا يطابق البريد أو انتهت صلاحيته." }, { status: 403 });
-      }
-
-      const role = claim.role || "EMPLOYEE";
-      const name = safeWorkspaceName(body.name, email.split("@")[0] || "عضو فريق");
-      const tenantId = normalizeTenantId(claim.workspaceId);
-      let userId = "";
-
-      try {
-        const user = await createAuthIdentity(supabase, {
-          email,
-          password,
-          name,
-          tenantId,
-          role,
-          workspaceMode: "COMPANY",
-        });
-        userId = user.id;
-        await provisionWorkspaceUser(supabase, {
-          userId,
-          employeeId: `member-${userId}`,
-          workspaceId: tenantId,
-          workspaceName: claim.workspaceName,
-          workspaceMode: "COMPANY",
-          plan: "COMPANY",
-          name,
-          email,
-          role,
-          createWorkspace: false,
-        });
-
-        const completed = await supabase.rpc("complete_orvanta_workspace_invite", {
-          p_id: claim.id,
-          p_claim_token: claim.claimToken,
-          p_user_id: userId,
-        });
-        if (completed.error || completed.data !== true) throw new Error("تعذر تثبيت عضوية الشركة.");
-        return signInResponse(supabase, email, password, false, true);
-      } catch (error) {
-        if (userId) await cleanupProvisionedUser(supabase, userId, tenantId, false);
-        await supabase.rpc("release_orvanta_workspace_invite", {
-          p_id: claim.id,
-          p_claim_token: claim.claimToken,
-        });
-        throw error;
-      }
-    }
-
-    if (action === "issue_company_activation") {
-      const caller = await authenticateRequest(req);
-      if (!caller || caller.tenantId !== normalizeTenantId(process.env.ORVANTA_TENANT_ID || DEFAULT_TENANT_ID) || !hasPermission(caller.role, "OWNER")) {
-        return NextResponse.json({ ok: false, error: "هذه العملية متاحة لمالك منصة Orvanta فقط." }, { status: 403 });
-      }
-
-      const issuerAuthUserId = await resolveAuthUserId(supabase, caller);
-      if (!issuerAuthUserId) throw new Error("تعذر ربط مالك المنصة بهوية Supabase Auth.");
-      const companyName = safeWorkspaceName(body.companyName, "شركة جديدة");
-      const workspaceId = slugifyWorkspace(String(body.workspaceId || companyName));
-      const code = randomAccessCode("ORV");
-      const expiresDays = Math.max(1, Math.min(90, Number(body.expiresDays || 30)));
-      const { error } = await supabase.from("workspace_activation_codes").insert({
-        code_hash: hashCode(code),
-        workspace_id: workspaceId,
-        workspace_name: companyName,
-        plan: String(body.plan || "COMPANY").slice(0, 40),
-        status: "ACTIVE",
-        expires_at: new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
-        created_by_user_id: issuerAuthUserId,
-      });
-      if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true, code, workspaceId, companyName, expiresDays }, { status: 201 });
-    }
-
-    if (action === "issue_employee_invite") {
-      const caller = await authenticateRequest(req);
-      if (!caller || !hasPermission(caller.role, "MANAGER")) {
-        return NextResponse.json({ ok: false, error: "لا تملك صلاحية إصدار دعوة موظف." }, { status: 403 });
-      }
-
-      const issuerAuthUserId = await resolveAuthUserId(supabase, caller);
-      if (!issuerAuthUserId) throw new Error("تعذر ربط مصدر الدعوة بهوية Supabase Auth.");
-      const invitedEmail = normalizeEmail(body.invitedEmail);
-      const requestedRole = String(body.role || "EMPLOYEE").toUpperCase() as UserRole;
-      const elevatedIssuer = caller.role === "OWNER" || caller.role === "ADMIN";
-      const allowedRoles: UserRole[] = elevatedIssuer
-        ? ["CEO", "CFO", "COO", "CRO", "CGO", "MANAGER", "EMPLOYEE", "VIEWER"]
-        : ["EMPLOYEE", "VIEWER"];
-      if (!allowedRoles.includes(requestedRole)) {
-        return NextResponse.json({ ok: false, error: "لا يمكنك إصدار دعوة بهذه الصلاحية." }, { status: 403 });
-      }
-      const role = requestedRole;
-      const code = randomAccessCode("TEAM");
-      const expiresDays = Math.max(1, Math.min(30, Number(body.expiresDays || 14)));
-      const { error } = await supabase.from("workspace_invites").insert({
-        workspace_id: caller.tenantId,
-        code_hash: hashCode(code),
-        email: invitedEmail || null,
-        role,
-        status: "ACTIVE",
-        expires_at: new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
-        created_by_user_id: issuerAuthUserId,
-      });
-      if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true, code, email: invitedEmail || null, role, expiresDays }, { status: 201 });
-    }
-
-    return NextResponse.json({ ok: false, error: "عملية المصادقة غير معروفة." }, { status: 400 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "هذه النسخة خاصة بالمالك فقط. تسجيل الشركات والموظفين والدعوات مؤجل إلى الإطلاق التجاري.",
+      },
+      { status: 403 }
+    );
   } catch (error) {
     const status = error instanceof AuthRequestError ? error.status : 500;
     return NextResponse.json(
