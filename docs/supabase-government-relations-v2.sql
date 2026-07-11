@@ -1,13 +1,30 @@
 -- ORVANTA Government Relations V2
--- Adds tenant-safe file/extraction records and explicit analysis/automation state.
+-- Run after the core tenant helpers are installed.
+-- Adds tenant-safe government records and explicit analysis/automation state.
 
 alter table public.gov_documents
+  add column if not exists tenant_id text not null default 'golden-star',
   add column if not exists analysis_status text not null default 'PENDING',
   add column if not exists analysis_engine text,
   add column if not exists analysis_error text,
   add column if not exists analyzed_at timestamptz,
   add column if not exists automation_status text not null default 'PENDING',
   add column if not exists automation_summary jsonb not null default '{}'::jsonb;
+
+alter table public.gov_fee_sources
+  add column if not exists tenant_id text not null default 'golden-star';
+
+alter table public.gov_renewal_tasks
+  add column if not exists tenant_id text not null default 'golden-star';
+
+alter table public.gov_regulatory_sources
+  add column if not exists tenant_id text not null default 'golden-star';
+
+alter table public.gov_regulatory_updates
+  add column if not exists tenant_id text not null default 'golden-star';
+
+alter table public.gov_document_revisions
+  add column if not exists tenant_id text not null default 'golden-star';
 
 alter table public.gov_document_files
   add column if not exists tenant_id text not null default 'golden-star',
@@ -36,6 +53,16 @@ update public.gov_document_access_logs a
 set tenant_id = d.tenant_id
 from public.gov_documents d
 where a.document_id = d.id and a.tenant_id is distinct from d.tenant_id;
+
+update public.gov_renewal_tasks r
+set tenant_id = d.tenant_id
+from public.gov_documents d
+where r.document_id = d.id and r.tenant_id is distinct from d.tenant_id;
+
+update public.gov_document_revisions r
+set tenant_id = d.tenant_id
+from public.gov_documents d
+where r.document_id = d.id and r.tenant_id is distinct from d.tenant_id;
 
 -- Preserve legacy uploads and expose their actual analysis state instead of
 -- leaving them indefinitely marked PENDING after this migration.
@@ -82,6 +109,16 @@ create index if not exists gov_documents_tenant_created_idx
   on public.gov_documents (tenant_id, created_at desc);
 create index if not exists gov_documents_tenant_status_idx
   on public.gov_documents (tenant_id, status, expiry_date);
+create index if not exists gov_fee_sources_tenant_type_idx
+  on public.gov_fee_sources (tenant_id, document_type);
+create index if not exists gov_renewal_tasks_tenant_due_idx
+  on public.gov_renewal_tasks (tenant_id, due_date, status);
+create index if not exists gov_regulatory_sources_tenant_active_idx
+  on public.gov_regulatory_sources (tenant_id, active, last_checked_at);
+create index if not exists gov_regulatory_updates_tenant_status_idx
+  on public.gov_regulatory_updates (tenant_id, status, detected_at desc);
+create index if not exists gov_document_revisions_tenant_document_idx
+  on public.gov_document_revisions (tenant_id, document_id, created_at desc);
 create index if not exists gov_document_files_tenant_document_idx
   on public.gov_document_files (tenant_id, document_id, created_at desc);
 create index if not exists gov_document_files_tenant_hash_idx
@@ -92,21 +129,29 @@ create index if not exists gov_document_extractions_tenant_document_idx
 create index if not exists gov_document_access_logs_tenant_document_idx
   on public.gov_document_access_logs (tenant_id, document_id, created_at desc);
 
-alter table public.gov_document_files enable row level security;
-alter table public.gov_document_extractions enable row level security;
-alter table public.gov_document_access_logs enable row level security;
-
--- Recreate tenant policies because these tables did not originally carry tenant_id.
+-- Recreate tenant policies on every government table used by the V2 API.
 do $$
 declare
   table_name text;
   policy_name text;
 begin
-  foreach table_name in array array['gov_document_files','gov_document_extractions','gov_document_access_logs']
+  foreach table_name in array array[
+    'gov_documents',
+    'gov_fee_sources',
+    'gov_renewal_tasks',
+    'gov_regulatory_sources',
+    'gov_regulatory_updates',
+    'gov_document_revisions',
+    'gov_document_files',
+    'gov_document_extractions',
+    'gov_document_access_logs'
+  ]
   loop
+    execute format('alter table public.%I enable row level security', table_name);
+
     for policy_name in
       select p.policyname from pg_policies p
-      where p.schemaname='public' and p.tablename=table_name
+      where p.schemaname = 'public' and p.tablename = table_name
     loop
       execute format('drop policy if exists %I on public.%I', policy_name, table_name);
     end loop;
