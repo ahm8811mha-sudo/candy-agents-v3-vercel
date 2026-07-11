@@ -1,28 +1,29 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Loader2, LockKeyhole, LogIn, ShieldCheck } from "lucide-react";
 import OrvantaLogo from "@/components/OrvantaLogo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
+  const [nextPath, setNextPath] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
 
-  const next = params.get("next")?.startsWith("/") ? params.get("next")! : "/";
-
   useEffect(() => {
+    const candidate = new URLSearchParams(window.location.search).get("next");
+    const destination = candidate?.startsWith("/") ? candidate : "/";
+    setNextPath(destination);
     fetch("/api/auth", { cache: "no-store" })
       .then((response) => {
-        if (response.ok) router.replace(next);
+        if (response.ok) router.replace(destination);
       })
       .finally(() => setChecking(false));
-  }, [next, router]);
+  }, [router]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -36,7 +37,7 @@ export default function LoginPage() {
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json.ok) throw new Error(json.error || "تعذر تسجيل الدخول.");
-      router.replace(next);
+      router.replace(nextPath);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذر تسجيل الدخول.");
