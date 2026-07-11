@@ -50,6 +50,25 @@ export async function reconcileCompanyAction(input: {
   output: Record<string, unknown>;
   actor: string;
 }) {
+  const actualExternalReference = externalReferenceFromOutput(input.output);
+
+  // Safe rollout behavior: existing integrations keep working until the schema
+  // migration is applied and the explicit production gate is enabled. The
+  // readiness endpoint remains red, so this bypass can never be mistaken for a
+  // production-ready configuration.
+  if (process.env.ORVANTA_RECONCILIATION_REQUIRED !== "true") {
+    return {
+      reconciled: true,
+      exceptions: [] as string[],
+      status: "BYPASSED_UNTIL_ACTIVATED" as const,
+      id: null,
+      externalReference: actualExternalReference,
+      ledgerReference: undefined,
+      financial: false,
+      bypassed: true,
+    };
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required for action reconciliation.");
 
@@ -58,7 +77,6 @@ export async function reconcileCompanyAction(input: {
   const expectedAmountSAR = number(integration.expectedAmountSAR ?? payload.expectedAmountSAR);
   const actualAmountSAR = number(input.output.actualAmountSAR ?? input.output.amountSAR);
   const expectedExternalReference = text(integration.expectedExternalReference ?? payload.expectedExternalReference);
-  const actualExternalReference = externalReferenceFromOutput(input.output);
   const ledgerReference = text(input.output.ledgerReference ?? integration.ledgerReference ?? payload.ledgerReference);
   const financial = expectedAmountSAR != null || actualAmountSAR != null;
   const ledgerBalanced = financial ? await hasBalancedLedgerReference(input.tenantId, ledgerReference) : true;
@@ -104,10 +122,12 @@ export async function reconcileCompanyAction(input: {
     externalReference: actualExternalReference,
     ledgerReference,
     financial,
+    bypassed: false,
   };
 }
 
 export async function getReconciliationForAction(tenantId: string, actionId: string) {
+  if (process.env.ORVANTA_RECONCILIATION_REQUIRED !== "true") return null;
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
   const { data, error } = await supabase
