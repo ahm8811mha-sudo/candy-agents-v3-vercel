@@ -1,15 +1,15 @@
 /**
- * F4 — Double-entry ledger (docs/ROADMAP.md).
+ * Legacy compatibility ledger.
  *
- * Every posted entry must balance (Σ debits = Σ credits). Recognizing sales
- * revenue splits a VAT-inclusive gross amount into net revenue + VAT payable,
- * so the company books stay compliant and the trial balance always balances.
- * Deterministic and fully testable; entries are written through to the Supabase
- * `ledger_entries` table and hydrated on read (see hydrateLedger) when set up.
+ * The authoritative financial source is now `accounting_journal_entries` plus
+ * `accounting_journal_lines`. This module keeps its synchronous API for older
+ * sales/ZATCA flows and tests, while every new entry is mirrored into the
+ * authoritative accounting repository with an idempotent reference.
  */
 
-import { VAT_RATE, splitVatInclusive } from "./zatca";
+import { scheduleLegacyLedgerMirror } from "../accountingRepository";
 import { persist, fetchRows, hydrateOnce } from "../supabase";
+import { VAT_RATE, splitVatInclusive } from "./zatca";
 
 export type LedgerLine = { account: string; debit: number; credit: number };
 
@@ -37,6 +37,7 @@ export function postEntry(input: { description: string; reference?: string; line
   if (debit !== credit) {
     throw new Error(`Unbalanced entry: debit ${debit} ≠ credit ${credit}`);
   }
+
   const entry: LedgerEntry = {
     id: genId(),
     date: input.date || new Date().toISOString(),
@@ -45,6 +46,9 @@ export function postEntry(input: { description: string; reference?: string; line
     lines: input.lines,
   };
   entries.unshift(entry);
+
+  // Retained as a compatibility event log only. Financial dashboards no longer
+  // read from this table.
   persist("ledger_entries", {
     id: entry.id,
     date: entry.date,
@@ -52,10 +56,12 @@ export function postEntry(input: { description: string; reference?: string; line
     reference: entry.reference ?? null,
     lines: entry.lines,
   });
+  scheduleLegacyLedgerMirror(entry);
+
   return entry;
 }
 
-/** Hydrate the ledger from Supabase once per process (before reads). */
+/** Hydrate the compatibility ledger once for legacy callers and tests. */
 export const hydrateLedger = hydrateOnce(async () => {
   const rows = await fetchRows("ledger_entries", { orderBy: "date", limit: 500 });
   const seen = new Set(entries.map((e) => e.id));
