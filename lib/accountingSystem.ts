@@ -1,4 +1,9 @@
-import { hydrateLedger, listEntries, postEntry, type LedgerEntry } from "./company/ledger";
+import {
+  listAccountingTransactions,
+  postAccountingEntry,
+  type AccountingTransaction,
+} from "./accountingRepository";
+import { hasSupabaseEnv } from "./supabase";
 
 export type TransactionType = "income" | "expense";
 
@@ -59,7 +64,7 @@ async function runFinancialAI(prompt: string, fallback: string) {
         {
           role: "system",
           content:
-            "You are a professional financial analyst and corporate accountant. Write clear Arabic corporate reports with realistic recommendations. Treat the double-entry ledger as the source of truth.",
+            "You are a professional financial analyst and corporate accountant. Write clear Arabic corporate reports with realistic recommendations. Treat the accounting journal as the only financial source of truth.",
         },
         { role: "user", content: prompt },
       ],
@@ -75,87 +80,58 @@ function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function entryToTransactions(entry: LedgerEntry): Transaction[] {
-  const income = entry.lines
-    .filter((line) => line.account.includes("Revenue") || line.account.includes("إيرادات"))
-    .reduce((sum, line) => sum + Number(line.credit || 0), 0);
-
-  const expense = entry.lines
-    .filter((line) => line.account.includes("Expense") || line.account.includes("مصروف"))
-    .reduce((sum, line) => sum + Number(line.debit || 0), 0);
-
-  const transactions: Transaction[] = [];
-  if (income > 0) {
-    transactions.push({
-      id: `${entry.id}-income`,
-      type: "income",
-      amount: round2(income),
-      description: entry.description,
-      created_at: entry.date,
-      source: "ledger",
-      reference: entry.reference,
-    });
-  }
-  if (expense > 0) {
-    transactions.push({
-      id: `${entry.id}-expense`,
-      type: "expense",
-      amount: round2(expense),
-      description: entry.description,
-      created_at: entry.date,
-      source: "ledger",
-      reference: entry.reference,
-    });
-  }
-  return transactions;
+function toTransaction(item: AccountingTransaction): Transaction {
+  return {
+    id: item.id,
+    type: item.type,
+    amount: item.amount,
+    description: item.description,
+    created_at: item.created_at,
+    reference: item.reference,
+    source: "ledger",
+  };
 }
 
 export async function addTransaction(data: TransactionInput) {
   if (!["income", "expense"].includes(data.type)) {
     throw new Error("نوع العملية غير صحيح.");
   }
-
   if (!Number.isFinite(data.amount) || data.amount <= 0) {
     throw new Error("المبلغ يجب أن يكون أكبر من صفر.");
   }
-
   if (!data.description.trim()) {
     throw new Error("وصف العملية مطلوب.");
   }
 
   const amount = round2(data.amount);
   const description = data.description.trim();
-  const entry = data.type === "income"
-    ? postEntry({
-        description,
-        reference: "manual-income",
-        lines: [
-          { account: "النقد (Cash)", debit: amount, credit: 0 },
-          { account: "إيرادات تشغيلية (Operating Revenue)", debit: 0, credit: amount },
-        ],
-      })
-    : postEntry({
-        description,
-        reference: "manual-expense",
-        lines: [
-          { account: "مصروفات تشغيلية (Operating Expense)", debit: amount, credit: 0 },
-          { account: "النقد (Cash)", debit: 0, credit: amount },
-        ],
-      });
+  const entry = await postAccountingEntry({
+    memo: description,
+    source: "manual-simple-accounting",
+    reference: `${data.type.toUpperCase()}-${Date.now()}`,
+    lines:
+      data.type === "income"
+        ? [
+            { accountCode: "1000", debit: amount, credit: 0, memo: description },
+            { accountCode: "4000", debit: 0, credit: amount, memo: description },
+          ]
+        : [
+            { accountCode: "5200", debit: amount, credit: 0, memo: description },
+            { accountCode: "1000", debit: 0, credit: amount, memo: description },
+          ],
+  });
 
   return { success: true, entry };
 }
 
 export async function getTransactions(): Promise<Transaction[]> {
-  await hydrateLedger();
-  const ledgerTransactions = listEntries(500).flatMap(entryToTransactions);
-  if (ledgerTransactions.length === 0) return fallbackTransactions;
-  return ledgerTransactions.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  if (!hasSupabaseEnv()) return fallbackTransactions;
+  const transactions = await listAccountingTransactions(500);
+  return transactions.map(toTransaction);
 }
 
 export async function calculateFinancials(): Promise<Financials> {
   const transactions = await getTransactions();
-
   const totals = transactions.reduce(
     (acc, transaction) => {
       const amount = Number(transaction.amount) || 0;
@@ -167,8 +143,9 @@ export async function calculateFinancials(): Promise<Financials> {
   );
 
   return {
-    ...totals,
-    profit: totals.income - totals.expenses,
+    income: round2(totals.income),
+    expenses: round2(totals.expenses),
+    profit: round2(totals.income - totals.expenses),
     transactionCount: transactions.length,
     source: transactions.some((item) => item.source === "ledger") ? "ledger" : "demo",
   };
@@ -182,7 +159,7 @@ export async function generateFinancialReport() {
 
   const fallback = `
 1. Executive Summary
-الإيرادات الحالية ${financials.income.toLocaleString("ar-SA")} ريال، والمصروفات ${financials.expenses.toLocaleString("ar-SA")} ريال، وصافي الربح ${financials.profit.toLocaleString("ar-SA")} ريال. مصدر البيانات: ${financials.source === "ledger" ? "دفتر القيود المزدوجة" : "بيانات تجريبية"}.
+الإيرادات الحالية ${financials.income.toLocaleString("ar-SA")} ريال، والمصروفات ${financials.expenses.toLocaleString("ar-SA")} ريال، وصافي الربح ${financials.profit.toLocaleString("ar-SA")} ريال. مصدر البيانات: ${financials.source === "ledger" ? "دفتر القيود المحاسبي الموحد" : "بيانات تجريبية"}.
 
 2. Revenue Analysis
 يجب متابعة مصادر الإيراد الأعلى وربطها بقنوات البيع الأكثر كفاءة.
@@ -197,10 +174,10 @@ export async function generateFinancialReport() {
 - ارتفاع المصروفات قبل ثبات الإيرادات.
 - غياب حد صرف شهري.
 - عدم فصل مصروفات التسويق عن التشغيل.
-- استخدام بيانات demo يعني أن القرار غير صالح للإنتاج حتى يتم إدخال قيود Ledger فعلية.
+- استخدام بيانات demo يعني أن القرار غير صالح للإنتاج حتى يتم إدخال قيود فعلية.
 
 6. Strategic Recommendations
-- اعتماد دفتر القيود المزدوجة كمصدر مالي وحيد.
+- اعتماد دفتر القيود المحاسبي الموحد كمصدر مالي وحيد.
 - مراجعة التدفق النقدي أسبوعيًا.
 - إيقاف أي مصروف لا يرتبط بمؤشر أداء واضح.
 `.trim();
