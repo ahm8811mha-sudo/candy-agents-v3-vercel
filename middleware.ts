@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PRIVATE_OWNER_ONLY = process.env.ORVANTA_PRIVATE_OWNER_ONLY !== "false";
-const PRIVATE_RUNTIME_BYPASS = PRIVATE_OWNER_ONLY && process.env.AUTH_ENABLED !== "true";
+const PERSONAL_OWNER_RUNTIME = process.env.ORVANTA_PERSONAL_MODE !== "false";
+const PRIVATE_OWNER_ONLY = PERSONAL_OWNER_RUNTIME || process.env.ORVANTA_PRIVATE_OWNER_ONLY !== "false";
+const PRIVATE_RUNTIME_BYPASS = PERSONAL_OWNER_RUNTIME;
 const OWNER_TENANT_ID = (process.env.ORVANTA_TENANT_ID || "golden-star").trim();
 const PUBLIC_PATHS = [
   "/api/health",
@@ -240,13 +241,11 @@ export async function middleware(req: NextRequest) {
 
   if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
 
-  // Current installation is a personal owner-only workspace. Until commercial
-  // onboarding is enabled, do not block the application because Vercel lacks
-  // the production authentication variables. This intentionally restores the
-  // original personal-use behavior while preserving commercial auth code for later.
+  // Personal mode is the permanent behavior of the current installation:
+  // one owner, one tenant, no login screen and no commercial onboarding.
   if (PRIVATE_RUNTIME_BYPASS) {
     const response = NextResponse.next();
-    response.headers.set("x-orvanta-access-mode", "private-owner-runtime");
+    response.headers.set("x-orvanta-access-mode", "personal-single-owner");
     return response;
   }
 
