@@ -5,7 +5,7 @@
   "crons": [
     {
       "path": "/api/company-os/runtime/cron",
-      "schedule": "*/5 * * * *"
+      "schedule": "15 3 * * *"
     },
     {
       "path": "/api/company/loop/cron",
