@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/api/health", "/api/auth"];
 const PUBLIC_METHODS = ["OPTIONS"];
+const ACCESS_COOKIE = "orvanta_access_token";
+const REFRESH_COOKIE = "orvanta_refresh_token";
 
 function readAccessValue(req: NextRequest) {
   const raw = req.headers.get("authorization") || "";
@@ -17,9 +19,7 @@ function canRunCompanyCommand(req: NextRequest) {
 }
 
 export function middleware(req: NextRequest) {
-  if (PUBLIC_METHODS.includes(req.method)) {
-    return NextResponse.next();
-  }
+  if (PUBLIC_METHODS.includes(req.method)) return NextResponse.next();
 
   if (req.nextUrl.pathname === "/api/company-execution" && !canRunCompanyCommand(req)) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
@@ -29,15 +29,17 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (process.env.AUTH_ENABLED !== "true") {
-    return NextResponse.next();
-  }
+  if (process.env.AUTH_ENABLED !== "true") return NextResponse.next();
 
-  const hasAuth = req.headers.has("authorization") || req.headers.has("x-api-key");
+  const hasAuth =
+    req.headers.has("authorization") ||
+    req.headers.has("x-api-key") ||
+    req.cookies.has(ACCESS_COOKIE) ||
+    req.cookies.has(REFRESH_COOKIE);
 
   if (!hasAuth && req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.json(
-      { ok: false, error: "مطلوب مصادقة للوصول إلى API." },
+      { ok: false, code: "AUTH_REQUIRED", error: "مطلوب مصادقة للوصول إلى API." },
       { status: 401 }
     );
   }
