@@ -34,36 +34,96 @@ export function getSupabaseAdmin() {
   return adminClient;
 }
 
-/**
- * Durable persistence helpers for the in-memory company OS modules.
- *
- * Design: the in-memory store stays the fast working copy; every write also
- * fire-and-forgets an upsert to Supabase (`persist`), and each module hydrates
- * its store once per process from Supabase on the first read (`hydrateOnce`).
- * All helpers are no-ops when Supabase is not configured, so the modules keep
- * their synchronous signatures and every existing test still passes unchanged.
- *
- * Security rule: server persistence requires SUPABASE_SERVICE_ROLE_KEY. The
- * public anon key is intentionally not accepted here because this module writes
- * governance, approvals, ledger, and audit data from server routes.
- */
+const SENSITIVE_FIELD = /(password|secret|token|authorization|cookie|otp|code_verifier|session)/i;
+
+function sanitizeForFailureLog(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[TRUNCATED]";
+  if (Array.isArray(value)) return value.slice(0, 50).map((item) => sanitizeForFailureLog(item, depth + 1));
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = SENSITIVE_FIELD.test(key) ? "[REDACTED]" : sanitizeForFailureLog(item, depth + 1);
+    }
+    return output;
+  }
+  if (typeof value === "string" && value.length > 4000) return `${value.slice(0, 4000)}…`;
+  return value;
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message?: unknown }).message || error);
+  return String(error);
+}
+
+async function recordFailedWrite(input: {
+  table: string;
+  operation: string;
+  row: Record<string, unknown>;
+  error: unknown;
+}) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase || input.table === "failed_writes") return;
+
+  const message = errorMessage(input.error).slice(0, 2000);
+  try {
+    const { error } = await supabase.from("failed_writes").insert({
+      tenant_id: getTenantId(),
+      table_name: input.table,
+      operation: input.operation,
+      payload: sanitizeForFailureLog(input.row),
+      error_message: message,
+      status: "PENDING",
+      attempts: 1,
+    });
+    if (error) {
+      console.error("[orvanta:persistence] failed to record failed write", {
+        table: input.table,
+        originalError: message,
+        recorderError: error.message,
+      });
+    }
+  } catch (recorderError) {
+    console.error("[orvanta:persistence] failed write recorder unavailable", {
+      table: input.table,
+      originalError: message,
+      recorderError: errorMessage(recorderError),
+    });
+  }
+}
+
+async function executePersist(table: string, row: Record<string, unknown>, onConflict = "id") {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is not configured for durable writes.");
+
+  const durableRow = withTenant(row);
+  try {
+    const { error } = await supabase.from(table).upsert(durableRow, { onConflict });
+    if (error) throw error;
+  } catch (error) {
+    await recordFailedWrite({ table, operation: "UPSERT", row: durableRow, error });
+    throw error;
+  }
+}
 
 /**
- * Non-blocking upsert; never throws into the caller. Keeps the store's sync
- * signatures while persisting durably.
+ * Compatibility helper for synchronous in-memory modules.
  *
- * On Vercel the request function is frozen the moment the response is sent, so a
- * plain fire-and-forget promise would be killed before it reaches Supabase. We
- * hand the write to `after()` so the serverless runtime keeps the invocation
- * alive until the insert completes. Outside a request scope (long-running
- * server, scripts) `after()` throws, so we fall back to letting it float.
+ * The write is retained by Next.js `after()` on Vercel, but failures are no
+ * longer swallowed: they are logged and copied to `failed_writes` for replay.
+ * New financial, approval, identity and contract code should use
+ * `persistCritical()` or a transactional repository/RPC instead.
  */
 export function persist(table: string, row: Record<string, unknown>, onConflict = "id"): void {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return;
-  const write: Promise<void> = Promise.resolve(
-    supabase.from(table).upsert(withTenant(row), { onConflict })
-  ).then(() => undefined, () => undefined);
+  if (!hasSupabaseEnv()) return;
+
+  const write = executePersist(table, row, onConflict).catch((error) => {
+    console.error("[orvanta:persistence] asynchronous write failed", {
+      table,
+      error: errorMessage(error),
+    });
+  });
+
   try {
     after(write);
   } catch {
@@ -71,8 +131,18 @@ export function persist(table: string, row: Record<string, unknown>, onConflict 
   }
 }
 
-/** Load rows from a table (newest-first by default); [] on any failure.
- *  With multi-tenancy enabled, only this tenant's rows are read. */
+/** Awaited durable write for state that must not report success before commit. */
+export async function persistCritical(
+  table: string,
+  row: Record<string, unknown>,
+  onConflict = "id"
+): Promise<void> {
+  requireSupabaseForWrite();
+  await executePersist(table, row, onConflict);
+}
+
+/** Load rows from a table (newest-first by default); [] on failure.
+ * With multi-tenancy enabled, only this tenant's rows are read. */
 export async function fetchRows(
   table: string,
   opts: { orderBy?: string; ascending?: boolean; limit?: number } = {}
@@ -85,9 +155,13 @@ export async function fetchRows(
     if (opts.orderBy) query = query.order(opts.orderBy, { ascending: opts.ascending ?? false });
     if (opts.limit) query = query.limit(opts.limit);
     const { data, error } = await query;
-    if (error || !data) return [];
-    return data as Record<string, unknown>[];
-  } catch {
+    if (error) {
+      console.error("[orvanta:persistence] read failed", { table, error: error.message });
+      return [];
+    }
+    return (data || []) as Record<string, unknown>[];
+  } catch (error) {
+    console.error("[orvanta:persistence] read threw", { table, error: errorMessage(error) });
     return [];
   }
 }
@@ -108,7 +182,8 @@ export function hydrateOnce(fn: () => Promise<void>): () => Promise<void> {
         done = true;
         inflight = null;
       },
-      () => {
+      (error) => {
+        console.error("[orvanta:persistence] hydration failed", { error: errorMessage(error) });
         inflight = null;
       }
     );
