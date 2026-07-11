@@ -17,16 +17,27 @@ export default function SessionControl() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((json) => {
-        if (active && json?.ok) setUser(json.user);
-      })
-      .finally(() => {
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/auth", { cache: "no-store" });
+        const json = response.ok ? await response.json() : null;
+        if (!active) return;
+        setUser(json?.ok ? json.user : null);
+      } finally {
         if (active) setLoaded(true);
-      });
+      }
+    }
+
+    void loadSession();
+    const timer = window.setInterval(loadSession, 45 * 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadSession();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
