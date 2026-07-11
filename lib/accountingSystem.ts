@@ -131,6 +131,7 @@ export async function getTransactions(): Promise<Transaction[]> {
 }
 
 export async function calculateFinancials(): Promise<Financials> {
+  const configured = hasSupabaseEnv();
   const transactions = await getTransactions();
   const totals = transactions.reduce(
     (acc, transaction) => {
@@ -147,7 +148,7 @@ export async function calculateFinancials(): Promise<Financials> {
     expenses: round2(totals.expenses),
     profit: round2(totals.income - totals.expenses),
     transactionCount: transactions.length,
-    source: transactions.some((item) => item.source === "ledger") ? "ledger" : "demo",
+    source: configured ? "ledger" : "demo",
   };
 }
 
