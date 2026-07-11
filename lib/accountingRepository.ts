@@ -56,9 +56,18 @@ function requireSupabase() {
   return supabase;
 }
 
-function entryNumber(reference?: string) {
-  const cleaned = reference?.trim().replace(/[^a-z0-9_-]+/gi, "-").slice(0, 80);
-  return cleaned || `JE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function safeIdentifier(value: string, maxLength: number) {
+  return value
+    .trim()
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLength);
+}
+
+function entryNumber(tenantId: string, reference?: string) {
+  const tenant = safeIdentifier(tenantId, 24) || "tenant";
+  const cleaned = reference ? safeIdentifier(reference, 72) : "";
+  return `${tenant}-${cleaned || `JE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`;
 }
 
 async function ensureAccounts() {
@@ -81,6 +90,7 @@ function validateEntry(input: AccountingEntryInput) {
     if (!line.accountCode?.trim()) throw new Error("Every journal line requires an account code.");
     if (number(line.debit) < 0 || number(line.credit) < 0) throw new Error("Journal amounts cannot be negative.");
     if (number(line.debit) > 0 && number(line.credit) > 0) throw new Error("A journal line cannot contain both debit and credit.");
+    if (number(line.debit) === 0 && number(line.credit) === 0) throw new Error("A journal line must contain a debit or credit amount.");
   }
 }
 
@@ -90,7 +100,7 @@ export async function postAccountingEntry(input: AccountingEntryInput) {
 
   const supabase = requireSupabase();
   const tenantId = getTenantId();
-  const numberValue = entryNumber(input.reference);
+  const numberValue = entryNumber(tenantId, input.reference);
   const entryDate = input.entryDate || new Date().toISOString();
 
   const { data: rpcData, error: rpcError } = await supabase.rpc("orvanta_post_journal_entry", {
@@ -266,6 +276,42 @@ function legacyAccountCode(account: string) {
   return "1000";
 }
 
+async function recordLegacyMirrorFailure(
+  entry: {
+    id: string;
+    date: string;
+    description: string;
+    reference?: string;
+    lines: Array<{ account: string; debit: number; credit: number }>;
+  },
+  error: unknown
+) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+  const message = error instanceof Error ? error.message : String(error);
+  const { error: recordError } = await supabase.from("failed_writes").insert({
+    tenant_id: getTenantId(),
+    table_name: "accounting_journal_entries",
+    operation: "LEGACY_LEDGER_MIRROR",
+    payload: {
+      id: entry.id,
+      date: entry.date,
+      description: entry.description,
+      reference: entry.reference || null,
+      lines: entry.lines,
+    },
+    error_message: message.slice(0, 2000),
+    status: "PENDING",
+    attempts: 1,
+  });
+  if (recordError) {
+    console.error("[orvanta:accounting] failed to record legacy mirror failure", {
+      entryId: entry.id,
+      error: recordError.message,
+    });
+  }
+}
+
 export function scheduleLegacyLedgerMirror(entry: {
   id: string;
   date: string;
@@ -285,11 +331,12 @@ export function scheduleLegacyLedgerMirror(entry: {
       credit: line.credit,
       memo: line.account,
     })),
-  }).catch((error) => {
+  }).catch(async (error) => {
     console.error("[orvanta:accounting] legacy ledger mirror failed", {
       entryId: entry.id,
       error: error instanceof Error ? error.message : String(error),
     });
+    await recordLegacyMirrorFailure(entry, error);
   });
 
   try {
