@@ -35,14 +35,21 @@ export type PolicyDecision = {
 
 export const COMPANY_POLICY_VERSION = "2026-07-core-v1";
 
-function actorExecutiveRole(actor: AuthUser): ExecutiveRole | null {
+export function actorExecutiveRole(actor: AuthUser): ExecutiveRole | null {
   switch (actor.role) {
     case "ADMIN":
+    case "OWNER":
       return "OWNER";
     case "CEO":
       return "CEO";
     case "CFO":
       return "CFO";
+    case "COO":
+      return "COO";
+    case "CRO":
+      return "CRO";
+    case "CGO":
+      return "CGO";
     default:
       return null;
   }
