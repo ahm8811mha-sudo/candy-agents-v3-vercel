@@ -1,13 +1,11 @@
 # ORVANTA Core Completion Runbook
 
-This runbook activates the governed company runtime introduced by PR #17.
+## Database order
 
-## 1. Migration order
-
-Run in a staging Supabase project first. Existing Orvanta installations already contain `database/schema.sql`; verify it before continuing.
+Apply and verify these migrations in sequence:
 
 ```text
-1. database/schema.sql (existing operational schema; verify/apply when absent)
+1. database/schema.sql
 2. docs/supabase-schema.sql
 3. docs/supabase-multitenant.sql
 4. docs/supabase-world-class-os-v2.sql
@@ -16,47 +14,21 @@ Run in a staging Supabase project first. Existing Orvanta installations already 
 7. docs/supabase-performance-indexes.sql
 ```
 
-`supabase-world-class-os-v2.sql` is compatible with the existing production `opportunities.id TEXT` schema. Do not use the original UUID-oriented migration on an existing Orvanta database.
+Use the v2 world-class migration on existing Orvanta databases because the production `opportunities.id` column is text. Run Supabase Security Advisor after all migrations and require a clean security result before enabling execution.
 
-The final security migration removes permissive legacy policies, applies tenant-claim RLS to every company table, moves pgvector out of the public schema, and restricts the event append function to the service role. The performance migration adds covering indexes for the durable workflow, decision, knowledge, approval, and operational paths.
+## Identity and tenant context
 
-Do not set readiness flags until every migration finishes without errors, Supabase Security Advisor returns no findings, and the acceptance tests below pass.
+Every interactive Supabase user needs `tenant_id` and `role` in `app_metadata`. Supported roles are `ADMIN`, `OWNER`, `CEO`, `CFO`, `COO`, `CRO`, `CGO`, `MANAGER`, `EMPLOYEE`, and `VIEWER`.
 
-## 2. Supabase user claims
+Browser requests cannot override their JWT tenant. Tenant headers are accepted only for trusted system and scheduler requests.
 
-Every interactive user must have a tenant claim and role in `app_metadata`:
+## Production gates
 
-```json
-{
-  "tenant_id": "golden-star",
-  "role": "CEO"
-}
-```
+Configure the variables documented in `.env.example`. The required readiness gates are authentication, a service-role persistence key, API and scheduler credentials, multi-tenant mode, confirmed core schema, confirmed RLS, durable workflows, outbox publishing, and mandatory reconciliation.
 
-Supported roles are `ADMIN`, `OWNER`, `CEO`, `CFO`, `COO`, `CRO`, `CGO`, `MANAGER`, `EMPLOYEE`, and `VIEWER`.
+Do not expose service-role or internal scheduler credentials to browser code.
 
-A browser request cannot override its JWT tenant with `x-orvanta-tenant-id`. The header is accepted only for trusted API-key or scheduler calls.
-
-## 3. Vercel environment gates
-
-Configure server-only values in Vercel. Never use `NEXT_PUBLIC_` for secrets.
-
-```text
-AUTH_ENABLED=true
-API_SECRET_KEY=<strong random secret>
-CRON_SECRET=<different strong random secret>
-ORVANTA_MULTI_TENANT=true
-ORVANTA_TENANT_ID=golden-star
-ORVANTA_CORE_SCHEMA_READY=true
-ORVANTA_RLS_READY=true
-ORVANTA_WORKFLOW_RUNTIME_ENABLED=true
-ORVANTA_OUTBOX_ENABLED=true
-ORVANTA_RECONCILIATION_REQUIRED=true
-```
-
-Set `ORVANTA_CORE_SCHEMA_READY` and `ORVANTA_RLS_READY` only after database verification and cross-tenant tests. Google Workspace remains behind its own kill switch and OAuth variables.
-
-## 4. Runtime APIs
+## Execution model
 
 ```text
 POST /api/company-os/workflows
@@ -70,100 +42,32 @@ GET|POST /api/company-os/knowledge
 POST /api/company-os/reconcile
 ```
 
-Worker endpoints require either:
+Creating a workflow immediately advances it until approval, completion, failure, or another safe stopping point. Completing the required approval quorum immediately resumes the affected workflow.
 
-```text
-Authorization: Bearer <CRON_SECRET>
-```
+The Vercel Hobby-compatible recovery job calls `/api/company-os/runtime/cron` daily at 03:15 UTC. It drains several workflow cycles and then publishes the transactional outbox. On a Pro plan, the same endpoint can be scheduled more frequently.
 
-or:
-
-```text
-x-api-key: <API_SECRET_KEY>
-x-orvanta-tenant-id: golden-star
-```
-
-The Vercel scheduler invokes `/api/company-os/runtime/cron` every five minutes. That endpoint advances a bounded batch of durable workflow steps first, then publishes a bounded outbox batch so events created during the same tick can be delivered immediately. Vercel supplies `Authorization: Bearer <CRON_SECRET>` automatically when `CRON_SECRET` is configured.
-
-## 5. Acceptance tests
+## Required verification
 
 ### Tenant isolation
 
-1. Create users for `tenant-a` and `tenant-b`.
-2. Add the matching `tenant_id` and `role` to each user's `app_metadata`.
-3. Insert one project and one action for each tenant.
-4. Use each user's session to query tenant-scoped routes.
-5. Confirm neither user can read, update, execute, approve, or reconcile the other tenant's records.
-6. Attempt to send a conflicting `x-orvanta-tenant-id`; expect HTTP 403.
+Create two test users with different tenant claims. Confirm each user can access only its own projects, decisions, actions, workflows, and reconciliation records. A conflicting tenant header must return HTTP 403.
 
-### Workflow restart and idempotency
+### Workflow durability
 
-1. Start an `idea-to-investment` workflow with a fixed correlation ID.
-2. Start it again with the same correlation ID; expect `reused=true`.
-3. Run one worker tick.
-4. Redeploy or restart the server.
-5. Continue worker ticks and confirm execution resumes from the persisted current step.
-6. Verify only one decision packet, project, budget commitment, and action set exist.
+Start the same workflow twice with one correlation ID and confirm the second request is reused without duplicate decision, project, budget, or action records. Restart or redeploy during a retryable step, then run the recovery endpoint and confirm the workflow resumes from persisted state.
 
-### Approval pause and quorum
+### Approval behavior
 
-1. Start a MEDIUM/HIGH workflow.
-2. Confirm the workflow enters `WAITING_APPROVAL`.
-3. Vote through `/api/company-os/decisions/approve` using each required executive role.
-4. Confirm the workflow remains paused until quorum is complete.
-5. Run the worker again and confirm it resumes.
-6. Reject a separate decision and confirm its workflow is cancelled.
+A material workflow must stop at `WAITING_APPROVAL`. It must remain paused until quorum is complete. The quorum-completing response must include workflow progress and resume execution. A rejected decision must cancel its workflow.
 
-### Scheduler smoke test
+### Outbox and reconciliation
 
-1. Configure `CRON_SECRET`, deploy to production, and confirm the Vercel cron appears for `/api/company-os/runtime/cron`.
-2. Trigger the cron manually or wait for the next five-minute window.
-3. Confirm HTTP 200 and a response containing both `workflow` and `outbox` summaries.
-4. Confirm the request actor is `cron`, the tenant is `golden-star`, and a telemetry span is written for both phases.
-5. Confirm an invalid bearer token returns HTTP 401.
+Successful webhook delivery must be signed and marked published. Failed delivery must retry and eventually move to dead letter without republishing completed rows. External actions cannot become complete until their provider receipt and any required financial reference are reconciled.
 
-### Outbox reliability
+### Production status
 
-1. Configure a test webhook endpoint.
-2. Start a workflow and run the publisher.
-3. Confirm signed delivery and `PUBLISHED` status.
-4. Return HTTP 500 from the receiver and confirm `RETRY` with a future `available_at`.
-5. Repeat failures until the row becomes `DEAD_LETTER`.
-6. Confirm a repeated publisher run never sends a `PUBLISHED` event again.
+Check `/api/health` and `/status`. Production is acceptable only when `productionReady=true` and all required core checks pass.
 
-### Reconciliation
+## Rollback
 
-1. Execute Gmail, Sheets, and Drive actions.
-2. Confirm an external provider ID is stored as the receipt.
-3. Confirm `execution_reconciliations.status=RECONCILED` before the action becomes `DONE`.
-4. For a financial action, omit the ledger reference; expect `WAITING_RECONCILIATION`.
-5. Add a balanced ledger entry and reconcile again; expect `DONE`.
-
-### Security Advisor
-
-1. Run the Supabase Security Advisor after all migrations.
-2. Confirm there are no `rls_enabled_no_policy`, `rls_policy_always_true`, `function_search_path_mutable`, `extension_in_public`, or `security_definer_function` findings.
-3. Confirm anonymous access returns no company data.
-
-### Production readiness
-
-Open:
-
-```text
-/api/health
-/status
-```
-
-Production is acceptable only when `productionReady=true` and every required core check is `PASS`.
-
-## 6. Rollback
-
-Disable execution without removing data:
-
-```text
-ORVANTA_WORKFLOW_RUNTIME_ENABLED=false
-ORVANTA_OUTBOX_ENABLED=false
-GOOGLE_INTEGRATIONS_ENABLED=false
-```
-
-Keep authentication, tenant RLS, audit, and reconciliation data enabled. Never roll back by disabling RLS or exposing the service-role key.
+Disable workflow, outbox, and external integration execution while keeping authentication, tenant RLS, audit records, workflow history, and reconciliation data intact.
