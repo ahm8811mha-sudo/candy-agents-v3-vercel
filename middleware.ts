@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const PRIVATE_OWNER_ONLY = process.env.ORVANTA_PRIVATE_OWNER_ONLY !== "false";
+const PRIVATE_RUNTIME_BYPASS = PRIVATE_OWNER_ONLY && process.env.AUTH_ENABLED !== "true";
 const OWNER_TENANT_ID = (process.env.ORVANTA_TENANT_ID || "golden-star").trim();
 const PUBLIC_PATHS = [
   "/api/health",
@@ -229,11 +230,25 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  if (req.nextUrl.pathname === "/api/company-execution" && !canRunCompanyCommand(req)) {
+  if (
+    req.nextUrl.pathname === "/api/company-execution" &&
+    !PRIVATE_RUNTIME_BYPASS &&
+    !canRunCompanyCommand(req)
+  ) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }
 
   if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
+
+  // Current installation is a personal owner-only workspace. Until commercial
+  // onboarding is enabled, do not block the application because Vercel lacks
+  // the production authentication variables. This intentionally restores the
+  // original personal-use behavior while preserving commercial auth code for later.
+  if (PRIVATE_RUNTIME_BYPASS) {
+    const response = NextResponse.next();
+    response.headers.set("x-orvanta-access-mode", "private-owner-runtime");
+    return response;
+  }
 
   if (process.env.AUTH_ENABLED !== "true") {
     if (process.env.NODE_ENV === "production") {
