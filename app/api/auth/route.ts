@@ -15,6 +15,7 @@ import { DEFAULT_TENANT_ID, normalizeTenantId } from "@/lib/tenant";
 const secureCookie = process.env.NODE_ENV === "production";
 const TRUSTED_DEVICE_COOKIE = "orvanta_trusted_device";
 const DEFAULT_OWNER_SESSION_DAYS = 180;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 type SetupState = "FIRST_OWNER_SETUP" | "SETUP_IN_PROGRESS" | "READY" | "UNAVAILABLE";
@@ -42,9 +43,44 @@ type ClaimedAccess = {
   role?: UserRole;
 };
 
+class AuthRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "AuthRequestError";
+    this.status = status;
+  }
+}
+
 function ownerSessionDays() {
   const configured = Number(process.env.ORVANTA_OWNER_SESSION_DAYS || DEFAULT_OWNER_SESSION_DAYS);
   return Number.isFinite(configured) && configured >= 30 ? Math.min(configured, 365) : DEFAULT_OWNER_SESSION_DAYS;
+}
+
+function canUseTrustedDevice(user: AuthUser) {
+  return user.role === "OWNER" || user.role === "ADMIN";
+}
+
+function setTrustedDeviceCookie(response: NextResponse, trustedDevice: boolean) {
+  if (trustedDevice) {
+    response.cookies.set(TRUSTED_DEVICE_COOKIE, "1", {
+      httpOnly: true,
+      secure: secureCookie,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * ownerSessionDays(),
+    });
+    return;
+  }
+
+  response.cookies.set(TRUSTED_DEVICE_COOKIE, "", {
+    httpOnly: true,
+    secure: secureCookie,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 function setSessionCookies(
@@ -75,29 +111,13 @@ function setSessionCookies(
     });
   }
 
-  if (trustedDevice) {
-    response.cookies.set(TRUSTED_DEVICE_COOKIE, "1", {
-      httpOnly: true,
-      secure: secureCookie,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * ownerSessionDays(),
-    });
-  } else {
-    response.cookies.set(TRUSTED_DEVICE_COOKIE, "", {
-      httpOnly: true,
-      secure: secureCookie,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
-    });
-  }
+  setTrustedDeviceCookie(response, trustedDevice);
 }
 
 function clearSessionCookies(response: NextResponse) {
   response.cookies.set(ACCESS_COOKIE, "", { httpOnly: true, secure: secureCookie, sameSite: "lax", path: "/", maxAge: 0 });
   response.cookies.set(REFRESH_COOKIE, "", { httpOnly: true, secure: secureCookie, sameSite: "lax", path: "/", maxAge: 0 });
-  response.cookies.set(TRUSTED_DEVICE_COOKIE, "", { httpOnly: true, secure: secureCookie, sameSite: "lax", path: "/", maxAge: 0 });
+  setTrustedDeviceCookie(response, false);
 }
 
 function userPayload(user: AuthUser) {
@@ -111,7 +131,8 @@ function userPayload(user: AuthUser) {
   };
 }
 
-function sessionResponse(user: AuthUser, refreshed = false, trustedDevice = false) {
+function sessionResponse(user: AuthUser, refreshed = false, trustedDeviceRequested = false) {
+  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
   return NextResponse.json({
     ok: true,
     authenticated: true,
@@ -177,6 +198,19 @@ function slugifyWorkspace(value: string) {
 
 function randomAccessCode(prefix: string) {
   return `${prefix}-${randomBytes(5).toString("hex").toUpperCase()}`;
+}
+
+async function resolveAuthUserId(supabase: SupabaseAdmin, caller: AuthUser) {
+  if (UUID_PATTERN.test(caller.id)) return caller.id;
+  const { data, error } = await supabase
+    .from("employees")
+    .select("auth_user_id")
+    .eq("id", caller.id)
+    .eq("tenant_id", caller.tenantId)
+    .maybeSingle();
+  if (error) throw new Error(`تعذر التحقق من هوية مصدر الإجراء: ${error.message}`);
+  const authUserId = String(data?.auth_user_id || "");
+  return UUID_PATTERN.test(authUserId) ? authUserId : null;
 }
 
 async function hasAuthUsers(supabase: SupabaseAdmin) {
@@ -279,7 +313,7 @@ async function createAuthIdentity(
       workspace_mode: input.workspaceMode,
     },
   });
-  if (error || !data.user) throw new Error(error?.message || "تعذر إنشاء هوية المستخدم.");
+  if (error || !data.user) throw new AuthRequestError(error?.message || "تعذر إنشاء هوية المستخدم.", 400);
   return data.user;
 }
 
@@ -287,7 +321,7 @@ async function signInResponse(
   supabase: SupabaseAdmin,
   email: string,
   password: string,
-  trustedDevice: boolean,
+  trustedDeviceRequested: boolean,
   setupCompleted = false
 ) {
   const signedIn = await supabase.auth.signInWithPassword({ email, password });
@@ -303,6 +337,7 @@ async function signInResponse(
   }
 
   const user = await authUserFromSupabaseUser(signedIn.data.user);
+  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
   const response = NextResponse.json({
     ok: true,
     authenticated: true,
@@ -351,17 +386,22 @@ async function unauthenticatedResponse(supabase: ReturnType<typeof getSupabaseAd
 }
 
 function validatePassword(password: string) {
-  if (password.length < 10) throw new Error("كلمة المرور يجب ألا تقل عن 10 أحرف.");
+  if (password.length < 10) throw new AuthRequestError("كلمة المرور يجب ألا تقل عن 10 أحرف.");
 }
 
 function validateRequired(email: string, password: string) {
-  if (!email || !password) throw new Error("البريد الإلكتروني وكلمة المرور مطلوبان.");
+  if (!email || !password) throw new AuthRequestError("البريد الإلكتروني وكلمة المرور مطلوبان.");
 }
 
 export async function GET(req: NextRequest) {
+  const trustedDeviceRequested = req.cookies.get(TRUSTED_DEVICE_COOKIE)?.value === "1";
   const user = await authenticateRequest(req);
-  const trustedDevice = req.cookies.get(TRUSTED_DEVICE_COOKIE)?.value === "1";
-  if (user) return sessionResponse(user, false, trustedDevice);
+  if (user) {
+    const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
+    const response = sessionResponse(user, false, trustedDevice);
+    if (trustedDeviceRequested && !trustedDevice) setTrustedDeviceCookie(response, false);
+    return response;
+  }
 
   const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
   const supabase = getSupabaseAdmin();
@@ -371,6 +411,7 @@ export async function GET(req: NextRequest) {
   if (error || !data.session || !data.user) return unauthenticatedResponse(supabase);
 
   const refreshedUser = await authUserFromSupabaseUser(data.user);
+  const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(refreshedUser);
   const response = sessionResponse(refreshedUser, true, trustedDevice);
   setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in, trustedDevice);
   return response;
@@ -382,7 +423,7 @@ export async function POST(req: NextRequest) {
     const action = String(body.action || "login");
     const email = normalizeEmail(body.email);
     const password = String(body.password || "");
-    const trustedDevice = Boolean(body.rememberDevice);
+    const trustedDeviceRequested = Boolean(body.rememberDevice);
     const supabase = getSupabaseAdmin();
 
     if (!supabase) {
@@ -396,6 +437,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "بيانات الدخول غير صحيحة." }, { status: 401 });
       }
       const user = await authUserFromSupabaseUser(data.user);
+      const trustedDevice = trustedDeviceRequested && canUseTrustedDevice(user);
       const response = sessionResponse(user, false, trustedDevice);
       setSessionCookies(response, data.session.access_token, data.session.refresh_token, data.session.expires_in, trustedDevice);
       return response;
@@ -456,9 +498,7 @@ export async function POST(req: NextRequest) {
       validateRequired(email, password);
       validatePassword(password);
       const activationCode = normalizeCode(body.activationCode);
-      if (!activationCode) {
-        return NextResponse.json({ ok: false, error: "رمز تفعيل الشركة مطلوب." }, { status: 400 });
-      }
+      if (!activationCode) throw new AuthRequestError("رمز تفعيل الشركة مطلوب.");
 
       const { data, error } = await supabase.rpc("claim_orvanta_activation_code", {
         p_code_hash: hashCode(activationCode),
@@ -503,7 +543,7 @@ export async function POST(req: NextRequest) {
           p_user_id: userId,
         });
         if (completed.error || completed.data !== true) throw new Error("تعذر تثبيت ترخيص مساحة الشركة.");
-        return signInResponse(supabase, email, password, trustedDevice, true);
+        return signInResponse(supabase, email, password, trustedDeviceRequested, true);
       } catch (error) {
         if (userId) await cleanupProvisionedUser(supabase, userId, tenantId, true);
         await supabase.rpc("release_orvanta_activation_code", {
@@ -518,9 +558,7 @@ export async function POST(req: NextRequest) {
       validateRequired(email, password);
       validatePassword(password);
       const inviteCode = normalizeCode(body.inviteCode);
-      if (!inviteCode) {
-        return NextResponse.json({ ok: false, error: "رمز الدعوة مطلوب." }, { status: 400 });
-      }
+      if (!inviteCode) throw new AuthRequestError("رمز الدعوة مطلوب.");
 
       const { data, error } = await supabase.rpc("claim_orvanta_workspace_invite", {
         p_code_hash: hashCode(inviteCode),
@@ -565,7 +603,7 @@ export async function POST(req: NextRequest) {
           p_user_id: userId,
         });
         if (completed.error || completed.data !== true) throw new Error("تعذر تثبيت عضوية الشركة.");
-        return signInResponse(supabase, email, password, trustedDevice, true);
+        return signInResponse(supabase, email, password, false, true);
       } catch (error) {
         if (userId) await cleanupProvisionedUser(supabase, userId, tenantId, false);
         await supabase.rpc("release_orvanta_workspace_invite", {
@@ -582,6 +620,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "هذه العملية متاحة لمالك منصة Orvanta فقط." }, { status: 403 });
       }
 
+      const issuerAuthUserId = await resolveAuthUserId(supabase, caller);
+      if (!issuerAuthUserId) throw new Error("تعذر ربط مالك المنصة بهوية Supabase Auth.");
       const companyName = safeWorkspaceName(body.companyName, "شركة جديدة");
       const workspaceId = slugifyWorkspace(String(body.workspaceId || companyName));
       const code = randomAccessCode("ORV");
@@ -593,7 +633,7 @@ export async function POST(req: NextRequest) {
         plan: String(body.plan || "COMPANY").slice(0, 40),
         status: "ACTIVE",
         expires_at: new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
-        created_by_user_id: caller.id,
+        created_by_user_id: issuerAuthUserId,
       });
       if (error) throw new Error(error.message);
       return NextResponse.json({ ok: true, code, workspaceId, companyName, expiresDays }, { status: 201 });
@@ -605,10 +645,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "لا تملك صلاحية إصدار دعوة موظف." }, { status: 403 });
       }
 
+      const issuerAuthUserId = await resolveAuthUserId(supabase, caller);
+      if (!issuerAuthUserId) throw new Error("تعذر ربط مصدر الدعوة بهوية Supabase Auth.");
       const invitedEmail = normalizeEmail(body.invitedEmail);
       const requestedRole = String(body.role || "EMPLOYEE").toUpperCase() as UserRole;
-      const allowedRoles: UserRole[] = ["CEO", "CFO", "COO", "CRO", "CGO", "MANAGER", "EMPLOYEE", "VIEWER"];
-      const role = allowedRoles.includes(requestedRole) ? requestedRole : "EMPLOYEE";
+      const elevatedIssuer = caller.role === "OWNER" || caller.role === "ADMIN";
+      const allowedRoles: UserRole[] = elevatedIssuer
+        ? ["CEO", "CFO", "COO", "CRO", "CGO", "MANAGER", "EMPLOYEE", "VIEWER"]
+        : ["EMPLOYEE", "VIEWER"];
+      if (!allowedRoles.includes(requestedRole)) {
+        return NextResponse.json({ ok: false, error: "لا يمكنك إصدار دعوة بهذه الصلاحية." }, { status: 403 });
+      }
+      const role = requestedRole;
       const code = randomAccessCode("TEAM");
       const expiresDays = Math.max(1, Math.min(30, Number(body.expiresDays || 14)));
       const { error } = await supabase.from("workspace_invites").insert({
@@ -618,7 +666,7 @@ export async function POST(req: NextRequest) {
         role,
         status: "ACTIVE",
         expires_at: new Date(Date.now() + expiresDays * 86_400_000).toISOString(),
-        created_by_user_id: caller.id,
+        created_by_user_id: issuerAuthUserId,
       });
       if (error) throw new Error(error.message);
       return NextResponse.json({ ok: true, code, email: invitedEmail || null, role, expiresDays }, { status: 201 });
@@ -626,9 +674,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: false, error: "عملية المصادقة غير معروفة." }, { status: 400 });
   } catch (error) {
+    const status = error instanceof AuthRequestError ? error.status : 500;
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "خطأ في المصادقة" },
-      { status: 500 }
+      { status }
     );
   }
 }
