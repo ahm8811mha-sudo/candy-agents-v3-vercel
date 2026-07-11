@@ -49,6 +49,21 @@ export function hasPermission(userRole: UserRole, requiredRole: UserRole): boole
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
 }
 
+export function isPersonalOwnerMode(): boolean {
+  return process.env.ORVANTA_PERSONAL_MODE !== "false";
+}
+
+export function personalOwnerUser(): AuthUser {
+  return {
+    id: "private-owner",
+    email: process.env.ORVANTA_OWNER_EMAIL?.trim() || "ahm8811mha@gmail.com",
+    role: "OWNER",
+    name: process.env.ORVANTA_OWNER_NAME?.trim() || "أحمد ناصر الأحمد",
+    tenantId: process.env.ORVANTA_TENANT_ID?.trim() || DEFAULT_TENANT_ID,
+    authMethod: "SYSTEM_KEY",
+  };
+}
+
 function secureEqual(left: string | null | undefined, right: string | null | undefined): boolean {
   if (!left || !right) return false;
   const a = Buffer.from(left);
@@ -108,7 +123,8 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
         authMethod: "CRON",
       };
     }
-    return verifySupabaseToken(token);
+    const verified = await verifySupabaseToken(token);
+    if (verified) return verified;
   }
 
   const cookieToken = req.cookies.get(ACCESS_COOKIE)?.value;
@@ -116,6 +132,11 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
     const user = await verifySupabaseToken(cookieToken);
     if (user) return user;
   }
+
+  // The current installation is intentionally a private, single-user owner
+  // workspace. Every internal browser request receives the same OWNER context;
+  // no login, employee, company or invitation flow is part of this version.
+  if (isPersonalOwnerMode()) return personalOwnerUser();
 
   // Refresh tokens are rotated only by /api/auth, which can also replace both
   // HttpOnly cookies. A generic API request must never consume a refresh token
@@ -198,5 +219,5 @@ export function requireAuth(user: AuthUser | null, minRole: UserRole = "VIEWER")
 }
 
 export function isAuthEnabled(): boolean {
-  return process.env.AUTH_ENABLED === "true";
+  return !isPersonalOwnerMode() && process.env.AUTH_ENABLED === "true";
 }
