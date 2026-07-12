@@ -1,5 +1,6 @@
 import { hasSupabaseEnv } from "../supabase";
-import { isAuthEnabled } from "../auth";
+import { isAuthEnabled, isPersonalOwnerMode } from "../auth";
+import { isOwnerAccessConfigured } from "../security/personalAccess";
 import { getGoogleWorkspaceStatus } from "../integrations/googleWorkspace";
 
 export type ReadinessSeverity = "PASS" | "WARN" | "FAIL";
@@ -15,6 +16,7 @@ export type ReadinessCheck = {
 export type ProductionReadiness = {
   okForProduction: boolean;
   mode: "production" | "development" | "test";
+  accessMode: "personal" | "commercial";
   checks: ReadinessCheck[];
 };
 
@@ -36,8 +38,10 @@ function check(
 
 export function getProductionReadiness(): ProductionReadiness {
   const mode = process.env.NODE_ENV === "production" ? "production" : process.env.NODE_ENV === "test" ? "test" : "development";
+  const personalMode = isPersonalOwnerMode();
   const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
   const hasPublicAnonServerWriteFallback = Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const personalAccessCodeConfigured = Boolean(process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY);
   const googleWorkspace = getGoogleWorkspaceStatus();
   const googleWorkspaceCheck = googleWorkspace.enabled
     ? check(
@@ -57,14 +61,22 @@ export function getProductionReadiness(): ProductionReadiness {
         false
       );
 
+  const tenantIsolationPassed = personalMode
+    ? Boolean(process.env.ORVANTA_TENANT_ID) && process.env.ORVANTA_RLS_READY === "true"
+    : process.env.ORVANTA_MULTI_TENANT === "true" && process.env.ORVANTA_RLS_READY === "true";
+
   const checks: ReadinessCheck[] = [
     check(
-      "auth-enabled",
-      "Production authentication gate",
-      isAuthEnabled(),
-      isAuthEnabled()
-        ? "AUTH_ENABLED=true. Sensitive routes require authenticated roles and tenant context."
-        : "AUTH_ENABLED is not true. The development owner fallback is forbidden in production."
+      "access-gate",
+      personalMode ? "Personal owner access gate" : "Production authentication gate",
+      isAuthEnabled() && (!personalMode || personalAccessCodeConfigured),
+      personalMode
+        ? isOwnerAccessConfigured() && personalAccessCodeConfigured
+          ? "Personal mode requires a server-side owner code and a signed HttpOnly trusted-device cookie. Anonymous OWNER fallback is disabled."
+          : "Configure ORVANTA_OWNER_ACCESS_KEY and a server-side signing secret before exposing the personal workspace."
+        : isAuthEnabled()
+          ? "Commercial authentication is enabled. Sensitive routes require authenticated roles and tenant context."
+          : "AUTH_ENABLED is not true. Commercial routes must fail closed."
     ),
     check(
       "basic-auth-disabled",
@@ -72,7 +84,7 @@ export function getProductionReadiness(): ProductionReadiness {
       process.env.NODE_ENV === "production" || process.env.ALLOW_BASIC_AUTH !== "true",
       process.env.ALLOW_BASIC_AUTH === "true"
         ? "ALLOW_BASIC_AUTH=true is accepted only in local development and is ignored in production."
-        : "Basic Auth is disabled. Supabase bearer sessions or trusted system credentials are required."
+        : "Basic Auth is disabled. Signed owner access, Supabase sessions, or trusted system credentials are required."
     ),
     check(
       "supabase-service-role",
@@ -88,15 +100,19 @@ export function getProductionReadiness(): ProductionReadiness {
       process.env.ORVANTA_CORE_SCHEMA_READY === "true",
       process.env.ORVANTA_CORE_SCHEMA_READY === "true"
         ? "Core completion migration is confirmed as applied."
-        : "Apply docs/supabase-core-completion.sql in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
+        : "Apply the ordered Supabase migrations in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
     ),
     check(
       "tenant-rls-ready",
-      "Tenant claims and RLS",
-      process.env.ORVANTA_MULTI_TENANT === "true" && process.env.ORVANTA_RLS_READY === "true",
-      process.env.ORVANTA_RLS_READY === "true"
-        ? "Tenant-scoped RLS is confirmed and cross-tenant tests can run."
-        : "Set JWT app_metadata.tenant_id, enable ORVANTA_MULTI_TENANT, apply RLS policies, and set ORVANTA_RLS_READY=true."
+      personalMode ? "Single-tenant RLS boundary" : "Tenant claims and RLS",
+      tenantIsolationPassed,
+      tenantIsolationPassed
+        ? personalMode
+          ? "The personal workspace uses one explicit tenant and RLS remains enabled."
+          : "Tenant-scoped RLS is confirmed and cross-tenant tests can run."
+        : personalMode
+          ? "Set ORVANTA_TENANT_ID and confirm ORVANTA_RLS_READY=true; personal mode does not justify disabling RLS."
+          : "Set JWT app_metadata.tenant_id, enable ORVANTA_MULTI_TENANT, apply RLS policies, and set ORVANTA_RLS_READY=true."
     ),
     check(
       "workflow-runtime",
@@ -162,6 +178,7 @@ export function getProductionReadiness(): ProductionReadiness {
   return {
     okForProduction: checks.every((item) => item.severity !== "FAIL"),
     mode,
+    accessMode: personalMode ? "personal" : "commercial",
     checks,
   };
 }
