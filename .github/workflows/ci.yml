@@ -35,7 +35,19 @@ jobs:
         run: npm run typecheck
 
       - name: Unit and integration tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee vitest-output.log
+
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-output
+          path: vitest-output.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Production build
         run: npm run build
