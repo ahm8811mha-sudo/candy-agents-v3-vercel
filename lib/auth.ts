@@ -222,7 +222,6 @@ export function requireAuth(user: AuthUser | null, minRole: UserRole = "VIEWER")
 }
 
 export function isAuthEnabled(): boolean {
-  return isPersonalOwnerMode()
-    ? isOwnerAccessConfigured()
-    : process.env.AUTH_ENABLED === "true";
+  if (process.env.AUTH_ENABLED === "true") return true;
+  return isPersonalOwnerMode() && isOwnerAccessConfigured();
 }
