@@ -17,10 +17,25 @@ export type TelemetryRecord = {
   error?: string;
 };
 
+function logTelemetryFailure(kind: string, error: unknown, context: Record<string, unknown>) {
+  console.error("[orvanta:telemetry] persistence failed", {
+    kind,
+    ...context,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
 export async function recordTelemetry(record: TelemetryRecord) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return;
-  await supabase.from("operational_telemetry").insert({
+  if (!supabase) {
+    console.warn("[orvanta:telemetry] Supabase is unavailable", {
+      operation: record.operation,
+      correlationId: record.correlationId,
+    });
+    return false;
+  }
+
+  const { error } = await supabase.from("operational_telemetry").insert({
     id: randomUUID(),
     tenant_id: record.tenantId,
     correlation_id: record.correlationId,
@@ -34,6 +49,8 @@ export async function recordTelemetry(record: TelemetryRecord) {
     attributes: record.attributes || {},
     error: record.error || null,
   });
+  if (error) throw error;
+  return true;
 }
 
 export async function withTelemetrySpan<T>(
@@ -43,15 +60,30 @@ export async function withTelemetrySpan<T>(
   const started = performance.now();
   try {
     const value = await work();
-    await recordTelemetry({ ...input, status: "OK", durationMs: performance.now() - started }).catch(() => undefined);
+    try {
+      await recordTelemetry({ ...input, status: "OK", durationMs: performance.now() - started });
+    } catch (telemetryError) {
+      logTelemetryFailure("span-success", telemetryError, {
+        operation: input.operation,
+        correlationId: input.correlationId,
+      });
+    }
     return value;
   } catch (error) {
-    await recordTelemetry({
-      ...input,
-      status: "ERROR",
-      durationMs: performance.now() - started,
-      error: error instanceof Error ? error.message.slice(0, 1500) : String(error).slice(0, 1500),
-    }).catch(() => undefined);
+    try {
+      await recordTelemetry({
+        ...input,
+        status: "ERROR",
+        durationMs: performance.now() - started,
+        error: error instanceof Error ? error.message.slice(0, 1500) : String(error).slice(0, 1500),
+      });
+    } catch (telemetryError) {
+      logTelemetryFailure("span-error", telemetryError, {
+        operation: input.operation,
+        correlationId: input.correlationId,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
+    }
     throw error;
   }
 }
@@ -74,8 +106,15 @@ export async function recordModelExecution(input: {
   evaluation?: Record<string, unknown>;
 }) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return;
-  await supabase.from("model_execution_log").insert({
+  if (!supabase) {
+    console.warn("[orvanta:telemetry] model execution was not persisted", {
+      engineId: input.engineId,
+      correlationId: input.correlationId,
+    });
+    return false;
+  }
+
+  const { error } = await supabase.from("model_execution_log").insert({
     tenant_id: input.tenantId,
     correlation_id: input.correlationId,
     engine_id: input.engineId,
@@ -92,6 +131,8 @@ export async function recordModelExecution(input: {
     confidence: input.confidence || null,
     evaluation: input.evaluation || {},
   });
+  if (error) throw error;
+  return true;
 }
 
 export async function getTelemetrySummary(tenantId: string, sinceHours = 24) {
