@@ -1,21 +1,24 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
 import OrvantaLogo from "@/components/OrvantaLogo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [code, setCode] = useState("");
+  const [destination, setDestination] = useState("/");
+  const [missingSetup, setMissingSetup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const destination = useMemo(() => {
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
     const candidate = searchParams.get("next");
-    return candidate?.startsWith("/") && candidate !== "/login" ? candidate : "/";
-  }, [searchParams]);
+    setDestination(candidate?.startsWith("/") && candidate !== "/login" ? candidate : "/");
+    setMissingSetup(searchParams.get("setup") === "missing");
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -39,8 +42,6 @@ export default function LoginPage() {
     }
   }
 
-  const missingSetup = searchParams.get("setup") === "missing";
-
   return (
     <main className="page-wrap" style={{ minHeight: "100vh", display: "grid", placeItems: "center", paddingBlock: 20 }}>
       <section
@@ -58,7 +59,7 @@ export default function LoginPage() {
 
         {missingSetup ? (
           <div className="notice" style={{ color: "var(--red)", lineHeight: 1.8 }}>
-            لم تُجهز حماية النسخة الخاصة بعد. يجب تطبيق Migration الوصول وضبط مفتاح توقيع الخادم قبل فتح النظام.
+            حماية النسخة الخاصة غير مهيأة على الخادم. يجب ضبط مفتاح وصول المالك قبل فتح النظام.
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
@@ -72,10 +73,10 @@ export default function LoginPage() {
                   autoComplete="one-time-code"
                   required
                   minLength={12}
-                  maxLength={80}
+                  maxLength={128}
                   value={code}
-                  onChange={(event) => setCode(event.target.value.toUpperCase())}
-                  placeholder="ORV-••••••••••••••••"
+                  onChange={(event) => setCode(event.target.value)}
+                  placeholder="رمز الوصول الخاص"
                   dir="ltr"
                   style={{ paddingRight: 48 }}
                 />
