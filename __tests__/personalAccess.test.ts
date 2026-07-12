@@ -5,10 +5,14 @@ import {
 } from "@/lib/security/personalAccess";
 
 const originalSecret = process.env.ORVANTA_OWNER_COOKIE_SECRET;
+const originalServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 afterEach(() => {
   if (originalSecret === undefined) delete process.env.ORVANTA_OWNER_COOKIE_SECRET;
   else process.env.ORVANTA_OWNER_COOKIE_SECRET = originalSecret;
+
+  if (originalServiceRole === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  else process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRole;
 });
 
 describe("personal owner access", () => {
