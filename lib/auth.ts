@@ -2,6 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "./supabase";
 import { DEFAULT_TENANT_ID } from "./tenant";
+import {
+  OWNER_ACCESS_COOKIE,
+  isOwnerAccessConfigured,
+  verifyOwnerAccessToken,
+} from "./security/personalAccess";
 
 export const ACCESS_COOKIE = "orvanta_access_token";
 export const REFRESH_COOKIE = "orvanta_refresh_token";
@@ -133,7 +138,12 @@ export async function authenticateRequest(req: NextRequest): Promise<AuthUser | 
     if (user) return user;
   }
 
-  if (isPersonalOwnerMode()) return personalOwnerUser();
+  if (
+    isPersonalOwnerMode() &&
+    (await verifyOwnerAccessToken(req.cookies.get(OWNER_ACCESS_COOKIE)?.value))
+  ) {
+    return personalOwnerUser();
+  }
 
   if (process.env.NODE_ENV !== "production" && process.env.ALLOW_BASIC_AUTH === "true") {
     const basic = parseBasicAuth(authHeader);
@@ -198,7 +208,7 @@ async function verifyCredentials(email: string, password: string): Promise<AuthU
 export function requireAuth(user: AuthUser | null, minRole: UserRole = "VIEWER"): NextResponse | null {
   if (!user) {
     return NextResponse.json(
-      { ok: false, error: "غير مصرح. يرجى تسجيل الدخول." },
+      { ok: false, error: "غير مصرح. يلزم فتح النسخة الخاصة على هذا الجهاز." },
       { status: 401 }
     );
   }
@@ -212,5 +222,7 @@ export function requireAuth(user: AuthUser | null, minRole: UserRole = "VIEWER")
 }
 
 export function isAuthEnabled(): boolean {
-  return !isPersonalOwnerMode() && process.env.AUTH_ENABLED === "true";
+  return isPersonalOwnerMode()
+    ? isOwnerAccessConfigured()
+    : process.env.AUTH_ENABLED === "true";
 }
