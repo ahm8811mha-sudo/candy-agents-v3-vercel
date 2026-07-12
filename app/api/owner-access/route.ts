@@ -10,11 +10,52 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_FAILED_ATTEMPTS = 8;
-const LOCK_MINUTES = 30;
+const ATTEMPT_LIMIT = 8;
+const WINDOW_SECONDS = 30 * 60;
+const localAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function secureCookie() {
   return process.env.NODE_ENV === "production";
+}
+
+function configuredOwnerCode() {
+  return process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY || "";
+}
+
+function clientIp(req: NextRequest) {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+}
+
+async function checkRateLimit(req: NextRequest) {
+  const identity = await sha256Hex(`owner-access:${clientIp(req)}`);
+  const supabase = getSupabaseAdmin();
+
+  if (supabase) {
+    const { data, error } = await supabase.rpc("orvanta_check_rate_limit", {
+      p_key: identity,
+      p_window_seconds: WINDOW_SECONDS,
+      p_limit: ATTEMPT_LIMIT,
+    });
+    if (!error && data && typeof data === "object") {
+      const payload = data as { allowed?: unknown; reset_at?: unknown };
+      if (typeof payload.allowed === "boolean") {
+        return {
+          allowed: payload.allowed,
+          resetAt: new Date(String(payload.reset_at || Date.now() + WINDOW_SECONDS * 1000)).getTime(),
+        };
+      }
+    }
+  }
+
+  const now = Date.now();
+  const existing = localAttempts.get(identity);
+  if (!existing || existing.resetAt <= now) {
+    const resetAt = now + WINDOW_SECONDS * 1000;
+    localAttempts.set(identity, { count: 1, resetAt });
+    return { allowed: true, resetAt };
+  }
+  existing.count += 1;
+  return { allowed: existing.count <= ATTEMPT_LIMIT, resetAt: existing.resetAt };
 }
 
 function clearAccess(response: NextResponse) {
@@ -28,70 +69,36 @@ function clearAccess(response: NextResponse) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const expectedCode = configuredOwnerCode();
+  if (!expectedCode) {
     return NextResponse.json(
-      { ok: false, error: "حماية النسخة الخاصة غير مهيأة." },
+      { ok: false, error: "حماية النسخة الخاصة غير مهيأة. أضف ORVANTA_OWNER_ACCESS_KEY في Vercel." },
       { status: 503 }
+    );
+  }
+
+  const rateLimit = await checkRateLimit(req);
+  if (!rateLimit.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((rateLimit.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { ok: false, error: "تم إيقاف المحاولات مؤقتًا. حاول لاحقًا." },
+      { status: 429, headers: { "retry-after": String(retryAfter) } }
     );
   }
 
   const body = await req.json().catch(() => ({}));
-  const code = String(body.code || "").trim().toUpperCase();
-  if (code.length < 12 || code.length > 80) {
+  const code = String(body.code || "").trim();
+  if (code.length < 12 || code.length > 128) {
     return NextResponse.json({ ok: false, error: "رمز الوصول غير صحيح." }, { status: 401 });
   }
 
-  const { data: credential, error } = await supabase
-    .from("owner_access_credentials")
-    .select("id, access_code_hash, enabled, failed_attempts, locked_until")
-    .eq("id", "primary-owner")
-    .maybeSingle();
-
-  if (error || !credential || credential.enabled !== true) {
-    return NextResponse.json(
-      { ok: false, error: "حماية النسخة الخاصة غير مهيأة." },
-      { status: 503 }
-    );
-  }
-
-  const lockedUntil = credential.locked_until ? new Date(credential.locked_until) : null;
-  if (lockedUntil && lockedUntil.getTime() > Date.now()) {
-    return NextResponse.json(
-      { ok: false, error: "تم إيقاف المحاولات مؤقتًا. حاول لاحقًا." },
-      { status: 429 }
-    );
-  }
-
-  const suppliedHash = await sha256Hex(code);
-  const matches = suppliedHash === String(credential.access_code_hash || "");
-
-  if (!matches) {
-    const failedAttempts = Number(credential.failed_attempts || 0) + 1;
-    const locked = failedAttempts >= MAX_FAILED_ATTEMPTS;
-    await supabase
-      .from("owner_access_credentials")
-      .update({
-        failed_attempts: locked ? 0 : failedAttempts,
-        last_failed_at: new Date().toISOString(),
-        locked_until: locked
-          ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
-          : null,
-      })
-      .eq("id", "primary-owner");
-
+  const [suppliedHash, expectedHash] = await Promise.all([
+    sha256Hex(code),
+    sha256Hex(expectedCode),
+  ]);
+  if (suppliedHash !== expectedHash) {
     return NextResponse.json({ ok: false, error: "رمز الوصول غير صحيح." }, { status: 401 });
   }
-
-  await supabase
-    .from("owner_access_credentials")
-    .update({
-      failed_attempts: 0,
-      last_failed_at: null,
-      locked_until: null,
-      last_success_at: new Date().toISOString(),
-    })
-    .eq("id", "primary-owner");
 
   const response = NextResponse.json({ ok: true, authenticated: true, personalMode: true });
   response.cookies.set(OWNER_ACCESS_COOKIE, await issueOwnerAccessToken(), {
