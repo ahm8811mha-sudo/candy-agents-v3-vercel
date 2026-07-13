@@ -5,7 +5,7 @@ import {
   verifyOwnerAccessToken,
 } from "@/lib/security/personalAccess";
 
-const PUBLIC_PATHS = ["/login", "/api/owner-access", "/api/health"];
+const PUBLIC_EXACT_PATHS = new Set(["/login", "/api/owner-access", "/api/health"]);
 
 function secureEqual(left: string | null | undefined, right: string | null | undefined) {
   if (!left || !right || left.length !== right.length) return false;
@@ -29,7 +29,7 @@ function isTrustedSystemRequest(req: NextRequest) {
 }
 
 function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  return PUBLIC_EXACT_PATHS.has(pathname);
 }
 
 function unauthorized(req: NextRequest) {
