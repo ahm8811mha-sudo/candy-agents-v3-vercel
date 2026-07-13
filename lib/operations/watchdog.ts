@@ -10,7 +10,6 @@ const EXPECTED_JOBS: Array<{ jobName: string; maximumAgeHours: number }> = [
   { jobName: "owner-daily-digest", maximumAgeHours: 26 },
   { jobName: "daily-executive-report", maximumAgeHours: 26 },
   { jobName: "failed-write-recovery", maximumAgeHours: 26 },
-  { jobName: "system-watchdog", maximumAgeHours: 26 },
   { jobName: "weekly-learning-review", maximumAgeHours: 8 * 24 },
 ];
 
