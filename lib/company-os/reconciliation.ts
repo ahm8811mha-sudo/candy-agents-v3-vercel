@@ -16,6 +16,10 @@ function number(value: unknown) {
   return Number.isFinite(n) ? n : undefined;
 }
 
+export function isReconciliationRequired() {
+  return process.env.ORVANTA_RECONCILIATION_REQUIRED !== "false";
+}
+
 export function externalReferenceFromOutput(output: Record<string, unknown>) {
   return (
     text(output.messageId) ||
@@ -56,7 +60,7 @@ export async function reconcileCompanyAction(input: {
   // migration is applied and the explicit production gate is enabled. The
   // readiness endpoint remains red, so this bypass can never be mistaken for a
   // production-ready configuration.
-  if (process.env.ORVANTA_RECONCILIATION_REQUIRED !== "true") {
+  if (!isReconciliationRequired()) {
     return {
       reconciled: true,
       exceptions: [] as string[],
@@ -127,7 +131,7 @@ export async function reconcileCompanyAction(input: {
 }
 
 export async function getReconciliationForAction(tenantId: string, actionId: string) {
-  if (process.env.ORVANTA_RECONCILIATION_REQUIRED !== "true") return null;
+  if (!isReconciliationRequired()) return null;
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
   const { data, error } = await supabase

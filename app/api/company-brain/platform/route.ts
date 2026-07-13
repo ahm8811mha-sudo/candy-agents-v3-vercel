@@ -80,6 +80,7 @@ async function latestPlatformState(tenantId: string) {
     ingestion: ingestion.data,
     skills,
     facts: facts.data || [],
+    needsBootstrap: !twin.data && !ingestion.data,
     freshness: {
       twin: twin.data?.observed_at || null,
       snapshot: snapshot.data?.period_end || null,
@@ -120,11 +121,24 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "refresh");
-    if (action !== "refresh") {
+    if (action !== "refresh" && action !== "bootstrap") {
       return NextResponse.json(
         { ok: false, error: "Unsupported Company Brain action.", requestId: auth.context.requestId },
         { status: 400 }
       );
+    }
+
+    if (action === "bootstrap") {
+      const current = await latestPlatformState(auth.context.tenantId);
+      if (!current.needsBootstrap) {
+        return NextResponse.json({
+          ok: true,
+          tenantId: auth.context.tenantId,
+          bootstrapped: false,
+          ...current,
+          requestId: auth.context.requestId,
+        });
+      }
     }
 
     const cycle = await runCompanyBrainCycle(auth.context.tenantId, auth.context.actor.id);
@@ -132,6 +146,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       tenantId: auth.context.tenantId,
+      bootstrapped: action === "bootstrap",
       cycle: {
         warehouse: cycle.warehouse,
         snapshotId: cycle.snapshotId,

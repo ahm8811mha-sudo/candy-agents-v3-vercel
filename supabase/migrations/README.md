@@ -23,6 +23,11 @@
 - `202607130008_integration_completion_rpc.sql`
 - `202607130009_core_foreign_key_indexes.sql`
 - `202607130010_release_evidence.sql`
+- `202607140001_company_intelligence_core.sql`
+- `202607140002_company_brain_platform.sql`
+- `202607140003_company_brain_redaction.sql`
+- `202607140004_company_brain_function_security.sql`
+- `202607140005_company_brain_idempotency.sql`
 
 ## Verification
 

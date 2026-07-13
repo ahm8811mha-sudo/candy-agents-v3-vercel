@@ -17,21 +17,49 @@ insert into expected_protected_tables (table_name) values
   ('accounting_journal_entries'),
   ('accounting_journal_lines'),
   ('accounting_periods'),
-  ('government_documents'),
-  ('government_document_extractions'),
+  ('gov_documents'),
+  ('gov_document_extractions'),
   ('failed_writes'),
   ('cron_runs'),
   ('system_alerts'),
   ('dead_letter_jobs'),
   ('integration_attempts'),
   ('external_receipts'),
-  ('backup_verification_runs');
+  ('backup_verification_runs'),
+  ('readiness_evidence'),
+  ('company_knowledge_nodes'),
+  ('company_knowledge_edges'),
+  ('company_feature_values'),
+  ('company_intelligence_snapshots'),
+  ('decision_recommendations'),
+  ('simulation_runs'),
+  ('autonomous_plans'),
+  ('company_learning_events'),
+  ('executive_narratives'),
+  ('company_twin_states'),
+  ('company_prediction_runs'),
+  ('company_fact_daily'),
+  ('company_ingestion_runs'),
+  ('skill_definitions'),
+  ('skill_installations'),
+  ('skill_runs');
 
 -- Every present protected table must have RLS enabled and not forced off.
 do $$
 declare
   broken text;
 begin
+  select string_agg(e.table_name, ', ' order by e.table_name)
+    into broken
+  from expected_protected_tables e
+  left join pg_class c on c.relname=e.table_name
+  left join pg_namespace n on n.oid=c.relnamespace and n.nspname='public'
+  where c.oid is null or n.oid is null;
+
+  if broken is not null then
+    raise exception 'Required protected tables are missing: %', broken;
+  end if;
+
   select string_agg(e.table_name, ', ' order by e.table_name)
     into broken
   from expected_protected_tables e
@@ -58,7 +86,12 @@ begin
     and table_name in (
       'failed_writes','cron_runs','system_alerts','dead_letter_jobs',
       'integration_attempts','external_receipts','backup_verification_runs',
-      'accounting_periods'
+      'accounting_periods','readiness_evidence',
+      'company_knowledge_nodes','company_knowledge_edges','company_feature_values',
+      'company_intelligence_snapshots','decision_recommendations','simulation_runs',
+      'autonomous_plans','company_learning_events','executive_narratives',
+      'company_twin_states','company_prediction_runs','company_fact_daily',
+      'company_ingestion_runs','skill_definitions','skill_installations','skill_runs'
     )
     and grantee in ('anon','authenticated')
     and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER');

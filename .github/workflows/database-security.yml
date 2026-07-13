@@ -7,6 +7,12 @@ on:
       - "supabase/migrations/**"
       - "supabase/tests/**"
       - ".github/workflows/database-security.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/database-security.yml"
 
 permissions:
   contents: read

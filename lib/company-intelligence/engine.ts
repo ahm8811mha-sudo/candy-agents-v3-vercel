@@ -347,10 +347,8 @@ export function createAutonomousPlan(input: PlanInput): AutonomousPlan {
     "تثبيت النتائج وتوثيق الدروس وتحويلها إلى معرفة مؤسسية.",
   ];
 
-  let elapsed = 0;
   const phases = phaseNames.map((name, index) => {
     const durationDays = phaseDurations[index];
-    elapsed += durationDays;
     return {
       name,
       objective: objectives[index],

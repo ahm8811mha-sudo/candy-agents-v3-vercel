@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Loader2, Download, TrendingUp, AlertTriangle, Target, Image } from "lucide-react";
+import { FileText, Loader2, Download, TrendingUp, AlertTriangle, Target, Image as ImageIcon } from "lucide-react";
 import { HealthGauge, HorizontalBar, ProgressRing, StatusDistribution } from "./AnalyticsCharts";
 
 type ReportData = {
@@ -118,7 +118,7 @@ export default function ExecutiveReport() {
                 <Download size={16} /> نص
               </button>
               <button className="secondary-btn" onClick={openDesign}>
-                <Image size={16} /> تصميم احترافي
+                <ImageIcon size={16} /> تصميم احترافي
               </button>
             </>
           )}

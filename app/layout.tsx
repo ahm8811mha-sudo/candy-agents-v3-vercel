@@ -9,6 +9,9 @@ import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://candy-agents-v3-vercel.vercel.app"
+  ),
   title: {
     default: "Orvanta | AI Business Operating System",
     template: "%s | Orvanta",
