@@ -9,6 +9,8 @@ const EXPECTED_JOBS: Array<{ jobName: string; maximumAgeHours: number }> = [
   { jobName: "operational-alerts", maximumAgeHours: 26 },
   { jobName: "owner-daily-digest", maximumAgeHours: 26 },
   { jobName: "daily-executive-report", maximumAgeHours: 26 },
+  { jobName: "failed-write-recovery", maximumAgeHours: 26 },
+  { jobName: "system-watchdog", maximumAgeHours: 26 },
   { jobName: "weekly-learning-review", maximumAgeHours: 8 * 24 },
 ];
 
@@ -44,7 +46,7 @@ export async function runOperationalWatchdog(tenantId: string) {
   const sinceTenDays = hoursAgo(10 * 24);
   const { data: cronRows, error: cronError } = await supabase
     .from("cron_runs")
-    .select("id,job_name,status,started_at,heartbeat_at,completed_at,error_message")
+    .select("id,job_name,status,started_at,heartbeat_at,completed_at,processed_count,failed_count,error_message,details")
     .eq("tenant_id", tenantId)
     .gte("started_at", sinceTenDays)
     .order("started_at", { ascending: false })
@@ -77,7 +79,18 @@ export async function runOperationalWatchdog(tenantId: string) {
             entityId: String(latest.id),
             metadata: { latest },
           }
-        : null;
+        : Number(latest.failed_count || 0) > 0
+          ? {
+              key,
+              severity: "WARNING",
+              source: "WATCHDOG",
+              title: `اكتملت المهمة مع نتائج فاشلة: ${expected.jobName}`,
+              message: `اكتملت المهمة، لكن عدد العناصر غير الناجحة هو ${Number(latest.failed_count || 0)}.`,
+              entityType: "cron_run",
+              entityId: String(latest.id),
+              metadata: { latest },
+            }
+          : null;
     if (finding) findings.push(finding);
     await syncFinding(tenantId, finding, key);
   }
