@@ -148,37 +148,24 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
       ...(execution.receipt || {}),
     };
 
-    const receiptId = randomUUID();
-    const receiptInsert = await supabase.from("external_receipts").insert({
-      id: receiptId,
-      tenant_id: input.tenantId,
-      integration_attempt_id: attemptId,
-      integration: input.integration,
-      operation: input.operation,
-      idempotency_key: input.idempotencyKey,
-      external_id: execution.externalId || null,
-      external_url: execution.externalUrl || null,
-      receipt_type: execution.receiptType || "API_RESPONSE",
-      receipt: receiptPayload,
-      verified: true,
-      verified_at: completedAt,
+    const completedAttempt = await supabase.rpc("orvanta_complete_integration_attempt", {
+      p_attempt_id: attemptId,
+      p_tenant_id: input.tenantId,
+      p_external_id: execution.externalId || "",
+      p_external_url: execution.externalUrl || "",
+      p_response_code: execution.responseCode || 200,
+      p_receipt_type: execution.receiptType || "API_RESPONSE",
+      p_receipt: receiptPayload,
     });
-    if (receiptInsert.error) throw receiptInsert.error;
+    if (completedAttempt.error) throw completedAttempt.error;
 
-    const update = await supabase.from("integration_attempts").update({
-      status: "SUCCEEDED",
-      external_id: execution.externalId || null,
-      external_url: execution.externalUrl || null,
-      response_code: execution.responseCode || 200,
-      response_metadata: receiptPayload,
-      error_message: null,
-      completed_at: completedAt,
-      next_retry_at: null,
-      updated_at: completedAt,
-    }).eq("id", attemptId).eq("status", "STARTED");
-    if (update.error) throw update.error;
-
-    return { value: execution.value, attemptId, receiptId, idempotent: false };
+    const completion = (completedAttempt.data || {}) as { receipt_id?: unknown; idempotent?: unknown };
+    return {
+      value: execution.value,
+      attemptId,
+      receiptId: completion.receipt_id ? String(completion.receipt_id) : undefined,
+      idempotent: completion.idempotent === true,
+    };
   } catch (cause) {
     const message = errorMessage(cause).slice(0, 2000);
     const terminal = attemptNumber >= maxAttempts;
