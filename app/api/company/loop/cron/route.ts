@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
-import { requireCompanyContext } from "@/lib/company-os/context";
 import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
 import { publishOutboxBatch } from "@/lib/company-os/outboxPublisher";
+import { executeTrackedCron } from "@/lib/operations/trackedCron";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,36 +16,47 @@ export const maxDuration = 60;
  * bypass policy, approval, tenant, budget, or reconciliation gates.
  */
 export async function GET(req: NextRequest) {
-  const auth = await requireCompanyContext(req, "ADMIN");
-  if (!auth.ok) return auth.response;
-  try {
-    await hydrateCompany();
-    const idea = ensureDailyIdea();
-    await enrichIdea(idea.id);
-    const learning = getLearningSnapshot();
+  return executeTrackedCron({
+    req,
+    jobName: "company-autonomy-loop",
+    schedule: "0 4 * * *",
+    timeoutMs: 55_000,
+    run: async (context, heartbeat) => {
+      await hydrateCompany();
+      await heartbeat({ phase: "hydrated" });
 
-    const workflows = process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true"
-      ? await runWorkflowTick({ tenantId: auth.context.tenantId, limit: 20 })
-      : { processed: 0, disabled: true };
-    const outbox = process.env.ORVANTA_OUTBOX_ENABLED === "true"
-      ? await publishOutboxBatch({ tenantId: auth.context.tenantId, limit: 50 })
-      : { processed: 0, disabled: true };
+      const idea = ensureDailyIdea();
+      await enrichIdea(idea.id);
+      await heartbeat({ phase: "idea-enriched", ideaId: idea.id });
 
-    return NextResponse.json({
-      ok: true,
-      dailyIdea: { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode },
-      learning: {
-        decisionsAnalyzed: learning.decisionsAnalyzed,
-        confidenceThreshold: learning.confidenceThreshold,
-        recommendation: learning.recommendation,
-      },
-      durableRuntime: { workflows, outbox },
-      requestId: auth.context.requestId,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Company loop failed", requestId: auth.context.requestId },
-      { status: 500 }
-    );
-  }
+      const learning = getLearningSnapshot();
+      const workflows = process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true"
+        ? await runWorkflowTick({ tenantId: context.tenantId, limit: 20 })
+        : { processed: 0, disabled: true };
+      await heartbeat({ phase: "workflow-tick", processed: Number((workflows as { processed?: number }).processed || 0) });
+
+      const outbox = process.env.ORVANTA_OUTBOX_ENABLED === "true"
+        ? await publishOutboxBatch({ tenantId: context.tenantId, limit: 50 })
+        : { processed: 0, disabled: true };
+
+      const workflowProcessed = Number((workflows as { processed?: number }).processed || 0);
+      const outboxProcessed = Number((outbox as { processed?: number }).processed || 0);
+      const outboxFailed = Number((outbox as { retried?: number }).retried || 0) + Number((outbox as { deadLettered?: number }).deadLettered || 0);
+
+      return {
+        processedCount: 1 + workflowProcessed + outboxProcessed,
+        failedCount: outboxFailed,
+        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea.id },
+        body: {
+          dailyIdea: { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode },
+          learning: {
+            decisionsAnalyzed: learning.decisionsAnalyzed,
+            confidenceThreshold: learning.confidenceThreshold,
+            recommendation: learning.recommendation,
+          },
+          durableRuntime: { workflows, outbox },
+        },
+      };
+    },
+  });
 }
