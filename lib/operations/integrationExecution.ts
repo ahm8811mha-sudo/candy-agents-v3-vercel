@@ -137,8 +137,10 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
     throw inserted.error;
   }
 
+  let externalSucceeded = false;
   try {
     const execution = await input.execute();
+    externalSucceeded = true;
     const completedAt = new Date().toISOString();
     const receiptPayload = {
       value: execution.value as unknown,
@@ -167,12 +169,15 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
       idempotent: completion.idempotent === true,
     };
   } catch (cause) {
-    const message = errorMessage(cause).slice(0, 2000);
-    const terminal = attemptNumber >= maxAttempts;
+    const originalMessage = errorMessage(cause).slice(0, 1700);
+    const ambiguousMessage = externalSucceeded
+      ? `External operation may have succeeded, but durable receipt completion failed. Manual reconciliation is required before retrying. ${originalMessage}`
+      : originalMessage;
+    const terminal = externalSucceeded || attemptNumber >= maxAttempts;
     const completedAt = new Date().toISOString();
     const update = await supabase.from("integration_attempts").update({
       status: terminal ? "DEAD_LETTER" : "RETRY",
-      error_message: message,
+      error_message: ambiguousMessage,
       completed_at: completedAt,
       next_retry_at: terminal ? null : retryAt(attemptNumber),
       updated_at: completedAt,
@@ -180,7 +185,7 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
     if (update.error) {
       console.error("[orvanta:integration] failed to record integration failure", {
         attemptId,
-        originalError: message,
+        originalError: ambiguousMessage,
         recorderError: update.error.message,
       });
     }
@@ -191,8 +196,12 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
         source_type: "integration_attempt",
         source_id: attemptId,
         operation: `${input.integration}:${input.operation}`,
-        payload: input.request || {},
-        error_message: message,
+        payload: {
+          request: input.request || {},
+          externalOperationMayHaveSucceeded: externalSucceeded,
+          idempotencyKey: input.idempotencyKey,
+        },
+        error_message: ambiguousMessage,
         attempts: attemptNumber,
         status: "OPEN",
         last_attempt_at: completedAt,
