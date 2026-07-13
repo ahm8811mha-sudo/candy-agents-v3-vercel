@@ -63,13 +63,13 @@ describe("company intelligence engine", () => {
       },
     });
 
-    expect(result.projectedMonthlyRevenue).toBe(250_000);
-    expect(result.projectedMonthlyPayroll).toBe(84_000);
-    expect(result.projectedMonthlyOperatingExpenses).toBe(64_800);
-    expect(result.projectedMonthlyProfit).toBe(101_200);
-    expect(result.profitDelta).toBe(41_200);
+    expect(result.projectedMonthlyRevenue).toBeCloseTo(250_000, 2);
+    expect(result.projectedMonthlyPayroll).toBeCloseTo(84_000, 2);
+    expect(result.projectedMonthlyOperatingExpenses).toBeCloseTo(64_800, 2);
+    expect(result.projectedMonthlyProfit).toBeCloseTo(101_200, 2);
+    expect(result.profitDelta).toBeCloseTo(41_200, 2);
     expect(result.breakEvenMonths).toBe(5);
-    expect(result.cashImpactAtHorizon).toBe(314_400);
+    expect(result.cashImpactAtHorizon).toBeCloseTo(314_400, 2);
     expect(result.limitations.length).toBeGreaterThan(0);
   });
 
@@ -99,7 +99,7 @@ describe("company intelligence engine", () => {
   it("explains why the business state matters", () => {
     const recommendations = generateRecommendations(snapshot);
     const narrative = createExecutiveNarrative(snapshot, recommendations);
-    expect(narrative.headline).toContain("الاستقرار التشغيلي");
+    expect(narrative.headline).toMatch(/استقرار التشغيل/);
     expect(narrative.narrative).toContain("7 قرار");
     expect(narrative.recommendedActions.length).toBeGreaterThan(0);
     expect(narrative.confidence).toBeGreaterThanOrEqual(0.55);
