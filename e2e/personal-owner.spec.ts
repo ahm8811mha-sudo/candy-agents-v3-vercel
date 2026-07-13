@@ -1,0 +1,31 @@
+import { expect, test } from "@playwright/test";
+
+const ownerCode = process.env.ORVANTA_OWNER_ACCESS_KEY || "";
+
+test("anonymous visitors are redirected and the trusted owner device unlocks", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole("heading", { name: /فتح Orvanta على هذا الجهاز/ })).toBeVisible();
+
+  await page.getByLabel("رمز وصول المالك").fill(ownerCode);
+  await page.getByRole("button", { name: "فتح النسخة الخاصة" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Orvanta", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/status");
+  await expect(page.getByRole("heading", { name: "النظام" })).toBeVisible();
+  await expect(page.getByText("مركز الاعتمادية والتشغيل")).toBeVisible();
+});
+
+test("locking the device restores the access gate", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("رمز وصول المالك").fill(ownerCode);
+  await page.getByRole("button", { name: "فتح النسخة الخاصة" }).click();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.getByTitle("قفل النسخة الخاصة على هذا الجهاز").click();
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/status");
+  await expect(page).toHaveURL(/\/login/);
+});
