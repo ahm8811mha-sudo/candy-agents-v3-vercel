@@ -93,6 +93,13 @@ const requestSchema = z.discriminatedUnion("action", [
   edgeSchema,
 ]);
 
+function normalizeRequestBody(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const body = value as Record<string, unknown>;
+  if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) return body;
+  return { ...(body.data as Record<string, unknown>), action: body.action };
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireCompanyContext(req, "OWNER");
   if (!auth.ok) return auth.response;
@@ -126,7 +133,8 @@ export async function POST(req: NextRequest) {
   const auth = await requireCompanyContext(req, "OWNER");
   if (!auth.ok) return auth.response;
 
-  const parsed = requestSchema.safeParse(await req.json().catch(() => null));
+  const rawBody = await req.json().catch(() => null);
+  const parsed = requestSchema.safeParse(normalizeRequestBody(rawBody));
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: "بيانات الطلب غير صحيحة.", details: parsed.error.flatten() },
