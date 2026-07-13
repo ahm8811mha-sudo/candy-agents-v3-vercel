@@ -1,6 +1,6 @@
 create extension if not exists pgcrypto;
 
-create table if not exists public.release_evidence (
+create table if not exists public.readiness_evidence (
   id uuid primary key default gen_random_uuid(),
   evidence_key text not null,
   environment text not null default 'production' check (environment in ('development','staging','production','restore-drill')),
@@ -10,15 +10,14 @@ create table if not exists public.release_evidence (
   performed_by text,
   performed_at timestamptz not null default now(),
   expires_at timestamptz,
-  created_at timestamptz not null default now(),
-  unique (evidence_key, environment, performed_at)
+  created_at timestamptz not null default now()
 );
 
-create index if not exists release_evidence_key_time_idx
-  on public.release_evidence (evidence_key, environment, performed_at desc);
+create index if not exists readiness_evidence_key_time_idx
+  on public.readiness_evidence (evidence_key, environment, performed_at desc);
 
-alter table public.release_evidence enable row level security;
-revoke all on public.release_evidence from public, anon, authenticated;
-grant select, insert, update, delete on public.release_evidence to service_role;
+alter table public.readiness_evidence enable row level security;
+revoke all on public.readiness_evidence from public, anon, authenticated;
+grant select, insert, update, delete on public.readiness_evidence to service_role;
 
 notify pgrst, 'reload schema';
