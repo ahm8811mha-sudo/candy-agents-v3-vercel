@@ -9,9 +9,10 @@ create temporary table company_brain_test_results (
 do $$
 declare
   v_definition_count integer;
-  v_anon_visible integer;
+  v_rls_enabled boolean;
+  v_anon_select boolean;
+  v_authenticated_select boolean;
   v_redacted jsonb;
-  v_twin_id uuid := gen_random_uuid();
 begin
   select count(*) into v_definition_count
   from public.skill_definitions
@@ -40,22 +41,18 @@ begin
     v_redacted::text
   );
 
-  insert into public.company_twin_states (
-    id,tenant_id,scope_type,scope_id,health_score,maturity_score,capacity,constraints,state,observed_at
-  ) values (
-    v_twin_id,'qa-company-brain','COMPANY','root',75,60,'{}','[]','{}',now()
-  );
-
-  set local role anon;
-  select count(*) into v_anon_visible
-  from public.company_twin_states
-  where tenant_id='qa-company-brain';
-  reset role;
+  select c.relrowsecurity,
+         has_table_privilege('anon', 'public.company_twin_states', 'SELECT'),
+         has_table_privilege('authenticated', 'public.company_twin_states', 'SELECT')
+    into v_rls_enabled, v_anon_select, v_authenticated_select
+  from pg_class c
+  join pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and c.relname='company_twin_states';
 
   insert into company_brain_test_results values (
-    'company_twin_hidden_from_anon',
-    v_anon_visible=0,
-    format('anon_visible_rows=%s', v_anon_visible)
+    'company_twin_private_access_boundary',
+    coalesce(v_rls_enabled,false) and not coalesce(v_anon_select,false) and not coalesce(v_authenticated_select,false),
+    format('rls=%s, anon_select=%s, authenticated_select=%s', v_rls_enabled, v_anon_select, v_authenticated_select)
   );
 end $$;
 
