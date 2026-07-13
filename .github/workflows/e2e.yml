@@ -20,6 +20,7 @@ jobs:
       ORVANTA_PERSONAL_MODE: "true"
       ORVANTA_OWNER_ACCESS_KEY: "ci-${{ github.run_id }}-owner-device-code"
       ORVANTA_OWNER_COOKIE_SECRET: "ci-${{ github.run_id }}-signed-cookie-key-for-browser-tests"
+      ORVANTA_COOKIE_SECURE: "false"
       ORVANTA_TENANT_ID: "golden-star"
       AUTH_ENABLED: "false"
 
