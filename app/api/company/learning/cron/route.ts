@@ -1,27 +1,37 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
+import { executeTrackedCron } from "@/lib/operations/trackedCron";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-/** Weekly review: recompute the learning snapshot (§9). */
-export async function GET() {
-  try {
-    await hydrateCompany();
-    const snap = getLearningSnapshot();
-    return NextResponse.json({
-      ok: true,
-      review: {
-        decisionsAnalyzed: snap.decisionsAnalyzed,
-        approvalRate: snap.approvalRate,
-        confidenceThreshold: snap.confidenceThreshold,
-        recommendation: snap.recommendation,
-      },
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Weekly review failed" },
-      { status: 500 }
-    );
-  }
+/** Weekly review: recompute the learning snapshot. */
+export async function GET(req: NextRequest) {
+  return executeTrackedCron({
+    req,
+    jobName: "weekly-learning-review",
+    schedule: "0 7 * * 0",
+    run: async (_context, heartbeat) => {
+      await hydrateCompany();
+      await heartbeat({ phase: "hydrated" });
+      const snap = getLearningSnapshot();
+      return {
+        processedCount: Math.max(1, snap.decisionsAnalyzed),
+        details: {
+          decisionsAnalyzed: snap.decisionsAnalyzed,
+          approvalRate: snap.approvalRate,
+          confidenceThreshold: snap.confidenceThreshold,
+        },
+        body: {
+          review: {
+            decisionsAnalyzed: snap.decisionsAnalyzed,
+            approvalRate: snap.approvalRate,
+            confidenceThreshold: snap.confidenceThreshold,
+            recommendation: snap.recommendation,
+          },
+        },
+      };
+    },
+  });
 }
