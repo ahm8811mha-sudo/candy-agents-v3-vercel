@@ -14,7 +14,7 @@ async function loadOperations(tenantId: string) {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required for operational status.");
 
-  const [cron, alerts, failedWrites, deadLetters, attempts, capabilities, backups] = await Promise.all([
+  const [cron, alerts, failedWrites, deadLetters, attempts, capabilities, backups, evidence] = await Promise.all([
     supabase.from("cron_runs").select("*").eq("tenant_id", tenantId).order("started_at", { ascending: false }).limit(LIMIT),
     supabase.from("system_alerts").select("*").eq("tenant_id", tenantId).order("last_seen_at", { ascending: false }).limit(LIMIT),
     supabase.from("failed_writes").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(LIMIT),
@@ -22,9 +22,10 @@ async function loadOperations(tenantId: string) {
     supabase.from("integration_attempts").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(LIMIT),
     supabase.from("capability_registry").select("*").order("domain").order("title"),
     supabase.from("backup_verification_runs").select("*").order("started_at", { ascending: false }).limit(20),
+    supabase.from("readiness_evidence").select("*").order("performed_at", { ascending: false }).limit(LIMIT),
   ]);
 
-  for (const result of [cron, alerts, failedWrites, deadLetters, attempts, capabilities, backups]) {
+  for (const result of [cron, alerts, failedWrites, deadLetters, attempts, capabilities, backups, evidence]) {
     if (result.error) throw result.error;
   }
 
@@ -33,6 +34,12 @@ async function loadOperations(tenantId: string) {
   for (const row of cronRows as Record<string, unknown>[]) {
     const jobName = String(row.job_name || "");
     if (jobName && !latestByJob.has(jobName)) latestByJob.set(jobName, row);
+  }
+
+  const latestEvidenceByKey = new Map<string, Record<string, unknown>>();
+  for (const row of (evidence.data || []) as Record<string, unknown>[]) {
+    const key = String(row.evidence_key || "");
+    if (key && !latestEvidenceByKey.has(key)) latestEvidenceByKey.set(key, row);
   }
 
   return {
@@ -46,6 +53,8 @@ async function loadOperations(tenantId: string) {
       trackedJobs: latestByJob.size,
       liveCapabilities: (capabilities.data || []).filter((row) => row.status === "LIVE").length,
       totalCapabilities: (capabilities.data || []).length,
+      readinessEvidencePassed: Array.from(latestEvidenceByKey.values()).filter((row) => row.status === "PASS").length,
+      readinessEvidenceTotal: latestEvidenceByKey.size,
     },
     latestCronRuns: Array.from(latestByJob.values()),
     cronRuns: cronRows,
@@ -55,6 +64,7 @@ async function loadOperations(tenantId: string) {
     integrationAttempts: attempts.data || [],
     capabilities: capabilities.data || [],
     backupVerificationRuns: backups.data || [],
+    readinessEvidence: Array.from(latestEvidenceByKey.values()),
   };
 }
 
@@ -111,10 +121,49 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === "RETRY_DEAD_LETTER") {
+      const { data: deadLetter, error: readError } = await supabase
+        .from("dead_letter_jobs")
+        .select("*")
+        .eq("tenant_id", auth.context.tenantId)
+        .eq("id", id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!deadLetter) return NextResponse.json({ ok: false, error: "Dead Letter غير موجود." }, { status: 404 });
+
+      if (deadLetter.source_type !== "failed_write") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "هذه العملية تحتاج إعادة تشغيل من مسارها الأصلي بعد مراجعة الإيصال الخارجي؛ لن يعيد النظام تنفيذها عشوائيًا.",
+          },
+          { status: 409 }
+        );
+      }
+
+      const { error: sourceError } = await supabase.from("failed_writes").update({
+        status: "PENDING",
+        next_retry_at: new Date().toISOString(),
+        claimed_at: null,
+        claimed_by: null,
+        updated_at: new Date().toISOString(),
+      }).eq("tenant_id", auth.context.tenantId).eq("id", deadLetter.source_id);
+      if (sourceError) throw sourceError;
+
       const { data, error } = await supabase.from("dead_letter_jobs").update({
         status: "RETRYING",
         next_retry_at: new Date().toISOString(),
         last_attempt_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("tenant_id", auth.context.tenantId).eq("id", id).select("*").maybeSingle();
+      if (error) throw error;
+      return NextResponse.json({ ok: true, deadLetter: data });
+    }
+
+    if (action === "IGNORE_DEAD_LETTER") {
+      const { data, error } = await supabase.from("dead_letter_jobs").update({
+        status: "IGNORED",
+        resolution_note: String(body.note || "Ignored by owner after review"),
+        resolved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).eq("tenant_id", auth.context.tenantId).eq("id", id).select("*").maybeSingle();
       if (error) throw error;
