@@ -307,7 +307,7 @@ export async function appendActionToSheet(input: SheetAppendInput): Promise<Shee
   const sheets = google.sheets({ version: "v4", auth });
   const spreadsheetId = await ensureActionSpreadsheet();
   const tab = process.env.GOOGLE_SHEETS_TAB?.trim() || DEFAULT_SHEET_TAB;
-  const actionIdRange = `${quoteSheetName(tab)}!B2:B10000`;
+  const actionIdRange = `${quoteSheetName(tab)}!B2:B`;
   const ids = await sheets.spreadsheets.values.get({ spreadsheetId, range: actionIdRange });
   const alreadyExisted = (ids.data.values || []).some((row) => String(row[0] || "") === input.actionId);
 
@@ -322,7 +322,7 @@ export async function appendActionToSheet(input: SheetAppendInput): Promise<Shee
   const response = await sheets.spreadsheets.values.append({
     spreadsheetId,
     range: `${quoteSheetName(tab)}!A:J`,
-    valueInputOption: "USER_ENTERED",
+    valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
     requestBody: {
       values: [[
