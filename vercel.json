@@ -4,14 +4,6 @@
   "buildCommand": "npm run build",
   "crons": [
     {
-      "path": "/api/system/retry/cron",
-      "schedule": "10 * * * *"
-    },
-    {
-      "path": "/api/system/watchdog/cron",
-      "schedule": "45 * * * *"
-    },
-    {
       "path": "/api/company-os/runtime/cron",
       "schedule": "15 3 * * *"
     },
@@ -42,6 +34,14 @@
     {
       "path": "/api/company/learning/cron",
       "schedule": "0 7 * * 0"
+    },
+    {
+      "path": "/api/system/retry/cron",
+      "schedule": "10 8 * * *"
+    },
+    {
+      "path": "/api/system/watchdog/cron",
+      "schedule": "45 8 * * *"
     }
   ]
 }
