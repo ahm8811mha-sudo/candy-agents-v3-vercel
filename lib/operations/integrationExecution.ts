@@ -50,13 +50,17 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T>): Promise<IntegrationExecutionResult<T>> {
+function isUniqueViolation(error: unknown) {
+  return Boolean(error && typeof error === "object" && String((error as { code?: unknown }).code || "") === "23505");
+}
+
+async function loadCompletedExecution<T>(input: ExecuteIntegrationInput<T>) {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required for external integration execution.");
 
   const existing = await supabase
     .from("integration_attempts")
-    .select("id,status,external_id,external_url,response_metadata")
+    .select("id,status,response_metadata")
     .eq("tenant_id", input.tenantId)
     .eq("integration", input.integration)
     .eq("operation", input.operation)
@@ -66,24 +70,32 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
     .limit(1)
     .maybeSingle();
   if (existing.error) throw existing.error;
+  if (!existing.data) return null;
 
-  if (existing.data) {
-    const receipt = await supabase
-      .from("external_receipts")
-      .select("id,receipt")
-      .eq("tenant_id", input.tenantId)
-      .eq("integration", input.integration)
-      .eq("operation", input.operation)
-      .eq("idempotency_key", input.idempotencyKey)
-      .maybeSingle();
-    if (receipt.error) throw receipt.error;
-    return {
-      value: ((receipt.data?.receipt as Record<string, unknown> | null)?.value ?? existing.data.response_metadata) as T,
-      attemptId: String(existing.data.id),
-      receiptId: receipt.data?.id ? String(receipt.data.id) : undefined,
-      idempotent: true,
-    };
-  }
+  const receipt = await supabase
+    .from("external_receipts")
+    .select("id,receipt")
+    .eq("tenant_id", input.tenantId)
+    .eq("integration", input.integration)
+    .eq("operation", input.operation)
+    .eq("idempotency_key", input.idempotencyKey)
+    .maybeSingle();
+  if (receipt.error) throw receipt.error;
+
+  return {
+    value: ((receipt.data?.receipt as Record<string, unknown> | null)?.value ?? existing.data.response_metadata) as T,
+    attemptId: String(existing.data.id),
+    receiptId: receipt.data?.id ? String(receipt.data.id) : undefined,
+    idempotent: true,
+  } satisfies IntegrationExecutionResult<T>;
+}
+
+export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T>): Promise<IntegrationExecutionResult<T>> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is required for external integration execution.");
+
+  const completed = await loadCompletedExecution(input);
+  if (completed) return completed;
 
   const previous = await supabase
     .from("integration_attempts")
@@ -116,7 +128,14 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
     started_at: startedAt,
     updated_at: startedAt,
   });
-  if (inserted.error) throw inserted.error;
+  if (inserted.error) {
+    if (isUniqueViolation(inserted.error)) {
+      const reused = await loadCompletedExecution(input);
+      if (reused) return reused;
+      throw new Error("The same external operation is already in progress. Retry after the active attempt completes.");
+    }
+    throw inserted.error;
+  }
 
   try {
     const execution = await input.execute();
@@ -156,7 +175,7 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
       completed_at: completedAt,
       next_retry_at: null,
       updated_at: completedAt,
-    }).eq("id", attemptId);
+    }).eq("id", attemptId).eq("status", "STARTED");
     if (update.error) throw update.error;
 
     return { value: execution.value, attemptId, receiptId, idempotent: false };
@@ -170,7 +189,7 @@ export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T
       completed_at: completedAt,
       next_retry_at: terminal ? null : retryAt(attemptNumber),
       updated_at: completedAt,
-    }).eq("id", attemptId);
+    }).eq("id", attemptId).eq("status", "STARTED");
     if (update.error) {
       console.error("[orvanta:integration] failed to record integration failure", {
         attemptId,
