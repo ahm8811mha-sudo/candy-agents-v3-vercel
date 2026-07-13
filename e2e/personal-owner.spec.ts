@@ -20,7 +20,9 @@ test("anonymous visitors are redirected and the trusted owner device unlocks", a
   await page.getByRole("button", { name: "فتح النسخة الخاصة" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText("Orvanta", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /شركة كاملة تعمل بالذكاء الاصطناعي، من القرار إلى التنفيذ/ })
+  ).toBeVisible();
 
   await page.goto("/status");
   await expect(page.getByRole("heading", { name: "النظام" })).toBeVisible();
