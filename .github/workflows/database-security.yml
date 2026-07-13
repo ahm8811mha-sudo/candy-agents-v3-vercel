@@ -1,0 +1,65 @@
+name: Database Security
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/database-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rls-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PGURL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect staging database configuration
+        id: configuration
+        shell: bash
+        run: |
+          if [ -n "$PGURL" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_STAGING_DB_URL is not configured; database evidence remains incomplete."
+          fi
+
+      - name: Install PostgreSQL client
+        if: steps.configuration.outputs.configured == 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Verify ordered migrations parse on staging
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in $(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+            echo "Applying $migration"
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Run RLS regression suite
+        if: steps.configuration.outputs.configured == 'true'
+        run: psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_regression.sql
+
+      - name: Store database evidence
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        run: |
+          psql "$PGURL" -Atc "select now(), current_database(), current_user" > database-security-evidence.txt
+          echo "commit=${GITHUB_SHA}" >> database-security-evidence.txt
+
+      - uses: actions/upload-artifact@v4
+        if: steps.configuration.outputs.configured == 'true'
+        with:
+          name: database-security-evidence
+          path: database-security-evidence.txt
+          retention-days: 30

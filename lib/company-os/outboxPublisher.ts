@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../supabase";
 import { signWebhookBody } from "../company/webhooks";
+import { executeIntegrationOnce } from "../operations/integrationExecution";
 import { eventToOutboxRecord, nextRetryAt } from "./events";
 import type { CompanyEvent } from "./types";
 
@@ -8,6 +9,8 @@ export type OutboxDeliveryResult = {
   status: "PUBLISHED" | "RETRY" | "DEAD_LETTER" | "SKIPPED";
   attempts: number;
   error?: string;
+  integrationAttemptId?: string;
+  receiptId?: string;
 };
 
 export async function appendCompanyEvent(event: CompanyEvent) {
@@ -63,9 +66,9 @@ function webhookConfig() {
   return { url, secret };
 }
 
-async function deliver(row: Record<string, unknown>) {
+async function rawWebhookDelivery(row: Record<string, unknown>) {
   const { url, secret } = webhookConfig();
-  if (!url) return { skipped: true, responseStatus: 204 };
+  if (!url) return { skipped: true, responseStatus: 204, externalUrl: undefined as string | undefined };
 
   const body = JSON.stringify({
     id: row.id,
@@ -90,10 +93,44 @@ async function deliver(row: Record<string, unknown>) {
   try {
     const response = await fetch(url, { method: "POST", headers, body, signal: controller.signal });
     if (!response.ok) throw new Error(`Webhook returned HTTP ${response.status}`);
-    return { skipped: false, responseStatus: response.status };
+    return { skipped: false, responseStatus: response.status, externalUrl: url };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function deliver(row: Record<string, unknown>) {
+  const tenantId = String(row.tenant_id || "golden-star");
+  const idempotencyKey = `outbox:${String(row.id)}`;
+  return executeIntegrationOnce({
+    tenantId,
+    integration: "ORVANTA_WEBHOOK",
+    operation: "event.publish",
+    idempotencyKey,
+    request: {
+      outboxId: row.id,
+      eventType: row.event_type,
+      aggregateType: row.aggregate_type,
+      aggregateId: row.aggregate_id,
+      correlationId: row.correlation_id,
+    },
+    maxAttempts: 8,
+    execute: async () => {
+      const delivery = await rawWebhookDelivery(row);
+      return {
+        value: delivery,
+        externalId: String(row.id),
+        externalUrl: delivery.externalUrl,
+        responseCode: delivery.responseStatus,
+        receiptType: delivery.skipped ? "DISABLED_INTEGRATION" : "WEBHOOK_RESPONSE",
+        receipt: {
+          skipped: delivery.skipped,
+          responseStatus: delivery.responseStatus,
+          eventType: row.event_type,
+        },
+      };
+    },
+  });
 }
 
 export async function publishOutboxBatch(options: { tenantId?: string; limit?: number } = {}) {
@@ -130,23 +167,36 @@ export async function publishOutboxBatch(options: { tenantId?: string; limit?: n
     if (!claimed) continue;
 
     try {
-      const delivery = await deliver(claimed);
-      await supabase
+      const execution = await deliver(claimed);
+      const delivery = execution.value as { skipped: boolean; responseStatus: number };
+      const update = await supabase
         .from("event_outbox")
         .update({
           status: "PUBLISHED",
           published_at: new Date().toISOString(),
           last_error: null,
-          delivery_result: delivery,
+          delivery_result: {
+            ...delivery,
+            integrationAttemptId: execution.attemptId,
+            receiptId: execution.receiptId || null,
+            idempotent: execution.idempotent,
+          },
           updated_at: new Date().toISOString(),
         })
         .eq("id", claimed.id)
         .eq("tenant_id", claimed.tenant_id);
-      results.push({ id: String(claimed.id), status: delivery.skipped ? "SKIPPED" : "PUBLISHED", attempts });
+      if (update.error) throw update.error;
+      results.push({
+        id: String(claimed.id),
+        status: delivery.skipped ? "SKIPPED" : "PUBLISHED",
+        attempts,
+        integrationAttemptId: execution.attemptId,
+        receiptId: execution.receiptId,
+      });
     } catch (deliveryError) {
       const terminal = attempts >= 8;
       const message = deliveryError instanceof Error ? deliveryError.message.slice(0, 1500) : String(deliveryError).slice(0, 1500);
-      await supabase
+      const update = await supabase
         .from("event_outbox")
         .update({
           status: terminal ? "DEAD_LETTER" : "RETRY",
@@ -156,6 +206,7 @@ export async function publishOutboxBatch(options: { tenantId?: string; limit?: n
         })
         .eq("id", claimed.id)
         .eq("tenant_id", claimed.tenant_id);
+      if (update.error) throw update.error;
       results.push({ id: String(claimed.id), status: terminal ? "DEAD_LETTER" : "RETRY", attempts, error: message });
     }
   }

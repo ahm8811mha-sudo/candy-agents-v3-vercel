@@ -5,15 +5,16 @@ import { isShopifyConfigured } from "@/lib/shopify";
 import { isVercelConfigured } from "@/lib/vercelMonitor";
 import { isAlpacaConfigured, alpacaMode } from "@/lib/trading/brokers/alpaca";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
-import { getProductionReadiness } from "@/lib/company/productionReadiness";
+import type { ProductionReadiness } from "@/lib/company/productionReadiness";
+import { getEvidenceAwareProductionReadiness } from "@/lib/company/productionReadinessEvidence";
 
-function passed(readiness: ReturnType<typeof getProductionReadiness>, id: string) {
+function passed(readiness: ProductionReadiness, id: string) {
   return readiness.checks.find((item) => item.id === id)?.severity === "PASS";
 }
 
 export async function GET() {
   const integrations = getEnabledIntegrations();
-  const readiness = getProductionReadiness();
+  const readiness = await getEvidenceAwareProductionReadiness();
 
   return NextResponse.json({
     ok: true,
@@ -23,20 +24,25 @@ export async function GET() {
       arabicName: "أورفانتا",
       tagline: "AI Operating System for Business",
     },
-    version: "3.1.0-hardening",
+    version: "3.2.0-road-to-8",
     accessMode: readiness.accessMode,
     productionReady: readiness.okForProduction,
     readiness,
     checks: {
       supabase: hasSupabaseEnv(),
-      googleSheets: Boolean(process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
+      googleSheets: Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID),
       ai: Boolean(process.env.OPENAI_API_KEY),
       accessGate: passed(readiness, "access-gate"),
-      tenantIsolation: passed(readiness, "tenant-rls-ready"),
-      coreSchema: passed(readiness, "core-schema-ready"),
+      tenantIsolation: passed(readiness, "tenant-rls-ready") && passed(readiness, "rls-regression-tested"),
+      coreSchema: passed(readiness, "core-schema-ready") && passed(readiness, "migration-baseline"),
       workflowRuntime: passed(readiness, "workflow-runtime"),
       outboxPublisher: passed(readiness, "outbox-publisher"),
       reconciliation: passed(readiness, "reconciliation-required"),
+      watchdog: passed(readiness, "watchdog"),
+      failedWriteRecovery: passed(readiness, "failed-write-recovery"),
+      accountingControls: passed(readiness, "accounting-controls"),
+      browserE2E: passed(readiness, "browser-e2e"),
+      backupRestore: passed(readiness, "backup-restore"),
       shopify: isShopifyConfigured(),
       vercelMonitoring: isVercelConfigured(),
       alpaca: isAlpacaConfigured(),
@@ -61,7 +67,7 @@ export async function GET() {
       approvalToExecution: true,
       productionReadiness: true,
       evidenceContract: true,
-      integrations: integrations.map((i) => i.type),
+      integrations: integrations.map((integration) => integration.type),
     },
     timestamp: new Date().toISOString(),
   });

@@ -1,0 +1,57 @@
+name: Browser E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ORVANTA_PERSONAL_MODE: "true"
+      ORVANTA_OWNER_ACCESS_KEY: "ci-${{ github.run_id }}-owner-device-code"
+      ORVANTA_OWNER_COOKIE_SECRET: "ci-${{ github.run_id }}-signed-cookie-key-for-browser-tests"
+      ORVANTA_COOKIE_SECURE: "false"
+      ORVANTA_TENANT_ID: "golden-star"
+      AUTH_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright test runner for this job
+        run: npm install --no-save --package-lock=false @playwright/test
+
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run desktop Chromium and iPhone WebKit journeys
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

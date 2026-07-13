@@ -15,7 +15,7 @@ const WINDOW_SECONDS = 30 * 60;
 const localAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function secureCookie() {
-  return process.env.NODE_ENV === "production";
+  return process.env.NODE_ENV === "production" && process.env.ORVANTA_COOKIE_SECURE !== "false";
 }
 
 function configuredOwnerCode() {

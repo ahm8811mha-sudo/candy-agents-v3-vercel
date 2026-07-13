@@ -1,0 +1,67 @@
+name: External Integration Canaries
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/external-canary.mjs"
+      - ".github/workflows/external-integrations.yml"
+      - "lib/integrations/**"
+      - "app/api/finance/zatca/sandbox/**"
+
+permissions:
+  contents: read
+
+jobs:
+  external-canaries:
+    name: Google Workspace and ZATCA sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_GMAIL_SENDER: ${{ secrets.GOOGLE_GMAIL_SENDER }}
+      GOOGLE_CANARY_EMAIL: ${{ secrets.GOOGLE_CANARY_EMAIL }}
+      GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+      GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+      ZATCA_SANDBOX_ENABLED: ${{ secrets.ZATCA_SANDBOX_ENABLED }}
+      ZATCA_SANDBOX_URL: ${{ secrets.ZATCA_SANDBOX_URL }}
+      ZATCA_SANDBOX_TOKEN: ${{ secrets.ZATCA_SANDBOX_TOKEN }}
+      COMPANY_LEGAL_NAME: ${{ secrets.COMPANY_LEGAL_NAME }}
+      COMPANY_VAT_NUMBER: ${{ secrets.COMPANY_VAT_NUMBER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify external test credentials exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REFRESH_TOKEN GOOGLE_GMAIL_SENDER; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "External canaries require test credentials in GitHub Actions secrets."
+            exit 2
+          fi
+
+      - name: Run real external canaries
+        run: node scripts/external-canary.mjs
+
+      - name: Upload external evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-canary-report
+          path: external-canary-report.json
+          if-no-files-found: ignore
+          retention-days: 90
