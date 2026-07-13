@@ -2,6 +2,15 @@ import { expect, test } from "@playwright/test";
 
 const ownerCode = process.env.ORVANTA_OWNER_ACCESS_KEY || "";
 
+test("only the top-level health endpoint is public", async ({ request }) => {
+  const publicHealth = await request.get("/api/health");
+  expect(publicHealth.status()).toBe(200);
+
+  const detailedDatabaseHealth = await request.get("/api/health/supabase");
+  expect(detailedDatabaseHealth.status()).toBe(401);
+  await expect(detailedDatabaseHealth.json()).resolves.toMatchObject({ code: "OWNER_ACCESS_REQUIRED" });
+});
+
 test("anonymous visitors are redirected and the trusted owner device unlocks", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
