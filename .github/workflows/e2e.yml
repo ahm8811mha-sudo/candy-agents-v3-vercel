@@ -38,13 +38,13 @@ jobs:
       - name: Install Playwright test runner for this job
         run: npm install --no-save --package-lock=false @playwright/test
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Build application
         run: npm run build
 
-      - name: Run desktop and iPhone journeys
+      - name: Run desktop Chromium and iPhone WebKit journeys
         run: npm run test:e2e
 
       - name: Upload Playwright report
