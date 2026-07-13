@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ const TABLES = [
   "readiness_evidence",
 ];
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   if (!hasSupabaseEnv()) {
     return NextResponse.json({
       ok: false,
@@ -61,34 +61,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Explicit owner-only diagnostic. It is disabled unless probe=1 and uses an
-  // awaited insert/read/delete cycle; the marker is never reported as a real audit event.
-  let writeProbe: Record<string, unknown> | undefined;
-  if (req.nextUrl.searchParams.get("probe") === "1") {
-    const id = `probe-${Date.now()}`;
-    const insert = await supabase.from("audit_log").insert({
-      id,
-      actor: "health-probe",
-      action: "PROBE",
-      entity_type: "diagnostic",
-      entity_id: id,
-      detail: "write probe",
-      created_at: new Date().toISOString(),
-    });
-    if (insert.error) {
-      writeProbe = { wrote: false, error: insert.error.message, code: insert.error.code };
-    } else {
-      const read = await supabase.from("audit_log").select("id").eq("id", id).maybeSingle();
-      const cleanup = await supabase.from("audit_log").delete().eq("id", id);
-      writeProbe = {
-        wrote: true,
-        readBack: Boolean(read.data),
-        readError: read.error?.message,
-        cleanupError: cleanup.error?.message,
-      };
-    }
-  }
-
   const allOk = Object.values(tables).every((result) => result.ok);
   return NextResponse.json({
     ok: allOk,
@@ -99,6 +71,5 @@ export async function GET(req: NextRequest) {
       ? "Supabase متصل وجداول النواة والاعتمادية والمحاسبة قابلة للوصول."
       : "Supabase متصل لكن جدولًا جوهريًا واحدًا أو أكثر غير جاهز. راجع سلسلة supabase/migrations.",
     tables,
-    ...(writeProbe ? { writeProbe } : {}),
   }, { status: allOk ? 200 : 503 });
 }
