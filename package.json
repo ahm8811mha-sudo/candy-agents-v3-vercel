@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "google:oauth": "node scripts/google-oauth.mjs"
   },
   "dependencies": {
