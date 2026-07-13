@@ -14,7 +14,7 @@ permissions:
 jobs:
   rls-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PGURL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
 
@@ -46,9 +46,15 @@ jobs:
             psql "$PGURL" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Run RLS regression suite
+      - name: Run all database regression suites
         if: steps.configuration.outputs.configured == 'true'
-        run: psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_regression.sql
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in $(find supabase/tests -maxdepth 1 -type f -name '*.sql' | sort); do
+            echo "Running $suite"
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "$suite"
+          done
 
       - name: Store database evidence
         if: steps.configuration.outputs.configured == 'true'
@@ -56,6 +62,8 @@ jobs:
         run: |
           psql "$PGURL" -Atc "select now(), current_database(), current_user" > database-security-evidence.txt
           echo "commit=${GITHUB_SHA}" >> database-security-evidence.txt
+          echo "migration_count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)" >> database-security-evidence.txt
+          echo "regression_suite_count=$(find supabase/tests -maxdepth 1 -type f -name '*.sql' | wc -l)" >> database-security-evidence.txt
 
       - uses: actions/upload-artifact@v4
         if: steps.configuration.outputs.configured == 'true'
