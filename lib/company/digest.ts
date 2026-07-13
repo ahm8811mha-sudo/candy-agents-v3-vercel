@@ -35,7 +35,7 @@ function composeDigestValues(now: Date, revenue: number, vatPayable: number): Di
     : "لا قرارات معلّقة — الشركة تسير";
 
   const text = [
-    `📊 ملخص Orvanta · ${date}`,
+    `📊 ملخص شركة النجمة الذهبية عبر Orvanta · ${date}`,
     "",
     `${headline}.`,
     ...(topPending.length ? ["", "أهم ما ينتظرك:", ...topPending] : []),
@@ -120,7 +120,7 @@ export async function dispatchDigest(now: Date = new Date()): Promise<{ digest: 
     result = {
       sent: false,
       channel: "none",
-      reason: "لا توجد قناة إرسال فعلية مهيأة؛ تم إنشاء الملخص وحفظ سجل واضح بعدم التسليم.",
+      reason: "لا توجد قناة إرسال فعلية مهيأة؛ تم إنشاء الملخص وتسجيل عدم التسليم بوضوح.",
     };
   } else {
     const delivery = await triggerNotification(
@@ -134,7 +134,7 @@ export async function dispatchDigest(now: Date = new Date()): Promise<{ digest: 
       externalId: delivery.externalId,
       reason: delivery.sent
         ? `أُرسل الملخص فعليًا عبر ${delivery.channel}.`
-        : `لم يُسلّم الملخص عبر ${delivery.channel}; تم تسجيل الفشل.` ,
+        : `لم يُسلّم الملخص عبر ${delivery.channel}; تم تسجيل الفشل.`,
     };
   }
 
