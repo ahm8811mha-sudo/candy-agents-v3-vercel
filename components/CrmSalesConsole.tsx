@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, BadgeDollarSign, CheckCircle2, FileText, Loader2, Plus, RefreshCw, Send, Users } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, FileText, Loader2, Plus, RefreshCw, Send, Users } from "lucide-react";
 import Link from "next/link";
 
 type CrmData = {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "../supabase";
+import { isPersonalOwnerMode } from "../auth";
 import { buildDecisionPacket } from "./board";
 import { canReserveBudget } from "./finance";
 import { classifyRisk } from "./governance";
@@ -96,10 +97,16 @@ type StepRow = {
   available_at: string;
 };
 
+export function isWorkflowRuntimeEnabled() {
+  return isPersonalOwnerMode()
+    ? process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED !== "false"
+    : process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true";
+}
+
 function requireRuntime() {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required for durable workflow execution.");
-  if (process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED !== "true") {
+  if (!isWorkflowRuntimeEnabled()) {
     throw new Error("Durable workflow runtime is disabled. Set ORVANTA_WORKFLOW_RUNTIME_ENABLED=true after applying the core schema.");
   }
   return supabase;

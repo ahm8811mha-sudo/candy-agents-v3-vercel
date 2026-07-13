@@ -41,6 +41,7 @@ export async function GET() {
       watchdog: passed(readiness, "watchdog"),
       failedWriteRecovery: passed(readiness, "failed-write-recovery"),
       accountingControls: passed(readiness, "accounting-controls"),
+      companyBrain: passed(readiness, "company-brain-cycle"),
       browserE2E: passed(readiness, "browser-e2e"),
       backupRestore: passed(readiness, "backup-restore"),
       shopify: isShopifyConfigured(),

@@ -99,22 +99,23 @@ async function readSource(source: IngestionSource, tenantId: string) {
     .limit(source.limit);
   if (error) {
     console.error("[orvanta:warehouse] source read failed", { table: source.table, error: error.message });
-    return [] as Record<string, unknown>[];
+    return { rows: [] as Record<string, unknown>[], error: error.message };
   }
-  return (data || []) as Record<string, unknown>[];
+  return { rows: (data || []) as Record<string, unknown>[], error: null };
 }
 
 export async function materializeCompanyWarehouse(tenantId: string) {
   const supabase = requireSupabase();
   const runId = randomUUID();
   const startedAt = new Date().toISOString();
-  await supabase.from("company_ingestion_runs").insert({
+  const { error: startError } = await supabase.from("company_ingestion_runs").insert({
     id: runId,
     tenant_id: tenantId,
     pipeline: "operational-to-company-brain-v1",
     status: "STARTED",
     started_at: startedAt,
   });
+  if (startError) throw startError;
 
   let rowsRead = 0;
   let nodesUpserted = 0;
@@ -125,7 +126,9 @@ export async function materializeCompanyWarehouse(tenantId: string) {
 
   try {
     for (const source of SOURCES) {
-      const rows = await readSource(source, tenantId);
+      const sourceRead = await readSource(source, tenantId);
+      const rows = sourceRead.rows;
+      if (sourceRead.error) failures += 1;
       rowsRead += rows.length;
       let sourceNodes = 0;
       let sourceFeatures = 0;
@@ -183,7 +186,10 @@ export async function materializeCompanyWarehouse(tenantId: string) {
             observed_at: observedAt,
           },
         ];
-        const { error: featureError } = await supabase.from("company_feature_values").insert(featureRows);
+        const { error: featureError } = await supabase.from("company_feature_values").upsert(
+          featureRows,
+          { onConflict: "tenant_id,entity_type,entity_id,feature_key,source,observed_at" }
+        );
         if (!featureError) {
           sourceFeatures += featureRows.length;
           featuresWritten += featureRows.length;
@@ -211,11 +217,16 @@ export async function materializeCompanyWarehouse(tenantId: string) {
       if (!factError) factsWritten += 1;
       else failures += 1;
 
-      sourceResults[source.table] = { rows: rows.length, nodes: sourceNodes, features: sourceFeatures };
+      sourceResults[source.table] = {
+        rows: rows.length,
+        nodes: sourceNodes,
+        features: sourceFeatures,
+        error: sourceRead.error,
+      };
     }
 
     const status = failures === 0 ? "SUCCEEDED" : "PARTIAL";
-    await supabase.from("company_ingestion_runs").update({
+    const { error: completionError } = await supabase.from("company_ingestion_runs").update({
       status,
       completed_at: new Date().toISOString(),
       rows_read: rowsRead,
@@ -225,10 +236,11 @@ export async function materializeCompanyWarehouse(tenantId: string) {
       failures,
       details: sourceResults,
     }).eq("id", runId);
+    if (completionError) throw completionError;
 
     return { runId, status, rowsRead, nodesUpserted, featuresWritten, factsWritten, failures, sources: sourceResults };
   } catch (error) {
-    await supabase.from("company_ingestion_runs").update({
+    const { error: failureUpdateError } = await supabase.from("company_ingestion_runs").update({
       status: "FAILED",
       completed_at: new Date().toISOString(),
       rows_read: rowsRead,
@@ -239,6 +251,12 @@ export async function materializeCompanyWarehouse(tenantId: string) {
       error_message: error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000),
       details: sourceResults,
     }).eq("id", runId);
+    if (failureUpdateError) {
+      console.error("[orvanta:warehouse] failed to persist terminal ingestion state", {
+        runId,
+        error: failureUpdateError.message,
+      });
+    }
     throw error;
   }
 }
@@ -430,6 +448,27 @@ export async function runCompanyBrainCycle(tenantId: string, actorId = "company-
     source_snapshot_id: snapshotId,
   }).select("id").single();
   if (narrativeError) throw narrativeError;
+
+  const cycleSucceeded = warehouse.status === "SUCCEEDED";
+  const { error: evidenceError } = await supabase.from("readiness_evidence").insert({
+    evidence_key: "company-brain-cycle",
+    environment: process.env.NODE_ENV === "production" ? "production" : "development",
+    status: cycleSucceeded ? "PASS" : "FAIL",
+    details: {
+      tenantId,
+      ingestionRunId: warehouse.runId,
+      ingestionStatus: warehouse.status,
+      failures: warehouse.failures,
+      snapshotId,
+      twinId,
+      predictionCount: predictionIds.length,
+      recommendationCount: recommendationIds.length,
+    },
+    performed_by: actorId,
+    performed_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 36 * 60 * 60_000).toISOString(),
+  });
+  if (evidenceError) throw evidenceError;
 
   return {
     warehouse,

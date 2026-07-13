@@ -47,6 +47,10 @@ export function getProductionReadiness(): ProductionReadiness {
   const hasPublicAnonServerWriteFallback = Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const personalAccessCodeConfigured = Boolean(process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY);
   const googleWorkspace = getGoogleWorkspaceStatus();
+  const workflowRuntimeEnabled = personalMode
+    ? process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED !== "false"
+    : enabled("ORVANTA_WORKFLOW_RUNTIME_ENABLED");
+  const reconciliationRequired = process.env.ORVANTA_RECONCILIATION_REQUIRED !== "false";
   const googleWorkspaceCheck = googleWorkspace.enabled
     ? check(
         "google-workspace",
@@ -137,8 +141,8 @@ export function getProductionReadiness(): ProductionReadiness {
     check(
       "workflow-runtime",
       "Durable workflow runtime",
-      enabled("ORVANTA_WORKFLOW_RUNTIME_ENABLED"),
-      enabled("ORVANTA_WORKFLOW_RUNTIME_ENABLED")
+      workflowRuntimeEnabled,
+      workflowRuntimeEnabled
         ? "Durable workflow instances, steps, retries, approvals, and restart recovery are enabled."
         : "ORVANTA_WORKFLOW_RUNTIME_ENABLED is not true. Long-running company workflows remain blocked."
     ),
@@ -169,8 +173,8 @@ export function getProductionReadiness(): ProductionReadiness {
     check(
       "reconciliation-required",
       "External receipt and reconciliation",
-      enabled("ORVANTA_RECONCILIATION_REQUIRED"),
-      enabled("ORVANTA_RECONCILIATION_REQUIRED")
+      reconciliationRequired,
+      reconciliationRequired
         ? "External actions cannot complete without evidence and reconciliation."
         : "Set ORVANTA_RECONCILIATION_REQUIRED=true after applying the reconciliation and receipt schema."
     ),
@@ -181,6 +185,12 @@ export function getProductionReadiness(): ProductionReadiness {
       enabled("ORVANTA_CAPABILITY_REGISTRY_READY")
         ? "Every exposed capability is labelled LIVE, SANDBOX, HUMAN_CHECKPOINT, NOT_INTEGRATED, or DISABLED."
         : "Verify the capability registry and hide unsupported modules before setting ORVANTA_CAPABILITY_REGISTRY_READY=true."
+    ),
+    check(
+      "company-brain-cycle",
+      "Company Brain production cycle",
+      false,
+      "No recent tenant-scoped Company Brain cycle has been verified yet."
     ),
     check(
       "accounting-controls",
@@ -212,7 +222,10 @@ export function getProductionReadiness(): ProductionReadiness {
       Boolean(process.env.API_SECRET_KEY),
       process.env.API_SECRET_KEY
         ? "API_SECRET_KEY is configured for trusted system calls."
-        : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints."
+        : personalMode
+          ? "API_SECRET_KEY is optional in personal mode; owner cookies and CRON_SECRET protect the active surfaces."
+          : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints.",
+      !personalMode
     ),
     check(
       "cron-secret",

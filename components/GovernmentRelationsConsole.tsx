@@ -292,7 +292,7 @@ export default function GovernmentRelationsConsole() {
     try {
       const json = await postJson({ action: "preview-file", fileId });
       if (popup && json.result?.signedUrl) popup.location.href = json.result.signedUrl;
-      else if (json.result?.signedUrl) window.location.href = json.result.signedUrl;
+      else if (json.result?.signedUrl) window.location.assign(json.result.signedUrl);
     } catch (err) {
       popup?.close();
       setError(err instanceof Error ? err.message : "تعذر فتح الملف.");

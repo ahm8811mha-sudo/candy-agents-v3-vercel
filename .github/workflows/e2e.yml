@@ -35,9 +35,6 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Install Playwright test runner for this job
-        run: npm install --no-save --package-lock=false @playwright/test
-
       - name: Install Chromium and WebKit
         run: npx playwright install --with-deps chromium webkit
 

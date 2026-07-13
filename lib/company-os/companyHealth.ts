@@ -68,7 +68,7 @@ export async function getCompanyHealth(tenantId: string) {
 
   const commitmentRows = commitments.data || [];
   const reserved = commitmentRows.filter((item) => item.status === "RESERVED").reduce((sum, item) => sum + Number(item.amount_sar || 0), 0);
-  const financialScore = exceptions === 0 ? 90 : Math.max(30, 90 - exceptions * 15);
+  const financialScore = Math.max(30, Math.min(100, reconciliationScore));
 
   const projectRows = projects.data || [];
   const projectScores = projectRows.map((item) => Number(item.health_score || 0)).filter((value) => value > 0);

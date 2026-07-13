@@ -50,7 +50,7 @@ function unauthorized(req: NextRequest) {
   return NextResponse.redirect(loginUrl);
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   if (req.method === "OPTIONS") return NextResponse.next();
 
   if (req.nextUrl.pathname.startsWith("/api/public/v1")) {

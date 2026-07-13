@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Typecheck, tests, and production build
+    name: Lint, typecheck, tests, build, and smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -30,6 +30,12 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: ESLint
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee eslint-output.log
 
       - name: TypeScript
         shell: bash
@@ -51,11 +57,15 @@ jobs:
           path: |
             typescript-output.log
             vitest-output.log
+            eslint-output.log
           if-no-files-found: ignore
           retention-days: 7
 
       - name: Production build
         run: npm run build
+
+      - name: Production security smoke
+        run: npm run test:smoke
 
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Brain,
@@ -62,6 +62,7 @@ type Skill = {
 };
 
 type PlatformState = {
+  needsBootstrap?: boolean;
   twin?: Twin | null;
   recommendations?: Recommendation[];
   predictions?: Prediction[];
@@ -126,20 +127,27 @@ export default function CompanyBrainPage() {
   const [revenue, setRevenue] = useState("100000");
   const [payroll, setPayroll] = useState("35000");
   const [opex, setOpex] = useState("30000");
+  const bootstrapStarted = useRef(false);
 
-  async function load(refresh = false) {
-    refresh ? setRefreshing(true) : setLoading(true);
+  async function load(action: "read" | "refresh" | "bootstrap" = "read") {
+    const mutating = action !== "read";
+    if (mutating) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
       const response = await fetch("/api/company-brain/platform", {
-        method: refresh ? "POST" : "GET",
-        headers: refresh ? { "content-type": "application/json" } : undefined,
-        body: refresh ? JSON.stringify({ action: "refresh" }) : undefined,
+        method: mutating ? "POST" : "GET",
+        headers: mutating ? { "content-type": "application/json" } : undefined,
+        body: mutating ? JSON.stringify({ action }) : undefined,
         cache: "no-store",
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json.ok) throw new Error(json.error || "تعذر تحميل العقل المؤسسي.");
       setState(json);
+      if (action === "read" && json.needsBootstrap && !bootstrapStarted.current) {
+        bootstrapStarted.current = true;
+        await load("bootstrap");
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذر تحميل العقل المؤسسي.");
     } finally {
@@ -149,7 +157,7 @@ export default function CompanyBrainPage() {
   }
 
   useEffect(() => {
-    void load(false);
+    void load("read");
   }, []);
 
   const domains = useMemo(() => Object.entries(state.twin?.state?.domains || {}), [state.twin]);
@@ -237,7 +245,7 @@ export default function CompanyBrainPage() {
               صورة موحدة للشركة تربط التنفيذ والقرارات والمالية والامتثال، ثم تحولها إلى توقعات وتوصيات ومحاكاة وخطط قابلة للاعتماد.
             </p>
           </div>
-          <button className="primary-btn" type="button" onClick={() => void load(true)} disabled={refreshing}>
+          <button className="primary-btn" type="button" onClick={() => void load("refresh")} disabled={refreshing}>
             {refreshing ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
             تحديث العقل المؤسسي
           </button>

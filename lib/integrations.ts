@@ -87,7 +87,11 @@ const integrationRegistry: IntegrationConfig[] = [
 ];
 
 export function getAvailableIntegrations(): IntegrationConfig[] {
-  return integrationRegistry.map(({ apiKey: _apiKey, ...rest }) => rest);
+  return integrationRegistry.map((integration) => {
+    const sanitized = { ...integration };
+    delete sanitized.apiKey;
+    return sanitized;
+  });
 }
 
 export function getEnabledIntegrations(): IntegrationConfig[] {
