@@ -1,0 +1,50 @@
+name: Database Security
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/database-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rls-regression:
+    if: ${{ secrets.SUPABASE_STAGING_DB_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PGURL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Verify ordered migrations parse on staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in $(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+            echo "Applying $migration"
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Run RLS regression suite
+        run: psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_regression.sql
+
+      - name: Store database evidence
+        shell: bash
+        run: |
+          psql "$PGURL" -Atc "select now(), current_database(), current_user" > database-security-evidence.txt
+          echo "commit=${GITHUB_SHA}" >> database-security-evidence.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: database-security-evidence
+          path: database-security-evidence.txt
+          retention-days: 30
