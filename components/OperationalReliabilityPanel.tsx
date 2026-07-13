@@ -5,8 +5,10 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  CircleSlash2,
   Clock3,
   Database,
+  FileCheck2,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -27,6 +29,8 @@ type OperationsPayload = {
     trackedJobs: number;
     liveCapabilities: number;
     totalCapabilities: number;
+    readinessEvidencePassed: number;
+    readinessEvidenceTotal: number;
   };
   latestCronRuns: Row[];
   alerts: Row[];
@@ -35,6 +39,7 @@ type OperationsPayload = {
   integrationAttempts: Row[];
   capabilities: Row[];
   backupVerificationRuns: Row[];
+  readinessEvidence: Row[];
 };
 
 function dateTime(value: unknown) {
@@ -45,8 +50,8 @@ function dateTime(value: unknown) {
 
 function badge(value: unknown) {
   const status = String(value || "UNKNOWN");
-  const good = ["SUCCEEDED", "LIVE", "RESOLVED", "PUBLISHED"].includes(status);
-  const bad = ["FAILED", "CRITICAL", "DEAD_LETTER"].includes(status);
+  const good = ["SUCCEEDED", "LIVE", "RESOLVED", "PUBLISHED", "PASS"].includes(status);
+  const bad = ["FAILED", "CRITICAL", "DEAD_LETTER", "FAIL"].includes(status);
   return (
     <span className="mini-pill" style={{ color: bad ? "var(--red)" : good ? "var(--green)" : "var(--amber)" }}>
       {status}
@@ -113,7 +118,7 @@ export default function OperationalReliabilityPanel() {
         <div>
           <span className="eyebrow">Operational Reliability</span>
           <h2 style={{ margin: "6px 0" }}>مركز الاعتمادية والتشغيل</h2>
-          <p className="page-sub" style={{ margin: 0 }}>حالة المهام المجدولة، التنبيهات، الكتابات الفاشلة، التكاملات والإثباتات.</p>
+          <p className="page-sub" style={{ margin: 0 }}>حالة المهام المجدولة، التنبيهات، الكتابات الفاشلة، التكاملات وأدلة الجاهزية.</p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button className="ghost-btn" onClick={() => action("RUN_WATCHDOG")} disabled={Boolean(running)}>
@@ -141,7 +146,7 @@ export default function OperationalReliabilityPanel() {
               ["كتابات تحتاج معالجة", data.summary.failedWrites, Database],
               ["Dead Letters", data.summary.deadLetters, Workflow],
               ["تكاملات فاشلة", data.summary.failedIntegrations, Activity],
-              ["مهام مجدولة مراقبة", data.summary.trackedJobs, Clock3],
+              ["أدلة جاهزية ناجحة", `${data.summary.readinessEvidencePassed}/${data.summary.readinessEvidenceTotal}`, FileCheck2],
             ].map(([label, value, Icon]) => {
               const IconComponent = Icon as typeof Activity;
               return (
@@ -158,7 +163,7 @@ export default function OperationalReliabilityPanel() {
             <div className="section-head">
               <div>
                 <h3 style={{ margin: 0 }}>آخر تشغيل للمهام المجدولة</h3>
-                <small style={{ color: "var(--muted)" }}>المهام غير السليمة حاليًا: {unhealthyJobs.length}</small>
+                <small style={{ color: "var(--muted)" }}>مراقبة {data.summary.trackedJobs} مهمة · غير السليم حاليًا: {unhealthyJobs.length}</small>
               </div>
               <span className="mini-pill"><Clock3 size={13} /> {dateTime(data.generatedAt)}</span>
             </div>
@@ -208,17 +213,30 @@ export default function OperationalReliabilityPanel() {
                   <div style={{ color: "var(--muted)", marginTop: 5 }}>{String(row.error_message || "فشل غير موضح")}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
                     {badge(row.status)}
-                    <button className="ghost-btn" onClick={() => action("RETRY_FAILED_WRITE", String(row.id))}>إعادة</button>
+                    <button className="ghost-btn" onClick={() => action("RETRY_FAILED_WRITE", String(row.id))}>إعادة الكتابة</button>
                   </div>
                 </div>
               ))}
-              {data.deadLetters.filter((row) => row.status === "OPEN").slice(0, 10).map((row) => (
-                <div className="notice" key={String(row.id)} style={{ borderColor: "rgba(239,68,68,.35)" }}>
-                  <strong>Dead Letter: {String(row.operation)}</strong>
-                  <div style={{ color: "var(--muted)", marginTop: 5 }}>{String(row.error_message)}</div>
-                  <button className="ghost-btn" style={{ marginTop: 8 }} onClick={() => action("RETRY_DEAD_LETTER", String(row.id))}>تجهيز لإعادة المحاولة</button>
-                </div>
-              ))}
+              {data.deadLetters.filter((row) => row.status === "OPEN").slice(0, 10).map((row) => {
+                const isFailedWrite = String(row.source_type) === "failed_write";
+                return (
+                  <div className="notice" key={String(row.id)} style={{ borderColor: "rgba(239,68,68,.35)" }}>
+                    <strong>Dead Letter: {String(row.operation)}</strong>
+                    <div style={{ color: "var(--muted)", marginTop: 5 }}>{String(row.error_message)}</div>
+                    <small style={{ display: "block", marginTop: 5 }}>المصدر: {String(row.source_type)}</small>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      {isFailedWrite ? (
+                        <button className="ghost-btn" onClick={() => action("RETRY_DEAD_LETTER", String(row.id))}>إعادة آمنة</button>
+                      ) : (
+                        <span className="mini-pill">يُعاد من مساره الأصلي بعد مراجعة الإيصال</span>
+                      )}
+                      <button className="ghost-btn" onClick={() => action("IGNORE_DEAD_LETTER", String(row.id))}>
+                        <CircleSlash2 size={14} /> تجاهل بعد المراجعة
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
               {!data.failedWrites.some((row) => row.status !== "RESOLVED") && !data.deadLetters.some((row) => row.status === "OPEN") && (
                 <div className="notice done"><CheckCircle2 size={17} /> لا توجد كتابات فاشلة أو Dead Letters.</div>
               )}
@@ -245,6 +263,33 @@ export default function OperationalReliabilityPanel() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="bento-card" style={{ gap: 14 }}>
+            <div className="section-head">
+              <div>
+                <h3 style={{ margin: 0 }}>أدلة الجاهزية</h3>
+                <small style={{ color: "var(--muted)" }}>الأدلة المنفذة فعليًا فقط؛ غياب الدليل لا يتحول إلى نجاح شكلي.</small>
+              </div>
+              <FileCheck2 size={18} />
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>البوابة</th><th>الحالة</th><th>البيئة</th><th>التنفيذ</th><th>الانتهاء</th></tr></thead>
+                <tbody>
+                  {data.readinessEvidence.map((row) => (
+                    <tr key={String(row.id)}>
+                      <td><strong>{String(row.evidence_key)}</strong></td>
+                      <td>{badge(row.status)}</td>
+                      <td>{String(row.environment)}</td>
+                      <td>{dateTime(row.performed_at)}</td>
+                      <td>{dateTime(row.expires_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!data.readinessEvidence.length && <div className="notice"><AlertTriangle size={16} /> لم تُسجل أدلة جاهزية بعد.</div>}
           </div>
         </>
       )}
