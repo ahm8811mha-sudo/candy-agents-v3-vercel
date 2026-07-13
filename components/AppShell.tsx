@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   Activity,
+  Brain,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
@@ -20,6 +21,7 @@ import SessionControl from "./SessionControl";
 type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number };
 
 const PAGE_TITLES: Array<[string, string]> = [
+  ["/company-brain", "العقل المؤسسي"],
   ["/control-room", "مركز قيادة الشركة"],
   ["/inbox", "القرارات"],
   ["/ideas", "الأفكار"],
@@ -100,7 +102,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
+    if (href === "/") return pathname === "/" || pathname.startsWith("/company-brain");
     if (href === "/departments") return pathname.startsWith("/departments") || ["/sales", "/company", "/office"].some((route) => pathname.startsWith(route));
     if (href === "/operations") return ["/operations", "/control-room", "/ideas", "/correspondence-center", "/recovery-center"].some((route) => pathname.startsWith(route));
     return pathname.startsWith(href);
@@ -138,9 +140,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
 
-        <div className="notice" style={{ margin: "22px 12px 0", fontSize: ".78rem", lineHeight: 1.7 }}>
-          الصفحات المتخصصة موجودة داخل الأقسام والتنفيذ. أُزيل التكرار من القائمة الرئيسية دون حذف الوظائف.
-        </div>
+        <Link
+          href="/company-brain"
+          className="notice"
+          onClick={() => setOpen(false)}
+          style={{ margin: "22px 12px 0", fontSize: ".78rem", lineHeight: 1.7, display: "grid", gap: 6, textDecoration: "none" }}
+        >
+          <strong style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Brain size={14} /> العقل المؤسسي</strong>
+          <span style={{ color: "var(--muted)" }}>التوأم الرقمي، التوقعات، المحاكاة، التخطيط والسرد التنفيذي في مساحة واحدة.</span>
+        </Link>
       </aside>
 
       <div className="shell-main">
