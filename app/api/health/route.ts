@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import { getEnabledIntegrations } from "@/lib/integrations";
-import { isAuthEnabled } from "@/lib/auth";
 import { isShopifyConfigured } from "@/lib/shopify";
 import { isVercelConfigured } from "@/lib/vercelMonitor";
 import { isAlpacaConfigured, alpacaMode } from "@/lib/trading/brokers/alpaca";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
 import { getProductionReadiness } from "@/lib/company/productionReadiness";
+
+function passed(readiness: ReturnType<typeof getProductionReadiness>, id: string) {
+  return readiness.checks.find((item) => item.id === id)?.severity === "PASS";
+}
 
 export async function GET() {
   const integrations = getEnabledIntegrations();
@@ -20,19 +23,20 @@ export async function GET() {
       arabicName: "أورفانتا",
       tagline: "AI Operating System for Business",
     },
-    version: "3.0.0-core",
+    version: "3.1.0-hardening",
+    accessMode: readiness.accessMode,
     productionReady: readiness.okForProduction,
     readiness,
     checks: {
       supabase: hasSupabaseEnv(),
       googleSheets: Boolean(process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY),
       ai: Boolean(process.env.OPENAI_API_KEY),
-      auth: isAuthEnabled(),
-      tenantIsolation: process.env.ORVANTA_MULTI_TENANT === "true" && process.env.ORVANTA_RLS_READY === "true",
-      coreSchema: process.env.ORVANTA_CORE_SCHEMA_READY === "true",
-      workflowRuntime: process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true",
-      outboxPublisher: process.env.ORVANTA_OUTBOX_ENABLED === "true" && Boolean(process.env.CRON_SECRET),
-      reconciliation: process.env.ORVANTA_RECONCILIATION_REQUIRED === "true",
+      accessGate: passed(readiness, "access-gate"),
+      tenantIsolation: passed(readiness, "tenant-rls-ready"),
+      coreSchema: passed(readiness, "core-schema-ready"),
+      workflowRuntime: passed(readiness, "workflow-runtime"),
+      outboxPublisher: passed(readiness, "outbox-publisher"),
+      reconciliation: passed(readiness, "reconciliation-required"),
       shopify: isShopifyConfigured(),
       vercelMonitoring: isVercelConfigured(),
       alpaca: isAlpacaConfigured(),
@@ -41,7 +45,7 @@ export async function GET() {
       integrations: integrations.length,
     },
     features: {
-      authentication: isAuthEnabled(),
+      authentication: passed(readiness, "access-gate"),
       tenantContext: true,
       policyEngine: true,
       durableWorkflow: true,
