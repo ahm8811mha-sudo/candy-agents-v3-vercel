@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       if (result.type === "GENERAL" && result.metadata?.source === "governanceOS") {
         execution = await executeGovernedApprovalDecision(result.metadata || {}, decision, decidedBy);
       } else if (decision === "APPROVED") {
-        if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
+        if (result.type === "TRADE") execution = await executeApprovedTrade({ ...(result.metadata || {}), approvalId: result.id });
         else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
         else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
         else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);

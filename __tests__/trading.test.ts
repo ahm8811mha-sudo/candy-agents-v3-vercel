@@ -145,8 +145,12 @@ describe("executionEngine — live gating", () => {
   const original = { ...process.env };
   beforeEach(() => {
     delete process.env.TRADING_LIVE_ENABLED;
-    delete process.env.BROKER_API_KEY;
-    delete process.env.BROKER_API_SECRET;
+    delete process.env.TRADING_LIVE_ACK;
+    delete process.env.ALPACA_LIVE;
+    delete process.env.ALPACA_API_KEY;
+    delete process.env.ALPACA_API_SECRET;
+    delete process.env.APCA_API_KEY_ID;
+    delete process.env.APCA_API_SECRET_KEY;
   });
   afterEach(() => {
     process.env = { ...original };
@@ -156,11 +160,13 @@ describe("executionEngine — live gating", () => {
     expect(isLiveTradingEnabled()).toBe(false);
   });
 
-  it("requires both opt-in flag and broker keys", () => {
+  it("requires credentials and every real-money opt-in gate", () => {
+    process.env.ALPACA_API_KEY = "k";
+    process.env.ALPACA_API_SECRET = "s";
+    process.env.ALPACA_LIVE = "true";
     process.env.TRADING_LIVE_ENABLED = "true";
     expect(isLiveTradingEnabled()).toBe(false);
-    process.env.BROKER_API_KEY = "k";
-    process.env.BROKER_API_SECRET = "s";
+    process.env.TRADING_LIVE_ACK = "I_UNDERSTAND_REAL_MONEY";
     expect(isLiveTradingEnabled()).toBe(true);
   });
 
@@ -175,8 +181,12 @@ describe("cfoTrader — full cycle", () => {
   const original = { ...process.env };
   beforeEach(() => {
     delete process.env.TRADING_LIVE_ENABLED;
-    delete process.env.BROKER_API_KEY;
-    delete process.env.BROKER_API_SECRET;
+    delete process.env.TRADING_LIVE_ACK;
+    delete process.env.ALPACA_LIVE;
+    delete process.env.ALPACA_API_KEY;
+    delete process.env.ALPACA_API_SECRET;
+    delete process.env.APCA_API_KEY_ID;
+    delete process.env.APCA_API_SECRET_KEY;
   });
   afterEach(() => {
     process.env = { ...original };

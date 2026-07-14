@@ -1609,6 +1609,87 @@ label {
   padding: 16px;
 }
 
+/* ─── Trading center ─── */
+.trading-panel-header {
+  align-items: flex-start;
+}
+
+.trading-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trading-setup-card {
+  display: grid;
+  gap: 14px;
+  padding: clamp(16px, 3vw, 22px);
+  border: 1px dashed color-mix(in srgb, var(--primary) 45%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 5%, var(--panel));
+}
+
+.trading-setup-card__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.trading-setup-card__title > svg { color: var(--primary); flex: 0 0 auto; }
+.trading-setup-card__title strong { display: block; font-size: var(--text-lg); }
+.trading-setup-card__title span { display: block; margin-top: 4px; color: var(--muted); line-height: 1.7; }
+
+.trading-setup-steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trading-setup-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.trading-setup-steps li b {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary);
+  background: var(--panel-2);
+}
+
+.trading-setup-card code,
+.trading-desk-panel code {
+  overflow-wrap: anywhere;
+}
+
+.trading-missing {
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}
+
+.trading-signal-error {
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--red);
+}
+
+.trading-signal-error span { color: var(--muted); }
+
 /* ─── Integration Cards ─── */
 .integrations-grid {
   display: grid;
@@ -2210,4 +2291,15 @@ label {
   .action-queue-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .action-queue-metric { min-height: 82px; padding: 12px; }
   .action-queue-metric strong { font-size: 1.55rem; font-variant-numeric: tabular-nums; }
+  .trading-panel-header { gap: 10px; }
+  .trading-panel-header h2 { font-size: 1.3rem; line-height: 1.45; }
+  .trading-header-actions { width: 100%; justify-content: flex-start; }
+  .trading-header-actions .status-pill { padding: 5px 9px; }
+  .trading-setup-card { padding: 14px; }
+  .trading-setup-card__title { gap: 9px; }
+  .trading-setup-card__title strong { font-size: var(--text-base); }
+  .trading-account-panel .report-section-box,
+  .trading-signal-panel .report-section-box { padding: 13px; }
+  .trading-signal-panel .report-section-box > div:first-child { align-items: flex-start !important; flex-wrap: wrap; }
+  .trading-signal-panel .report-section-box .secondary-btn { margin-inline-start: 0 !important; }
 }

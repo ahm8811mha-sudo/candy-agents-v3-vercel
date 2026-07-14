@@ -156,6 +156,23 @@ Full configuration, scopes, safety behavior, and acceptance tests:
 docs/GOOGLE_WORKSPACE_INTEGRATION.md
 ```
 
+## Alpaca Trading Center
+
+The trading center defaults to Alpaca Paper. Add the two server-only Paper
+credentials in Vercel, leave `ALPACA_LIVE=false`, and redeploy:
+
+```env
+ALPACA_API_KEY=...
+ALPACA_API_SECRET=...
+ALPACA_LIVE=false
+ALPACA_SCALP_SYMBOL=SPY
+ALPACA_DATA_FEED=iex
+```
+
+Real-money routing remains locked unless all three independent live gates are
+explicitly enabled. See `docs/ALPACA_TRADING_SETUP_AR.md` for the safe setup and
+verification checklist.
+
 ## Database
 
 For the production company OS persistence layer, run:

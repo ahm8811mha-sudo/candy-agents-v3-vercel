@@ -8,6 +8,10 @@ describe("executeApprovedTrade", () => {
     delete process.env.ALPACA_API_KEY;
     delete process.env.ALPACA_API_SECRET;
     delete process.env.ALPACA_LIVE;
+    delete process.env.APCA_API_KEY_ID;
+    delete process.env.APCA_API_SECRET_KEY;
+    delete process.env.TRADING_LIVE_ENABLED;
+    delete process.env.TRADING_LIVE_ACK;
   });
 
   afterEach(() => {
