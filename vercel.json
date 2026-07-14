@@ -32,8 +32,20 @@
       "schedule": "20 6 * * *"
     },
     {
+      "path": "/api/company-brain/cron",
+      "schedule": "40 6 * * *"
+    },
+    {
       "path": "/api/company/learning/cron",
       "schedule": "0 7 * * 0"
+    },
+    {
+      "path": "/api/system/retry/cron",
+      "schedule": "10 8 * * *"
+    },
+    {
+      "path": "/api/system/watchdog/cron",
+      "schedule": "45 8 * * *"
     }
   ]
 }

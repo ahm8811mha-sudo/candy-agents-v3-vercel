@@ -6,15 +6,16 @@ import {
 } from "../company/actionQueue";
 import { reconcileCompanyAction } from "../company-os/reconciliation";
 import {
-  appendActionToSheet,
-  createGmailDraft,
   getGoogleWorkspaceStatus,
   GoogleWorkspaceConfigurationError,
-  sendGmailMessage,
-  uploadActionArtifact,
-  withGoogleRetry,
   type GoogleWorkspaceCapability,
 } from "./googleWorkspace";
+import {
+  appendReliableActionToSheet,
+  createReliableGmailDraft,
+  sendReliableGmailMessage,
+  uploadReliableActionArtifact,
+} from "./googleWorkspaceReliable";
 
 export type CompanyIntegrationOperation =
   | "GMAIL_DRAFT"
@@ -225,57 +226,61 @@ export async function executeCompanyActionIntegration(
   }
 
   const payload = integrationPayload(claimed);
+  const resolvedTenantId = tenantId || claimed.tenant_id || process.env.ORVANTA_TENANT_ID || "golden-star";
 
   try {
-    const output = await withGoogleRetry(async (): Promise<Record<string, unknown>> => {
-      switch (plan.operation) {
-        case "GMAIL_DRAFT": {
-          const delivery = await createGmailDraft({
-            actionId: claimed.id,
-            to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
-            subject: payload.subject || `Orvanta — ${claimed.title}`,
-            html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
-          });
-          return { ...delivery };
-        }
-        case "GMAIL_SEND": {
-          const delivery = await sendGmailMessage({
-            actionId: claimed.id,
-            to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
-            subject: payload.subject || `Orvanta — ${claimed.title}`,
-            html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
-          });
-          return { ...delivery };
-        }
-        case "SHEETS_APPEND": {
-          const sheet = await appendActionToSheet({
-            actionId: claimed.id,
-            projectId: claimed.project_id,
-            actionType: claimed.action_type,
-            title: claimed.title,
-            description: claimed.description,
-            provider: claimed.provider,
-            actor,
-            status: "EXECUTED",
-          });
-          return { ...sheet };
-        }
-        case "DRIVE_UPLOAD": {
-          const file = await uploadActionArtifact({
-            actionId: claimed.id,
-            fileName: payload.fileName || safeFileName(claimed.title),
-            content: payload.content || payload.body || defaultDriveContent(claimed, actor),
-            mimeType: payload.mimeType || "text/markdown",
-          });
-          return { ...file };
-        }
-        default:
-          throw new UnsupportedActionIntegrationError(claimed.action_type);
+    let output: Record<string, unknown>;
+    switch (plan.operation) {
+      case "GMAIL_DRAFT": {
+        const execution = await createReliableGmailDraft(resolvedTenantId, {
+          actionId: claimed.id,
+          to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
+          subject: payload.subject || `Orvanta — ${claimed.title}`,
+          html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
+        });
+        output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };
+        break;
       }
-    });
+      case "GMAIL_SEND": {
+        const execution = await sendReliableGmailMessage(resolvedTenantId, {
+          actionId: claimed.id,
+          to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
+          subject: payload.subject || `Orvanta — ${claimed.title}`,
+          html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
+        });
+        output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };
+        break;
+      }
+      case "SHEETS_APPEND": {
+        const execution = await appendReliableActionToSheet(resolvedTenantId, {
+          actionId: claimed.id,
+          projectId: claimed.project_id,
+          actionType: claimed.action_type,
+          title: claimed.title,
+          description: claimed.description,
+          provider: claimed.provider,
+          actor,
+          status: "EXECUTED",
+        });
+        output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };
+        break;
+      }
+      case "DRIVE_UPLOAD": {
+        const execution = await uploadReliableActionArtifact(resolvedTenantId, {
+          actionId: claimed.id,
+          fileName: payload.fileName || safeFileName(claimed.title),
+          content: payload.content || payload.body || defaultDriveContent(claimed, actor),
+          mimeType: payload.mimeType || "text/markdown",
+        });
+        output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };
+        break;
+      }
+      default:
+        throw new UnsupportedActionIntegrationError(claimed.action_type);
+    }
 
     const reconciliation = await reconcileCompanyAction({
-      tenantId: tenantId || claimed.tenant_id || process.env.ORVANTA_TENANT_ID || "golden-star",
+      tenantId: resolvedTenantId,
       action: claimed,
       output,
       actor,

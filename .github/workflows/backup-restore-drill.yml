@@ -1,0 +1,51 @@
+name: Backup Restore Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_reference:
+        description: Backup identifier or timestamp restored into the isolated target
+        required: true
+        type: string
+      restore_target:
+        description: Isolated Supabase project or branch identifier
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-restored-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RESTORE_SUPABASE_URL: ${{ secrets.RESTORE_SUPABASE_URL }}
+      RESTORE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.RESTORE_SUPABASE_SERVICE_ROLE_KEY }}
+      PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_REFERENCE: ${{ inputs.backup_reference }}
+      RESTORE_TARGET: ${{ inputs.restore_target }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify restored core data and record evidence
+        run: node scripts/verify-restore.mjs | tee restore-verification.json
+
+      - name: Upload restore evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-verification
+          path: restore-verification.json
+          if-no-files-found: ignore
+          retention-days: 90

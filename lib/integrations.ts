@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
 import { getSupabaseAdmin } from "./supabase";
+import { getGoogleWorkspaceStatus } from "./integrations/googleWorkspace";
+import { sendReliableGmailMessage } from "./integrations/googleWorkspaceReliable";
 
 export type IntegrationType = "WHATSAPP" | "STRIPE" | "SALLA" | "SHOPIFY" | "WEBHOOK" | "EMAIL" | "VERCEL" | "ALPACA" | "FINNHUB" | "SAUDI_BROKER";
 
@@ -18,43 +21,44 @@ export type WebhookPayload = {
   source: string;
 };
 
+const googleStatus = getGoogleWorkspaceStatus();
 const integrationRegistry: IntegrationConfig[] = [
   {
     type: "WHATSAPP",
     name: "WhatsApp Business",
-    enabled: Boolean(process.env.WHATSAPP_API_TOKEN),
-    metadata: { description: "إرسال إشعارات وتقارير عبر واتساب" },
+    enabled: false,
+    metadata: { description: "غير منفذ في النسخة الحالية" },
   },
   {
     type: "STRIPE",
     name: "Stripe Payments",
-    enabled: Boolean(process.env.STRIPE_SECRET_KEY),
-    metadata: { description: "معالجة المدفوعات والفواتير" },
+    enabled: false,
+    metadata: { description: "غير منفذ في النسخة الحالية" },
   },
   {
     type: "SALLA",
     name: "Salla E-commerce",
-    enabled: Boolean(process.env.SALLA_API_KEY),
-    metadata: { description: "ربط مع منصة سلة للتجارة الإلكترونية" },
+    enabled: false,
+    metadata: { description: "غير منفذ في النسخة الحالية" },
   },
   {
     type: "SHOPIFY",
     name: "Shopify Store",
-    enabled: Boolean(process.env.SHOPIFY_ACCESS_TOKEN && process.env.SHOPIFY_STORE_DOMAIN),
-    metadata: { description: "متجر شوبيفاي: المنتجات والطلبات والمخزون والمبيعات" },
+    enabled: Boolean(process.env.SHOPIFY_ACCESS_TOKEN && process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_LIVE_WRITES_ENABLED === "true"),
+    metadata: { description: "يظهر مفعلاً فقط عند اكتمال المفاتيح وتفعيل الكتابات صراحة" },
   },
   {
     type: "WEBHOOK",
     name: "Custom Webhook",
     enabled: Boolean(process.env.CUSTOM_WEBHOOK_URL),
     webhookUrl: process.env.CUSTOM_WEBHOOK_URL,
-    metadata: { description: "إرسال أحداث لأي نظام خارجي" },
+    metadata: { description: "إرسال أحداث إلى Webhook مهيأ" },
   },
   {
     type: "EMAIL",
-    name: "Email Notifications",
-    enabled: Boolean(process.env.SMTP_HOST),
-    metadata: { description: "إرسال تقارير بالبريد الإلكتروني" },
+    name: "Google Gmail Notifications",
+    enabled: googleStatus.capabilities.gmail,
+    metadata: { description: "إرسال فعلي عبر Gmail مع سجل محاولة وإيصال" },
   },
   {
     type: "VERCEL",
@@ -65,48 +69,53 @@ const integrationRegistry: IntegrationConfig[] = [
   {
     type: "ALPACA",
     name: "Alpaca Trading",
-    enabled: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET),
-    metadata: { description: `تنفيذ التداول (${process.env.ALPACA_LIVE === "true" ? "حقيقي" : "ورقي/Paper"})` },
+    enabled: Boolean(process.env.ALPACA_API_KEY && process.env.ALPACA_API_SECRET && process.env.TRADING_LIVE_ENABLED === "true"),
+    metadata: { description: "التداول الحقيقي معطل افتراضياً" },
   },
   {
     type: "FINNHUB",
     name: "Finnhub Market Data",
     enabled: Boolean(process.env.FINNHUB_API_KEY),
-    metadata: { description: "ماسح الأخبار والتقويم الاقتصادي" },
+    metadata: { description: "بيانات السوق فقط" },
   },
   {
     type: "SAUDI_BROKER",
-    name: "وسيط سعودي (تداول)",
-    enabled: Boolean(process.env.SAUDI_BROKER_API_URL && process.env.SAUDI_BROKER_API_KEY),
-    metadata: { description: "تنفيذ أوامر السوق السعودي عبر وسيط مرخّص" },
+    name: "وسيط سعودي",
+    enabled: Boolean(process.env.SAUDI_BROKER_API_URL && process.env.SAUDI_BROKER_API_KEY && process.env.TRADING_LIVE_ENABLED === "true"),
+    metadata: { description: "التنفيذ الحقيقي معطل افتراضياً" },
   },
 ];
 
 export function getAvailableIntegrations(): IntegrationConfig[] {
-  return integrationRegistry.map(({ apiKey: _apiKey, ...rest }) => rest);
+  return integrationRegistry.map((integration) => {
+    const sanitized = { ...integration };
+    delete sanitized.apiKey;
+    return sanitized;
+  });
 }
 
 export function getEnabledIntegrations(): IntegrationConfig[] {
-  return integrationRegistry.filter((i) => i.enabled);
+  return integrationRegistry.filter((integration) => integration.enabled);
 }
 
 export async function sendWebhook(payload: WebhookPayload): Promise<boolean> {
   const webhookIntegrations = integrationRegistry.filter(
-    (i) => i.enabled && i.webhookUrl
+    (integration) => integration.enabled && integration.type === "WEBHOOK" && integration.webhookUrl
   );
 
   const results = await Promise.allSettled(
     webhookIntegrations.map(async (integration) => {
-      const res = await fetch(integration.webhookUrl!, {
+      const response = await fetch(integration.webhookUrl!, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      return res.ok;
+      if (!response.ok) throw new Error(`Webhook returned HTTP ${response.status}`);
+      return true;
     })
   );
 
-  return results.some((r) => r.status === "fulfilled" && r.value);
+  return results.some((result) => result.status === "fulfilled" && result.value);
 }
 
 export async function logIntegrationEvent(
@@ -116,44 +125,75 @@ export async function logIntegrationEvent(
   metadata?: Record<string, unknown>
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return;
+  if (!supabase) {
+    console.warn("[orvanta:integration] event was not persisted", { type, event, status });
+    return;
+  }
 
-  await supabase.from("external_sync_logs").insert({
+  const { error } = await supabase.from("external_sync_logs").insert({
     id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     provider: type,
     entity_type: event,
     status,
-    error_message: status === "FAILED" ? JSON.stringify(metadata) : null,
+    error_message: status === "FAILED" ? JSON.stringify(metadata || {}) : null,
   });
+  if (error) throw error;
+}
+
+function notificationId(channel: IntegrationType, recipient: string | undefined, message: string) {
+  return createHash("sha256")
+    .update(`${channel}:${recipient || "none"}:${message}`)
+    .digest("hex")
+    .slice(0, 40);
 }
 
 export async function triggerNotification(
   channel: IntegrationType,
   message: string,
   recipient?: string
-): Promise<{ sent: boolean; channel: IntegrationType }> {
-  const integration = integrationRegistry.find((i) => i.type === channel && i.enabled);
-
+): Promise<{ sent: boolean; channel: IntegrationType; externalId?: string }> {
+  const integration = integrationRegistry.find((item) => item.type === channel && item.enabled);
   if (!integration) {
+    await logIntegrationEvent(channel, "notification_not_delivered", "FAILED", {
+      reason: "integration_disabled_or_not_implemented",
+      recipient,
+      message: message.slice(0, 200),
+    }).catch(() => undefined);
     return { sent: false, channel };
   }
 
-  switch (channel) {
-    case "WEBHOOK":
-      return {
-        sent: await sendWebhook({
-          event: "notification",
-          data: { message, recipient },
-          timestamp: new Date().toISOString(),
-          source: "candy-agents",
-        }),
-        channel,
-      };
-    default:
-      await logIntegrationEvent(channel, "notification_queued", "SUCCESS", {
-        message: message.slice(0, 200),
-        recipient,
-      });
-      return { sent: true, channel };
+  if (channel === "WEBHOOK") {
+    const sent = await sendWebhook({
+      event: "notification",
+      data: { message, recipient },
+      timestamp: new Date().toISOString(),
+      source: "orvanta",
+    });
+    await logIntegrationEvent(channel, "notification_delivery", sent ? "SUCCESS" : "FAILED", { recipient }).catch(() => undefined);
+    return { sent, channel };
   }
+
+  if (channel === "EMAIL") {
+    if (!recipient?.trim()) return { sent: false, channel };
+    const execution = await sendReliableGmailMessage(
+      process.env.ORVANTA_TENANT_ID || "golden-star",
+      {
+        actionId: `system-notification-${notificationId(channel, recipient, message)}`,
+        to: recipient,
+        subject: "تنبيه Orvanta التشغيلي",
+        html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><p>${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p></div>`,
+      }
+    );
+    return {
+      sent: true,
+      channel,
+      externalId: String((execution.value as { messageId?: unknown }).messageId || execution.attemptId),
+    };
+  }
+
+  await logIntegrationEvent(channel, "notification_not_implemented", "FAILED", {
+    recipient,
+    message: message.slice(0, 200),
+  }).catch(() => undefined);
+  return { sent: false, channel };
 }

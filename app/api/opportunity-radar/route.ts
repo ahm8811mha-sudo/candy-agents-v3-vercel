@@ -1,16 +1,25 @@
+import { NextRequest } from "next/server";
 import { runOpportunityRadar } from "@/lib/enterpriseSystems";
-import { NextResponse } from "next/server";
+import { executeTrackedCron } from "@/lib/operations/trackedCron";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-export async function GET() {
-  try {
-    const result = await runOpportunityRadar("DAILY_CRON");
-    return NextResponse.json({ ok: true, result });
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Opportunity radar failed" },
-      { status: 500 }
-    );
-  }
+export async function GET(req: NextRequest) {
+  return executeTrackedCron({
+    req,
+    jobName: "opportunity-radar",
+    schedule: "0 5 * * *",
+    timeoutMs: 55_000,
+    run: async (_context, heartbeat) => {
+      await heartbeat({ phase: "scanning" });
+      const result = await runOpportunityRadar("DAILY_CRON");
+      const processed = Array.isArray(result) ? result.length : 1;
+      return {
+        processedCount: processed,
+        details: { processed },
+        body: { result },
+      };
+    },
+  });
 }
