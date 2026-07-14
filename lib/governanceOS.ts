@@ -1,5 +1,29 @@
+/**
+ * Enterprise governance facade.
+ *
+ * Historically this module was a PARALLEL decision center: its own role list,
+ * its own `approval_policies` thresholds (auto-approve ≤ 1,500 SAR), its own
+ * `decision_audit_log` table, and pending items written to the legacy
+ * `approvals` table — none of which the unified decision center could see.
+ *
+ * It is now a facade over the single authoritative stack:
+ *   - authority matrix: lib/company/governance.ts (T0–T3)
+ *   - pending sign-offs: lib/approvals.ts → company_approvals (the /inbox queue)
+ *   - audit trail:       lib/company/audit.ts → audit_log
+ *
+ * The exported names and return shapes are preserved so the enterprise
+ * modules (proAccounting, enterpriseSystems, marketingOS, executiveOffice,
+ * governmentRelations) keep working unchanged — but every gated action now
+ * follows the same rulebook and lands in the same owner inbox as the rest of
+ * the company.
+ */
+
 import { getDashboardData } from "./companyExecutionSystem";
 import { getSupabaseAdmin } from "./supabase";
+import { requiredTier, AUTHORITY_MATRIX, type TierRule } from "./company/governance";
+import { COMPANY_AGENTS } from "./company/agents";
+import { createApprovalCritical, listApprovals, hydrateApprovals, type ApprovalItem } from "./approvals";
+import { recordAudit, listAudit, hydrateAudit, type AuditEntry } from "./company/audit";
 
 type GovernedAction = {
   title: string;
@@ -24,80 +48,6 @@ type AuditInput = {
   metadata?: Record<string, unknown>;
 };
 
-const governanceRoles = [
-  {
-    id: "ceo",
-    name: "Chief Executive Officer",
-    description: "Final approval for strategic, high-risk, or large capital allocation decisions.",
-    permissions: { can_approve_any: true, can_override: true, can_scale: true },
-    spend_limit: 250000,
-    approval_limit: 50000,
-  },
-  {
-    id: "cfo",
-    name: "Chief Financial Officer",
-    description: "Controls budget, accounting integrity, cash, tax, and investment gates.",
-    permissions: { can_approve_budget: true, can_close_period: true, can_block_spend: true },
-    spend_limit: 50000,
-    approval_limit: 5000,
-  },
-  {
-    id: "marketing_director",
-    name: "Marketing and Innovation Director",
-    description: "Owns campaigns, product positioning, funnel metrics, and growth experiments.",
-    permissions: { can_create_campaign: true, can_run_tests: true, can_request_budget: true },
-    spend_limit: 5000,
-    approval_limit: 1500,
-  },
-  {
-    id: "chief_of_staff",
-    name: "Chief of Staff",
-    description: "Runs CEO office, follow-ups, meeting cadence, and execution accountability.",
-    permissions: { can_schedule: true, can_follow_up: true, can_prepare_briefs: true },
-    spend_limit: 2000,
-    approval_limit: 0,
-  },
-];
-
-const approvalPolicies = [
-  {
-    id: "auto_pilot",
-    rule_name: "Small validated test",
-    min_amount: 0,
-    max_amount: 1500,
-    risk_level: "LOW",
-    required_role: "MARKETING_DIRECTOR",
-    auto_approve: true,
-  },
-  {
-    id: "cfo_budget_gate",
-    rule_name: "CFO budget approval",
-    min_amount: 1500,
-    max_amount: 50000,
-    risk_level: "ANY",
-    required_role: "CFO",
-    auto_approve: false,
-  },
-  {
-    id: "ceo_capital_gate",
-    rule_name: "CEO strategic approval",
-    min_amount: 50000,
-    max_amount: null,
-    risk_level: "ANY",
-    required_role: "CEO",
-    auto_approve: false,
-  },
-  {
-    id: "high_risk_gate",
-    rule_name: "High risk override gate",
-    min_amount: 0,
-    max_amount: null,
-    risk_level: "HIGH",
-    required_role: "CEO",
-    auto_approve: false,
-  },
-];
-
 const costCenters = [
   { id: "cc-executive", name: "Executive Office", owner_role: "CEO Office", monthly_budget: 15000 },
   { id: "cc-marketing", name: "Growth and Marketing", owner_role: "Marketing Director", monthly_budget: 25000 },
@@ -120,28 +70,28 @@ function number(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function newId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function requireSupabase() {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
-  return supabase;
+/** Governance policy view synthesized from the single authority matrix. */
+function policyFromTier(rule: TierRule) {
+  return {
+    id: `tier-${rule.tier.toLowerCase()}`,
+    rule_name: rule.label,
+    min_amount: 0,
+    max_amount: Number.isFinite(rule.maxSAR) ? rule.maxSAR : null,
+    risk_level: "ANY",
+    required_role: rule.approver,
+    auto_approve: rule.tier === "T0",
+    tier: rule.tier,
+  };
 }
 
+/** Seed non-governance reference data (cost centers, integration catalog). */
 export async function seedGovernanceOS() {
-  const supabase = requireSupabase();
-
-  const { error: roleError } = await supabase.from("governance_roles").upsert(governanceRoles, { onConflict: "id" });
-  if (roleError) throw roleError;
-
-  const { error: policyError } = await supabase.from("approval_policies").upsert(approvalPolicies, { onConflict: "id" });
-  if (policyError) throw policyError;
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
 
   const { error: costError } = await supabase.from("cost_centers").upsert(costCenters, { onConflict: "id" });
   if (costError) throw costError;
@@ -150,52 +100,39 @@ export async function seedGovernanceOS() {
   if (integrationError) throw integrationError;
 }
 
-export async function logDecision(input: AuditInput) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase
-    .from("decision_audit_log")
-    .insert({
-      decision_type: input.decisionType,
-      entity_type: input.entityType || null,
-      entity_id: input.entityId || null,
-      actor_role: input.actorRole || "SYSTEM",
-      action: input.action,
-      amount: number(input.amount),
-      risk_level: input.riskLevel || "LOW",
-      approval_status: input.approvalStatus || "NOT_REQUIRED",
-      immutable_note: input.immutableNote || "Recorded by Enterprise Governance OS.",
-      metadata: input.metadata || {},
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+/** Records into the unified append-only audit trail (audit_log). */
+export async function logDecision(input: AuditInput): Promise<AuditEntry> {
+  return recordAudit({
+    actor: input.actorRole || "SYSTEM",
+    action: `${input.decisionType}: ${input.action}`,
+    entityType: input.entityType || "governance",
+    entityId: input.entityId || "-",
+    detail:
+      `${input.immutableNote || "Enterprise governed action."}` +
+      (input.amount ? ` · المبلغ ${number(input.amount).toLocaleString("ar-SA")} ر.س` : "") +
+      (input.riskLevel ? ` · المخاطرة ${input.riskLevel}` : "") +
+      (input.approvalStatus ? ` · الحالة ${input.approvalStatus}` : ""),
+  });
 }
 
+/**
+ * Gate an enterprise action through the SAME authority matrix and decision
+ * center as everything else. HIGH risk always escalates to the owner inbox,
+ * regardless of amount; otherwise T0 executes immediately and T1+ waits for
+ * sign-off in company_approvals.
+ */
 export async function evaluateGovernedAction(action: GovernedAction) {
-  await seedGovernanceOS();
-  const supabase = requireSupabase();
   const amount = number(action.amount);
-  const riskLevel = action.riskLevel || "LOW";
-  const policies = await supabase.from("approval_policies").select("*").eq("active", true).order("min_amount", { ascending: true });
-  if (policies.error) throw policies.error;
+  const riskLevel = String(action.riskLevel || "LOW").toUpperCase();
+  const tier = requiredTier(amount);
+  const highRisk = riskLevel === "HIGH";
+  const requiresApproval = highRisk || tier.tier !== "T0";
+  const approvalStatus = requiresApproval ? "PENDING" : "APPROVED";
+  const policy = {
+    ...policyFromTier(tier),
+    ...(highRisk ? { rule_name: `${tier.label} · تصعيد مخاطرة عالية`, auto_approve: false } : {}),
+  };
 
-  const policy =
-    (policies.data || []).find((item: any) => {
-      const minOk = amount >= number(item.min_amount);
-      const maxOk = item.max_amount === null || amount <= number(item.max_amount);
-      const riskOk = item.risk_level === "ANY" || item.risk_level === riskLevel;
-      return minOk && maxOk && riskOk;
-    }) || {
-      required_role: "CEO",
-      auto_approve: false,
-      rule_name: "Default CEO review",
-    };
-
-  const approvalStatus = policy.auto_approve ? "APPROVED" : "PENDING";
-  const requiresApproval = !policy.auto_approve;
   const audit = await logDecision({
     decisionType: requiresApproval ? "APPROVAL_REQUIRED" : "AUTO_APPROVED",
     entityType: action.entityType,
@@ -206,24 +143,29 @@ export async function evaluateGovernedAction(action: GovernedAction) {
     riskLevel,
     approvalStatus,
     immutableNote: `Governance rule: ${policy.rule_name}. Required role: ${policy.required_role}.`,
-    metadata: { ...action.metadata, policy },
   });
 
-  let approval = null;
-  if (requiresApproval && action.entityId) {
-    const { data, error } = await supabase
-      .from("approvals")
-      .insert({
-        id: newId("approval"),
-        entity_type: `${policy.required_role}_GOVERNANCE_APPROVAL`,
-        entity_id: action.entityId,
-        status: "PENDING",
-        notes: `${action.title} requires ${policy.required_role} approval by governance policy.`,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    approval = data;
+  let approval: ApprovalItem | null = null;
+  if (requiresApproval) {
+    approval = await createApprovalCritical({
+      type: "GENERAL",
+      title: action.title,
+      detail:
+        `إجراء مؤسسي بانتظار الاعتماد · الفئة ${tier.tier} — يعتمدها ${tier.approver}` +
+        (highRisk ? " · مخاطرة عالية (تصعيد إلزامي)" : "") +
+        (action.entityType ? ` · النوع ${action.entityType}` : ""),
+      amount: amount > 0 ? amount : undefined,
+      requestedRole: action.actorRole || "SYSTEM",
+      dedupeKey: action.entityId ? `gov-${action.entityType || "action"}-${action.entityId}` : undefined,
+      metadata: {
+        ...action.metadata,
+        source: "governanceOS",
+        entityType: action.entityType ?? null,
+        entityId: action.entityId ?? null,
+        riskLevel,
+        tier: tier.tier,
+      },
+    });
   }
 
   return {
@@ -238,37 +180,47 @@ export async function evaluateGovernedAction(action: GovernedAction) {
 }
 
 export async function getGovernanceCenter() {
+  await Promise.all([hydrateApprovals(), hydrateAudit()]);
   await seedGovernanceOS();
-  const supabase = requireSupabase();
+  const supabase = getSupabaseAdmin();
   const dashboard = await getDashboardData();
 
-  const [roles, policies, audits, costCenters, integrations] = await Promise.all([
-    supabase.from("governance_roles").select("*").order("approval_limit", { ascending: true }),
-    supabase.from("approval_policies").select("*").order("min_amount", { ascending: true }),
-    supabase.from("decision_audit_log").select("*").order("created_at", { ascending: false }).limit(40),
-    supabase.from("cost_centers").select("*").order("name", { ascending: true }),
-    supabase.from("business_integrations").select("*").order("provider", { ascending: true }),
-  ]);
+  const [costCenterRows, integrationRows] = supabase
+    ? await Promise.all([
+        supabase.from("cost_centers").select("*").order("name", { ascending: true }),
+        supabase.from("business_integrations").select("*").order("provider", { ascending: true }),
+      ])
+    : [null, null];
+  if (costCenterRows?.error) throw costCenterRows.error;
+  if (integrationRows?.error) throw integrationRows.error;
 
-  for (const result of [roles, policies, audits, costCenters, integrations]) {
-    if (result.error) throw result.error;
-  }
-
+  const audits = listAudit({}, 40);
+  const pendingUnified = listApprovals("PENDING");
   const pendingApprovals = (dashboard.approvals || []).filter((item: any) => item.status === "PENDING");
   const blockedActions = (dashboard.actions || []).filter((item: any) => item.approval_status === "PENDING");
+  const integrationData = integrationRows?.data || integrations;
 
   return {
-    roles: roles.data || [],
-    policies: policies.data || [],
-    audits: audits.data || [],
-    costCenters: costCenters.data || [],
-    integrations: integrations.data || [],
+    roles: COMPANY_AGENTS.filter((agent) => agent.rank === "OWNER" || agent.rank === "CEO" || agent.rank === "DEPARTMENT_HEAD").map(
+      (agent) => ({
+        id: agent.id,
+        name: `${agent.name} — ${agent.title}`,
+        description: agent.responsibilities.join("، "),
+        permissions: { rank: agent.rank, department: agent.department },
+        spend_limit: agent.authorityLimitSAR,
+        approval_limit: agent.authorityLimitSAR,
+      })
+    ),
+    policies: AUTHORITY_MATRIX.map(policyFromTier),
+    audits,
+    costCenters: costCenterRows?.data || costCenters,
+    integrations: integrationData,
     controlSummary: {
-      pendingApprovals: pendingApprovals.length,
+      pendingApprovals: pendingUnified.length + pendingApprovals.length,
       blockedActions: blockedActions.length,
-      auditEventsToday: (audits.data || []).filter((item: any) => String(item.created_at).startsWith(todayIso())).length,
-      connectedIntegrations: (integrations.data || []).filter((item: any) => item.status === "CONNECTED").length,
-      readyIntegrations: (integrations.data || []).filter((item: any) => item.status === "READY_FOR_CONNECTION").length,
+      auditEventsToday: audits.filter((item) => String(item.createdAt).startsWith(todayIso())).length,
+      connectedIntegrations: integrationData.filter((item: any) => item.status === "CONNECTED").length,
+      readyIntegrations: integrationData.filter((item: any) => item.status === "READY_FOR_CONNECTION").length,
     },
   };
 }
