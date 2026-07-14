@@ -3,7 +3,7 @@ import { runCfoTradingCycle, sampleOpportunities, type RunCycleInput } from "@/l
 import { defaultRiskLimits } from "@/lib/trading/riskEngine";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
 import type { MarketOpportunity, TradingMode } from "@/lib/trading/types";
-import { createApproval } from "@/lib/approvals";
+import { createApprovalCritical } from "@/lib/approvals";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
 
     // Surface trades that exceed the approval threshold as actionable items in
     // the decision center so a human can approve or reject them.
-    const createdApprovals = result.decisions
+    const createdApprovals = await Promise.all(result.decisions
       .filter((d) => d.action === "NEEDS_APPROVAL")
       .map((d) =>
-        createApproval({
+        createApprovalCritical({
           type: "TRADE",
           title: d.opportunity.title,
           detail: `${d.opportunity.symbol} · ${d.opportunity.assetClass} · عائد متوقع ${(d.opportunity.expectedReturn * 100).toFixed(0)}% · ${d.reason}`,
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
             mode: result.mode,
           },
         })
-      );
+      ));
 
     return NextResponse.json({ ok: true, ...result, createdApprovals });
   } catch (error) {

@@ -7,8 +7,8 @@
  * authoritative accounting repository with an idempotent reference.
  */
 
-import { scheduleLegacyLedgerMirror } from "../accountingRepository";
-import { persist, fetchRows, hydrateOnce } from "../supabase";
+import { scheduleLegacyLedgerMirror, postAccountingEntry, legacyAccountCode } from "../accountingRepository";
+import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv } from "../supabase";
 import { VAT_RATE, splitVatInclusive } from "./zatca";
 
 export type LedgerLine = { account: string; debit: number; credit: number };
@@ -31,33 +31,71 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function postEntry(input: { description: string; reference?: string; lines: LedgerLine[]; date?: string }): LedgerEntry {
+type PostEntryInput = { description: string; reference?: string; lines: LedgerLine[]; date?: string };
+
+function buildEntry(input: PostEntryInput): LedgerEntry {
   const debit = round2(input.lines.reduce((s, l) => s + l.debit, 0));
   const credit = round2(input.lines.reduce((s, l) => s + l.credit, 0));
   if (debit !== credit) {
     throw new Error(`Unbalanced entry: debit ${debit} ≠ credit ${credit}`);
   }
-
-  const entry: LedgerEntry = {
+  return {
     id: genId(),
     date: input.date || new Date().toISOString(),
     description: input.description,
     reference: input.reference,
     lines: input.lines,
   };
-  entries.unshift(entry);
+}
 
-  // Retained as a compatibility event log only. Financial dashboards no longer
-  // read from this table.
-  persist("ledger_entries", {
+function compatRow(entry: LedgerEntry): Record<string, unknown> {
+  return {
     id: entry.id,
     date: entry.date,
     description: entry.description,
     reference: entry.reference ?? null,
     lines: entry.lines,
-  });
+  };
+}
+
+export function postEntry(input: PostEntryInput): LedgerEntry {
+  const entry = buildEntry(input);
+  entries.unshift(entry);
+
+  // Retained as a compatibility event log only. Financial dashboards no longer
+  // read from this table.
+  persist("ledger_entries", compatRow(entry));
   scheduleLegacyLedgerMirror(entry);
 
+  return entry;
+}
+
+/**
+ * Awaited variant for approval-driven money flows: the authoritative journal
+ * entry (transactional RPC) and the compatibility row are both committed
+ * before the entry is accepted, so success is never reported ahead of the
+ * database. Falls back to in-memory-only when Supabase is not configured.
+ */
+export async function postEntryCritical(input: PostEntryInput): Promise<LedgerEntry> {
+  const entry = buildEntry(input);
+
+  if (hasSupabaseEnv()) {
+    await postAccountingEntry({
+      memo: entry.description,
+      source: "legacy-ledger-adapter",
+      reference: `LEGACY-${entry.id}`,
+      entryDate: entry.date,
+      lines: entry.lines.map((line) => ({
+        accountCode: legacyAccountCode(line.account),
+        debit: line.debit,
+        credit: line.credit,
+        memo: line.account,
+      })),
+    });
+    await persistCritical("ledger_entries", compatRow(entry));
+  }
+
+  entries.unshift(entry);
   return entry;
 }
 
@@ -78,18 +116,34 @@ export const hydrateLedger = hydrateOnce(async () => {
   entries.sort((a, b) => b.date.localeCompare(a.date));
 });
 
-/** Recognize a VAT-inclusive sale: debit Cash, credit Sales Revenue + VAT Payable. */
-export function postSale(gross: number, reference: string, description = "مبيعات معتمدة"): LedgerEntry & { net: number; vat: number } {
+function saleLines(gross: number): { net: number; vat: number; lines: LedgerLine[] } {
   const { net, vat } = splitVatInclusive(gross);
-  const entry = postEntry({
-    description,
-    reference,
+  return {
+    net,
+    vat,
     lines: [
       { account: "النقد (Cash)", debit: gross, credit: 0 },
       { account: "إيرادات المبيعات (Sales Revenue)", debit: 0, credit: net },
       { account: "ضريبة القيمة المضافة المستحقة (VAT Payable)", debit: 0, credit: vat },
     ],
-  });
+  };
+}
+
+/** Recognize a VAT-inclusive sale: debit Cash, credit Sales Revenue + VAT Payable. */
+export function postSale(gross: number, reference: string, description = "مبيعات معتمدة"): LedgerEntry & { net: number; vat: number } {
+  const { net, vat, lines } = saleLines(gross);
+  const entry = postEntry({ description, reference, lines });
+  return { ...entry, net, vat };
+}
+
+/** Awaited sale recognition — commits durably before reporting success. */
+export async function postSaleCritical(
+  gross: number,
+  reference: string,
+  description = "مبيعات معتمدة"
+): Promise<LedgerEntry & { net: number; vat: number }> {
+  const { net, vat, lines } = saleLines(gross);
+  const entry = await postEntryCritical({ description, reference, lines });
   return { ...entry, net, vat };
 }
 

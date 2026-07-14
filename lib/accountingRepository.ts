@@ -262,7 +262,7 @@ export async function listAccountingTransactions(limit = 500): Promise<Accountin
   return transactions.sort((left, right) => right.created_at.localeCompare(left.created_at));
 }
 
-function legacyAccountCode(account: string) {
+export function legacyAccountCode(account: string) {
   const value = account.toLowerCase();
   if (value.includes("marketing") || value.includes("تسويق")) return "5100";
   if (value.includes("cost of goods") || value.includes("تكلفة")) return "5000";

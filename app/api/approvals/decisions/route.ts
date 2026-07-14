@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listApprovals, decideApproval, approvalStats, type ApprovalStatus } from "@/lib/approvals";
+import { listApprovals, decideApprovalCritical, approvalStats, type ApprovalStatus } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     const decidedBy = user?.name || String(body.decidedBy || "المالك");
-    const result = decideApproval(id, decision, decidedBy, body.note ? String(body.note) : undefined);
+    const result = await decideApprovalCritical(id, decision, decidedBy, body.note ? String(body.note) : undefined);
     if (!result) {
       return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
     }
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     let execution = null;
     if (decision === "APPROVED") {
       if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
-      else if (result.type === "INCOME") execution = recognizeIncome(result.metadata || {});
+      else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
       else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
       else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
     }

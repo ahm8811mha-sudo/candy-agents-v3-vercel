@@ -8,7 +8,7 @@
  * per process (see hydrateApprovals), so decisions survive serverless restarts.
  */
 
-import { persist, fetchRows, hydrateOnce } from "./supabase";
+import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv } from "./supabase";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
@@ -93,7 +93,7 @@ export type CreateApprovalInput = {
   id?: string;
 };
 
-export function createApproval(input: CreateApprovalInput): ApprovalItem {
+function findExistingApproval(input: CreateApprovalInput): ApprovalItem | null {
   if (input.dedupeKey) {
     const existing = store.find(
       (a) => a.status === "PENDING" && a.metadata?.dedupeKey === input.dedupeKey
@@ -105,8 +105,11 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     const existing = store.find((a) => a.id === input.id);
     if (existing) return existing;
   }
+  return null;
+}
 
-  const item: ApprovalItem = {
+function buildApproval(input: CreateApprovalInput): ApprovalItem {
+  return {
     id: input.id || genId(),
     type: input.type,
     title: input.title,
@@ -117,8 +120,31 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     createdAt: new Date().toISOString(),
     metadata: { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) },
   };
+}
+
+export function createApproval(input: CreateApprovalInput): ApprovalItem {
+  const existing = findExistingApproval(input);
+  if (existing) return existing;
+
+  const item = buildApproval(input);
   store.unshift(item);
   persist("company_approvals", toRow(item));
+  emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
+  return item;
+}
+
+/**
+ * Awaited variant for API flows: the durable row is committed before the item
+ * is accepted into the store, so success is never reported ahead of persistence.
+ * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
+ */
+export async function createApprovalCritical(input: CreateApprovalInput): Promise<ApprovalItem> {
+  const existing = findExistingApproval(input);
+  if (existing) return existing;
+
+  const item = buildApproval(input);
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(item));
+  store.unshift(item);
   emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
   return item;
 }
@@ -142,6 +168,34 @@ export function decideApproval(
   item.decidedBy = decidedBy;
   if (note) item.note = note;
   persist("company_approvals", toRow(item));
+  emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
+  return item;
+}
+
+/**
+ * Awaited variant for API flows: the decision is committed durably before the
+ * in-memory item flips, so a sign-off can never be reported and then lost.
+ * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
+ */
+export async function decideApprovalCritical(
+  id: string,
+  decision: "APPROVED" | "REJECTED",
+  decidedBy = "CEO",
+  note?: string
+): Promise<ApprovalItem | null> {
+  const item = store.find((a) => a.id === id);
+  if (!item) return null;
+  if (item.status !== "PENDING") return item;
+
+  const decided: ApprovalItem = {
+    ...item,
+    status: decision,
+    decidedAt: new Date().toISOString(),
+    decidedBy,
+    ...(note ? { note } : {}),
+  };
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(decided));
+  Object.assign(item, decided);
   emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
   return item;
 }

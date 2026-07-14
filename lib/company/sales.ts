@@ -22,9 +22,9 @@ import {
   deleteShopifyProduct,
   setShopifyProductStatus,
 } from "../shopify";
-import { createApproval } from "../approvals";
+import { createApproval, createApprovalCritical } from "../approvals";
 import { requiredTier } from "./governance";
-import { postSale } from "./ledger";
+import { postSaleCritical } from "./ledger";
 import { buildInvoice } from "./zatca";
 import { recordAudit } from "./audit";
 import { persist, fetchRows, hydrateOnce } from "../supabase";
@@ -157,7 +157,7 @@ export async function proposeIncomeRecognition(): Promise<ProposeResult> {
   const orderIds = pending.map((o) => o.id);
   const currency = snap.summary.currency;
   const tier = requiredTier(amount);
-  const approval = createApproval({
+  const approval = await createApprovalCritical({
     type: "INCOME",
     title: `اعتماد مداخيل المبيعات (${pending.length} طلب)`,
     detail: `إجمالي ${amount.toLocaleString("ar-SA")} ${currency} من طلبات مدفوعة على «${snap.shopName}» — يعتمدها ${tier.approver} (فئة ${tier.tier}).`,
@@ -171,16 +171,22 @@ export async function proposeIncomeRecognition(): Promise<ProposeResult> {
 
 export type ExecResult = { executed: boolean; simulated?: boolean; reason: string };
 
-/** Called on approval of an INCOME item — posts it to the company ledger. */
-export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
+/** Called on approval of an INCOME item — posts it to the company ledger.
+ * The journal entry is committed durably (awaited RPC) before income is
+ * recorded, so an approved amount can never be reported and then lost. */
+export async function recognizeIncome(metadata: Record<string, unknown>): Promise<ExecResult> {
   const orderIds = Array.isArray(metadata.orderIds) ? (metadata.orderIds as string[]) : [];
   const amount = Number(metadata.amount) || 0;
   const currency = String(metadata.currency || "SAR");
   if (amount <= 0) return { executed: false, reason: "لا مبلغ صالح للاعتماد." };
 
-  for (const id of orderIds) recognizedOrders.add(id);
   const entryId = genId("inc");
   const recognizedAt = new Date().toISOString();
+
+  // Post the balanced double-entry (net + VAT) first — awaited and durable.
+  const sale = await postSaleCritical(amount, entryId, `مداخيل مبيعات معتمدة (${orderIds.length} طلب)`);
+
+  for (const id of orderIds) recognizedOrders.add(id);
   incomeLedger.unshift({
     id: entryId,
     amount,
@@ -198,9 +204,6 @@ export function recognizeIncome(metadata: Record<string, unknown>): ExecResult {
     note: "مداخيل مبيعات معتمدة ومسجّلة في دفتر الشركة",
     recognized_at: recognizedAt,
   });
-
-  // Post a balanced double-entry (net + VAT) and issue a ZATCA invoice.
-  const sale = postSale(amount, entryId, `مداخيل مبيعات معتمدة (${orderIds.length} طلب)`);
   const invoice = buildInvoice({ gross: amount, currency, reference: entryId });
   emitWebhook("income.recognized", { id: entryId, amount, currency, net: sale.net, vat: sale.vat, invoice: invoice.invoiceNumber });
   recordAudit({
