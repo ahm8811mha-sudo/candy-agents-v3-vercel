@@ -61,6 +61,8 @@ GOOGLE_CLIENT_SECRET=...
 GOOGLE_REFRESH_TOKEN=...
 ```
 
+يوصى بضبط `GOOGLE_INTEGRATIONS_ENABLED=true` صراحةً بعد الاختبار. وللتوافق مع عمليات الربط السابقة، إذا كان المتغير غير موجود وكانت بيانات OAuth الثلاث مكتملة فسيُفعّل الربط تلقائيًا؛ أما القيمة الصريحة `false` فتبقى مفتاح إيقاف طارئ وتتقدم على وجود بيانات OAuth.
+
 اختيارية:
 
 ```env
@@ -111,5 +113,5 @@ GOOGLE_DRIVE_FOLDER_ID=
 - لا تستخدم Service Account لإرسال Gmail شخصي؛ هذا المسار مبني على OAuth Refresh Token للحساب المصرح.
 - لا تضع Refresh Token في `NEXT_PUBLIC_*`.
 - لا تعرض قيمة أي سر عبر API أو واجهة المستخدم.
-- اترك `GOOGLE_INTEGRATIONS_ENABLED=false` إلى أن تنتهي من إعداد الحساب واختباره.
+- اترك `GOOGLE_INTEGRATIONS_ENABLED=false` إلى أن تنتهي من إعداد الحساب واختباره، ثم غيّرها إلى `true`.
 - إرسال البريد الفعلي يستخدم `EMAIL_SEND` فقط، بينما `SALES_OUTREACH` ينشئ مسودة آمنة للمراجعة.

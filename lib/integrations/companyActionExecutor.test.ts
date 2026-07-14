@@ -37,11 +37,15 @@ describe("company action integration plans", () => {
 });
 
 describe("Google Workspace readiness", () => {
-  it("requires the kill switch and OAuth credentials", () => {
+  it("requires OAuth credentials when no feature flag is set", () => {
     const status = getGoogleWorkspaceStatus();
     expect(status.enabled).toBe(false);
     expect(status.capabilities.gmail).toBe(false);
-    expect(status.missingEnvironmentVariables).toContain("GOOGLE_INTEGRATIONS_ENABLED");
+    expect(status.missingEnvironmentVariables).toEqual([
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "GOOGLE_REFRESH_TOKEN",
+    ]);
   });
 
   it("reports all capabilities ready after configuration", () => {
@@ -52,6 +56,26 @@ describe("Google Workspace readiness", () => {
     const status = getGoogleWorkspaceStatus();
     expect(status.capabilities).toEqual({ gmail: true, sheets: true, drive: true });
     expect(status.missingEnvironmentVariables).toEqual([]);
+  });
+
+  it("activates a fully linked OAuth account when the legacy flag is omitted", () => {
+    process.env.GOOGLE_CLIENT_ID = "client";
+    process.env.GOOGLE_CLIENT_SECRET = "secret";
+    process.env.GOOGLE_REFRESH_TOKEN = "refresh";
+    const status = getGoogleWorkspaceStatus();
+    expect(status.enabled).toBe(true);
+    expect(status.capabilities).toEqual({ gmail: true, sheets: true, drive: true });
+  });
+
+  it("keeps the explicit false flag as an emergency kill switch", () => {
+    process.env.GOOGLE_INTEGRATIONS_ENABLED = "false";
+    process.env.GOOGLE_CLIENT_ID = "client";
+    process.env.GOOGLE_CLIENT_SECRET = "secret";
+    process.env.GOOGLE_REFRESH_TOKEN = "refresh";
+    const status = getGoogleWorkspaceStatus();
+    expect(status.enabled).toBe(false);
+    expect(status.disabledByFlag).toBe(true);
+    expect(status.missingEnvironmentVariables).toEqual(["GOOGLE_INTEGRATIONS_ENABLED"]);
   });
 });
 

@@ -128,7 +128,8 @@ Important security rule:
 - Keep `AUTH_ENABLED=true` in production.
 - `/api/health` exposes production readiness checks. Production should not be considered ready unless `productionReady=true`.
 - Google OAuth secrets and refresh tokens must remain server-only and must never use a `NEXT_PUBLIC_*` name.
-- Keep `GOOGLE_INTEGRATIONS_ENABLED=false` until OAuth is configured and tested.
+- Keep `GOOGLE_INTEGRATIONS_ENABLED=false` until OAuth is configured and tested, then set it to `true`.
+- For existing linked deployments where the flag is absent, complete OAuth credentials activate the connector automatically; an explicit `false` always remains a hard kill switch.
 
 Without Supabase, the app still runs in memory/demo mode. That is acceptable for development only. Production needs Supabase persistence.
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { isVercelConfigured, getMonitoringSnapshot } from "../lib/vercelMonitor";
+import { isVercelConfigured, isVercelRuntime, getMonitoringSnapshot } from "../lib/vercelMonitor";
 
 describe("vercelMonitor", () => {
   const original = { ...process.env };
@@ -7,6 +7,8 @@ describe("vercelMonitor", () => {
   beforeEach(() => {
     delete process.env.VERCEL_API_TOKEN;
     delete process.env.VERCEL_PROJECT_ID;
+    delete process.env.VERCEL;
+    delete process.env.VERCEL_ENV;
   });
 
   afterEach(() => {
@@ -21,6 +23,13 @@ describe("vercelMonitor", () => {
     process.env.VERCEL_API_TOKEN = "token";
     process.env.VERCEL_PROJECT_ID = "prj_123";
     expect(isVercelConfigured()).toBe(true);
+  });
+
+  it("detects the current Vercel runtime without requiring an API token", () => {
+    process.env.VERCEL = "1";
+    process.env.VERCEL_ENV = "preview";
+    expect(isVercelRuntime()).toBe(true);
+    expect(isVercelConfigured()).toBe(false);
   });
 
   it("returns mock snapshot when not configured", async () => {

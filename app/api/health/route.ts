@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import { getEnabledIntegrations } from "@/lib/integrations";
 import { isShopifyConfigured } from "@/lib/shopify";
-import { isVercelConfigured } from "@/lib/vercelMonitor";
+import { isVercelConfigured, isVercelRuntime } from "@/lib/vercelMonitor";
 import { isAlpacaConfigured, alpacaMode } from "@/lib/trading/brokers/alpaca";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
 import type { ProductionReadiness } from "@/lib/company/productionReadiness";
@@ -15,6 +15,9 @@ function passed(readiness: ProductionReadiness, id: string) {
 export async function GET() {
   const integrations = getEnabledIntegrations();
   const readiness = await getEvidenceAwareProductionReadiness();
+  const vercelEnvironment = process.env.VERCEL_ENV || null;
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || null;
+  const durableDatabase = passed(readiness, "supabase-service-role") && passed(readiness, "core-schema-ready");
 
   return NextResponse.json({
     ok: true,
@@ -28,8 +31,15 @@ export async function GET() {
     accessMode: readiness.accessMode,
     productionReady: readiness.okForProduction,
     readiness,
+    deployment: {
+      platform: isVercelRuntime() ? "vercel" : "local",
+      environment: vercelEnvironment || readiness.mode,
+      isPreview: vercelEnvironment === "preview",
+      productionUrl: productionHost ? `https://${productionHost}` : null,
+      detailedMonitoring: isVercelConfigured(),
+    },
     checks: {
-      supabase: hasSupabaseEnv(),
+      supabase: hasSupabaseEnv() && durableDatabase,
       googleSheets: Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID),
       ai: Boolean(process.env.OPENAI_API_KEY),
       accessGate: passed(readiness, "access-gate"),
@@ -45,7 +55,7 @@ export async function GET() {
       browserE2E: passed(readiness, "browser-e2e"),
       backupRestore: passed(readiness, "backup-restore"),
       shopify: isShopifyConfigured(),
-      vercelMonitoring: isVercelConfigured(),
+      vercelMonitoring: isVercelRuntime() || isVercelConfigured(),
       alpaca: isAlpacaConfigured(),
       alpacaMode: alpacaMode(),
       liveTradingEnabled: isLiveTradingEnabled(),
