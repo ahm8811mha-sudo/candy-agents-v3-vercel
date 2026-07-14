@@ -50,3 +50,24 @@ describe("checkRateLimit", () => {
     expect(allowed.allowed).toBe(true);
   });
 });
+
+describe("checkRateLimitShared", () => {
+  it("falls back to the per-instance window when Upstash is not configured", async () => {
+    const { checkRateLimitShared } = await import("../lib/rateLimit");
+    const id = `shared-${Date.now()}`;
+    const config = { windowMs: 60_000, maxRequests: 2 };
+
+    const first = await checkRateLimitShared(id, config);
+    expect(first.allowed).toBe(true);
+    expect(first.scope).toBe("instance");
+
+    await checkRateLimitShared(id, config);
+    const third = await checkRateLimitShared(id, config);
+    expect(third.allowed).toBe(false);
+  });
+
+  it("reports shared configuration state", async () => {
+    const { isSharedRateLimitConfigured } = await import("../lib/rateLimit");
+    expect(isSharedRateLimitConfigured()).toBe(Boolean(process.env.UPSTASH_REDIS_REST_URL));
+  });
+});
