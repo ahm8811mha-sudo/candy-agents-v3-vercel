@@ -4,10 +4,9 @@
  * SIMULATION (paper) is the default and only fully-implemented path: it creates
  * positions against virtual cash, applying the computed stop-loss.
  *
- * LIVE execution is intentionally NOT wired to any brokerage. Placing real
- * orders requires the operator to supply a broker adapter and explicitly enable
- * live mode. Until then, any live request transparently degrades to simulation
- * and is flagged in the cycle notes. This is a deliberate safety control.
+ * The cycle itself computes positions and approval requests; approved tradable
+ * orders are routed later through the Alpaca adapter. LIVE therefore requires
+ * the same complete opt-in used by the broker adapter.
  */
 
 import type {
@@ -17,16 +16,14 @@ import type {
   TradingMode,
 } from "./types";
 import { computeStopLoss } from "./riskEngine";
+import { isAlpacaLiveEnabled } from "./brokers/alpaca";
 
 /**
- * Live trading is enabled only when BOTH an explicit opt-in flag is set AND a
- * broker adapter is configured. We ship no adapter, so this returns false by
- * default — real money is never at risk without deliberate operator action.
+ * Live trading is enabled only after credentials and all explicit opt-in gates
+ * are present. Paper remains the immutable default.
  */
 export function isLiveTradingEnabled(): boolean {
-  const optIn = process.env.TRADING_LIVE_ENABLED === "true";
-  const hasBroker = Boolean(process.env.BROKER_API_KEY && process.env.BROKER_API_SECRET);
-  return optIn && hasBroker;
+  return isAlpacaLiveEnabled();
 }
 
 /** Resolve the effective mode, downgrading LIVE to SIMULATION when not enabled. */

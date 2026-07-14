@@ -4,6 +4,7 @@ import { defaultRiskLimits } from "@/lib/trading/riskEngine";
 import { isLiveTradingEnabled } from "@/lib/trading/executionEngine";
 import type { MarketOpportunity, TradingMode } from "@/lib/trading/types";
 import { createApprovalCritical } from "@/lib/approvals";
+import { getAlpacaReadiness } from "@/lib/trading/brokers/alpaca";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     liveEnabled: isLiveTradingEnabled(),
+    broker: getAlpacaReadiness(),
     budget,
     limits: defaultRiskLimits(budget),
     opportunities: sampleOpportunities(),

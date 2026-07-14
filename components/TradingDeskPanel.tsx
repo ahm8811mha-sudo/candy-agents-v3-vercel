@@ -31,6 +31,14 @@ type CycleResult = {
   notes: string[];
 };
 
+type BrokerReadiness = {
+  configured: boolean;
+  mode: "paper" | "live";
+  liveRequested: boolean;
+  liveEnabled: boolean;
+  missingEnvironmentVariables: string[];
+};
+
 const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const actionPill: Record<string, string> = {
@@ -55,27 +63,33 @@ const classLabel: Record<string, string> = {
 
 export default function TradingDeskPanel() {
   const [liveEnabled, setLiveEnabled] = useState(false);
+  const [broker, setBroker] = useState<BrokerReadiness | null>(null);
   const [budget, setBudget] = useState(100000);
   const [result, setResult] = useState<CycleResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch("/api/trading");
+        const res = await fetch("/api/trading", { signal: controller.signal });
         const json = await res.json();
         if (json.ok) {
           setLiveEnabled(json.liveEnabled);
+          setBroker(json.broker);
           setBudget(json.budget);
         }
       } catch {
-        // silent
+        if (!controller.signal.aborted) setError("تعذّر قراءة جاهزية مكتب التداول.");
       }
     })();
+    return () => controller.abort();
   }, []);
 
   async function runCycle(mode: "SIMULATION" | "LIVE") {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/trading", {
         method: "POST",
@@ -83,39 +97,46 @@ export default function TradingDeskPanel() {
         body: JSON.stringify({ budget, mode }),
       });
       const json = await res.json();
-      if (json.ok) {
-        setResult(json);
-        // Notify the approval center so newly-gated trades appear immediately.
-        if (json.approvalsRequired > 0) {
-          window.dispatchEvent(new Event("approvals-updated"));
-        }
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذّر تشغيل دورة التداول.");
+      setResult(json);
+      // Notify the approval center so newly-gated trades appear immediately.
+      if (json.approvalsRequired > 0) {
+        window.dispatchEvent(new Event("approvals-updated"));
       }
-    } catch {
-      // silent
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذّر تشغيل دورة التداول.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
-      <div className="delivery-header">
+    <div className="delivery-panel fade-in trading-desk-panel" style={{ display: "grid", gap: 16 }}>
+      <div className="delivery-header trading-panel-header">
         <div>
           <span className="eyebrow"><CircleDollarSign size={16} /> مكتب التداول — تحت إدارة CFO</span>
           <h2>التداول الآلي على الفرص</h2>
         </div>
-        <span className={`status-pill ${liveEnabled ? "running" : "done"}`}>
-          {liveEnabled ? <Activity size={14} /> : <ShieldAlert size={14} />}
-          {liveEnabled ? "التنفيذ الحقيقي مُفعّل" : "وضع المحاكاة (آمن)"}
-        </span>
+        <div className="trading-header-actions">
+          <span className={`status-pill ${broker?.configured ? "done" : ""}`}>
+            {broker?.configured ? <Activity size={14} /> : <ShieldAlert size={14} />}
+            {broker?.configured ? (broker.mode === "live" ? "Alpaca Live" : "Alpaca Paper جاهز") : "الوسيط غير مربوط"}
+          </span>
+          <span className={`status-pill ${liveEnabled ? "running" : "done"}`}>
+            {liveEnabled ? "الحقيقي مُفعّل" : "المحاكاة آمنة"}
+          </span>
+        </div>
       </div>
 
       {!liveEnabled && (
         <p className="notice" style={{ color: "var(--muted)" }}>
-          التنفيذ الحقيقي معطّل افتراضياً. يتطلب تفعيله <code>TRADING_LIVE_ENABLED=true</code> ومفاتيح وسيط
-          (<code>BROKER_API_KEY</code> و <code>BROKER_API_SECRET</code>) — ضابط أمان متعمّد.
+          التنفيذ الحقيقي معطّل افتراضياً. لا يُفتح إلا بوجود مفاتيح Alpaca Live وتفعيل
+          <code> ALPACA_LIVE=true</code> و <code>TRADING_LIVE_ENABLED=true</code> وإقرار
+          <code> TRADING_LIVE_ACK=I_UNDERSTAND_REAL_MONEY</code>.
         </p>
       )}
+
+      {error && <p className="notice error">{error}</p>}
 
       <div className="request-form" style={{ background: "rgba(255,255,255,0.035)" }}>
         <label>
@@ -137,8 +158,8 @@ export default function TradingDeskPanel() {
           <button
             className="secondary-btn"
             onClick={() => runCycle("LIVE")}
-            disabled={loading}
-            title={liveEnabled ? "تنفيذ حقيقي" : "سيُحوَّل للمحاكاة لأن التنفيذ الحقيقي غير مُفعّل"}
+            disabled={loading || !liveEnabled}
+            title={liveEnabled ? "تنفيذ حقيقي" : "غير متاح حتى تكتمل بوابات التداول الحقيقي"}
           >
             <TrendingUp size={16} /> طلب تنفيذ حقيقي
           </button>

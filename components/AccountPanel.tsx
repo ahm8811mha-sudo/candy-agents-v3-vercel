@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Wallet, Loader2, ArrowDownToLine, ArrowUpFromLine, Info } from "lucide-react";
+import { Wallet, Loader2, ArrowDownToLine, ArrowUpFromLine, Info, ExternalLink, CheckCircle2, CircleDashed, ShieldCheck } from "lucide-react";
 
 type Account = {
   mode: "paper" | "live";
@@ -9,12 +9,20 @@ type Account = {
   cash: number;
   buyingPower: number;
   status: string;
+  tradingBlocked: boolean;
+  accountBlocked: boolean;
 };
 
 type Response = {
   ok: boolean;
   configured: boolean;
-  mode?: string;
+  mode: "paper" | "live";
+  liveRequested?: boolean;
+  liveEnabled?: boolean;
+  missingEnvironmentVariables?: string[];
+  symbol?: string;
+  feed?: string;
+  deployment?: { environment: string; isPreview: boolean; productionUrl?: string | null };
   account?: Account;
   error?: string;
 };
@@ -25,39 +33,47 @@ export default function AccountPanel() {
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  async function load(signal?: AbortSignal) {
     setLoading(true);
     try {
-      const res = await fetch("/api/trading/account", { cache: "no-store" });
-      setData(await res.json());
+      const res = await fetch("/api/trading/account", { cache: "no-store", signal });
+      const json = await res.json();
+      setData(json);
     } catch {
-      // silent
+      if (signal?.aborted) return;
+      setData({ ok: false, configured: false, mode: "paper", error: "تعذّر الاتصال بخدمة مركز التداول." });
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const isLive = data?.account?.mode === "live";
+  const connected = Boolean(data?.configured && data.account && !data.error);
 
   return (
-    <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
-      <div className="delivery-header">
+    <div className="delivery-panel fade-in trading-account-panel" style={{ display: "grid", gap: 16 }}>
+      <div className="delivery-header trading-panel-header">
         <div>
           <span className="eyebrow"><Wallet size={16} /> حساب التداول</span>
-          <h2>الرصيد والإيرادات</h2>
+          <h2>الرصيد وحالة الوسيط</h2>
         </div>
-        {data?.configured && data.account && (
-          <span className={`status-pill ${isLive ? "running" : "done"}`}>
-            {isLive ? "حساب حقيقي (Live)" : "حساب ورقي (Paper)"}
-          </span>
-        )}
-        <button className="secondary-btn" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={16} /> : "تحديث"}
-        </button>
+        <div className="trading-header-actions">
+          {data && (
+            <span className={`status-pill ${connected ? "done" : ""}`}>
+              {connected ? <CheckCircle2 size={14} /> : <CircleDashed size={14} />}
+              {connected ? (isLive ? "حقيقي Live" : "ورقي Paper") : "بانتظار الربط"}
+            </span>
+          )}
+          <button className="secondary-btn" onClick={() => load()} disabled={loading}>
+            {loading ? <Loader2 className="spin" size={16} /> : "تحديث"}
+          </button>
+        </div>
       </div>
 
       {loading && !data && (
@@ -67,10 +83,36 @@ export default function AccountPanel() {
       )}
 
       {data && !data.configured && (
-        <div className="empty-state" style={{ minHeight: 120 }}>
-          <Wallet size={26} />
-          <strong>Alpaca غير مُهيّأ</strong>
-          <span>أضف <code>ALPACA_API_KEY</code> و <code>ALPACA_API_SECRET</code> في Vercel ثم أعد النشر لعرض رصيد حسابك.</span>
+        <div className="trading-setup-card">
+          <div className="trading-setup-card__title">
+            <ShieldCheck size={24} />
+            <div>
+              <strong>تهيئة Alpaca Paper مطلوبة</strong>
+              <span>الربط الورقي يستخدم أموالاً افتراضية وبيانات IEX، ولا يسمح بإيداع أو سحب حقيقي.</span>
+            </div>
+          </div>
+          {data.deployment?.isPreview && (
+            <p className="notice integration-notice warning">
+              هذه نسخة Preview معزولة وقد لا تحتوي مفاتيح Production.
+              {data.deployment.productionUrl && <> <a href={data.deployment.productionUrl}>افتح نسخة الإنتاج</a>.</>}
+            </p>
+          )}
+          <ol className="trading-setup-steps">
+            <li><b>1</b><span>أنشئ حساب Paper وولّد مفاتيحه من لوحة Alpaca.</span></li>
+            <li><b>2</b><span>أضف المتغيرين في Vercel: <code>ALPACA_API_KEY</code> و <code>ALPACA_API_SECRET</code>.</span></li>
+            <li><b>3</b><span>اترك <code>ALPACA_LIVE=false</code> ثم أعد النشر واضغط تحديث.</span></li>
+          </ol>
+          <div className="inbox-item__actions">
+            <a className="primary-btn btn-sm" href="https://app.alpaca.markets/" target="_blank" rel="noreferrer">
+              فتح Alpaca Paper <ExternalLink size={14} />
+            </a>
+            <a className="secondary-btn btn-sm" href="https://vercel.com/dashboard" target="_blank" rel="noreferrer">
+              متغيرات Vercel <ExternalLink size={14} />
+            </a>
+          </div>
+          {data.missingEnvironmentVariables?.length ? (
+            <small className="trading-missing">الناقص: {data.missingEnvironmentVariables.join("، ")}</small>
+          ) : null}
         </div>
       )}
 
@@ -94,9 +136,12 @@ export default function AccountPanel() {
           </div>
 
           {!isLive && (
-            <p className="notice" style={{ color: "var(--amber)" }}>
+            <p className="notice integration-notice" style={{ color: "var(--amber)" }}>
               <Info size={14} /> هذا حساب <b>ورقي</b> — الأرقام افتراضية ولا تمثّل أموالاً حقيقية. لا إيداع/سحب حقيقي.
             </p>
+          )}
+          {(data.account.tradingBlocked || data.account.accountBlocked) && (
+            <p className="notice error">الحساب متصل لكن Alpaca يمنع التداول حالياً. راجع حالة الحساب من لوحة الوسيط.</p>
           )}
         </>
       )}
@@ -113,7 +158,7 @@ export default function AccountPanel() {
               <b style={{ color: "var(--text)" }}>الإيداع</b>
               <br />
               <small style={{ color: "var(--muted)" }}>
-                يتم من لوحة الوسيط المرخّص (Alpaca/وسيط سعودي) — تحويل بنكي إلى حساب الوساطة. التطبيق يعرض الرصيد فقط ولا يحرّك أموالاً.
+                {isLive ? "يتم من لوحة الوسيط المرخّص فقط. التطبيق يعرض الرصيد ولا يحرّك الأموال." : "غير متاح في Paper؛ الرصيد افتراضي ويُدار من لوحة Alpaca التجريبية."}
               </small>
             </span>
             <ArrowDownToLine size={16} style={{ color: "var(--green)" }} />
@@ -123,7 +168,7 @@ export default function AccountPanel() {
               <b style={{ color: "var(--text)" }}>السحب</b>
               <br />
               <small style={{ color: "var(--muted)" }}>
-                يُطلب من لوحة الوسيط ويُحوَّل لحساب المؤسسة البنكي. يتطلب حساب Live مموّلاً (غير متاح على Paper).
+                {isLive ? "يُطلب من لوحة الوسيط فقط ويُحوّل إلى الحساب البنكي المسجل." : "غير متاح في Paper ولا توجد أموال حقيقية قابلة للسحب."}
               </small>
             </span>
             <ArrowUpFromLine size={16} style={{ color: "var(--amber)" }} />
