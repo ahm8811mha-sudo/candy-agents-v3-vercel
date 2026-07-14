@@ -64,6 +64,29 @@ export function requiredTier(amountSAR: number): TierRule {
   return AUTHORITY_MATRIX.find((r) => amountSAR <= r.maxSAR)!;
 }
 
+/**
+ * The effective approval tier combines financial exposure with operational
+ * risk. HIGH/CRITICAL actions can never remain in the self-execution or CEO
+ * tiers: they require the owner (T2) even when the amount is small.
+ */
+export function effectiveTier(amountSAR: number, riskLevel?: string): TierRule {
+  const financialTier = requiredTier(amountSAR);
+  const normalizedRisk = String(riskLevel || "LOW").toUpperCase();
+  if (!["HIGH", "CRITICAL"].includes(normalizedRisk)) return financialTier;
+  const ownerTier = AUTHORITY_MATRIX.find((rule) => rule.tier === "T2")!;
+  return ["T0", "T1"].includes(financialTier.tier) ? ownerTier : financialTier;
+}
+
+/** Resolve the persisted tier used by the sign-off API. */
+export function approvalTierForDecision(
+  amountSAR: number | undefined,
+  metadata?: Record<string, unknown>
+): ApprovalTier {
+  const persisted = String(metadata?.governanceTier || metadata?.tier || "");
+  if (["T0", "T1", "T2", "T3"].includes(persisted)) return persisted as ApprovalTier;
+  return amountSAR ? requiredTier(amountSAR).tier : "T1";
+}
+
 /** May this agent spend this amount without escalation? (T0 gate) */
 export function canSelfApprove(agentId: string, amountSAR: number): boolean {
   const agent = getAgent(agentId);

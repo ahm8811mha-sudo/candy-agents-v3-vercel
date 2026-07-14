@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 type OrvantaLogoProps = {
   /** Full-logo width, or square mark size when showWordmark=false. */
   size?: number;
@@ -40,14 +42,13 @@ export default function OrvantaLogo({
       role="img"
       aria-label={subtitle ? `Orvanta — ${subtitle}` : "Orvanta"}
     >
-      <img
+      <Image
         className="orvanta-logo-image"
         src="/orvanta-logo.svg"
         alt=""
         width={740}
         height={453}
-        decoding="async"
-        loading={priority ? "eager" : "lazy"}
+        priority={priority}
       />
       {subtitle ? <small className="orvanta-logo-subtitle">{subtitle}</small> : null}
     </span>

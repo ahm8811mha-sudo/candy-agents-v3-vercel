@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { recordAudit, listAudit, auditStats, _clearAudit } from "../lib/company/audit";
 import { canApproveTier, canSignOff, minRoleForTier } from "../lib/company/access";
+import { approvalTierForDecision, effectiveTier } from "../lib/company/governance";
 
 describe("audit trail (F1)", () => {
   beforeEach(() => _clearAudit());
@@ -37,6 +38,13 @@ describe("authority enforcement (F2)", () => {
     expect(minRoleForTier("T1")).toBe("CEO");
     expect(minRoleForTier("T2")).toBe("ADMIN");
     expect(minRoleForTier("T3")).toBe("ADMIN");
+  });
+
+  it("persists owner escalation when a high-risk amount alone would be T0", () => {
+    expect(effectiveTier(500, "LOW").tier).toBe("T0");
+    const tier = effectiveTier(500, "HIGH").tier;
+    expect(tier).toBe("T2");
+    expect(approvalTierForDecision(500, { governanceTier: tier })).toBe("T2");
   });
 
   it("role check respects the hierarchy", () => {

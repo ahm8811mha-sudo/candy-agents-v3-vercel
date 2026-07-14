@@ -1,4 +1,5 @@
 import type { Financials } from "./accountingSystem";
+import { effectiveTier } from "./company/governance";
 
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
@@ -279,16 +280,24 @@ export function evaluateBusiness(request: string, financials: Financials): Busin
 }
 
 function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number): ApprovalPolicy {
-  if (riskLevel === "HIGH" || profit < 0) {
+  const elevatedRisk = riskLevel === "HIGH" || profit < 0;
+  const tier = effectiveTier(Math.max(budget, 1), elevatedRisk ? "HIGH" : riskLevel);
+
+  if (tier.tier === "T2" || tier.tier === "T3") {
     return {
       budget,
-      gate: "RISK",
-      requiredRole: "RISK_AGENT",
-      reason: "المخاطر المالية مرتفعة، ويجب مراجعة القرار قبل التنفيذ.",
+      gate: "OWNER",
+      requiredRole: "OWNER",
+      reason:
+        tier.tier === "T3"
+          ? "القرار ضمن T3 ويتطلب اعتماد المالك ودراسة جدوى ثلاثية قبل التنفيذ."
+          : elevatedRisk
+            ? "المخاطر المالية مرتفعة، لذلك صُعّد القرار إلى T2 واعتماد المالك."
+            : "الميزانية ضمن T2 وتحتاج اعتماد المالك قبل التنفيذ.",
     };
   }
 
-  if (budget <= 0 || budget <= 5000) {
+  if (budget <= 0 || tier.tier === "T0") {
     return {
       budget,
       gate: "AUTO",
@@ -297,7 +306,7 @@ function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number)
     };
   }
 
-  if (budget <= 25000) {
+  if (tier.tier === "T1") {
     return {
       budget,
       gate: "CEO",
@@ -306,12 +315,7 @@ function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number)
     };
   }
 
-  return {
-    budget,
-    gate: "OWNER",
-    requiredRole: "OWNER",
-    reason: "الميزانية تتجاوز صلاحية التشغيل الذاتي وتحتاج اعتماد المالك وربط التنفيذ بمراجعة جدوى.",
-  };
+  throw new Error(`Unsupported authority tier: ${tier.tier}`);
 }
 
 function chooseActionToday(profit: number, expenseRatio: number, budget: number, gate: ApprovalPolicy["gate"]) {

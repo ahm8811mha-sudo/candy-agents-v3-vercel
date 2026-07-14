@@ -59,7 +59,28 @@ describe("governanceOS facade (unified decision center)", () => {
 
     expect(result.allowedToExecute).toBe(false);
     expect(result.requiresApproval).toBe(true);
+    expect(result.policy.tier).toBe("T2");
+    expect(result.requiredRole).toBe("المالك");
+    expect(result.approval?.metadata?.governanceTier).toBe("T2");
     expect(listApprovals("PENDING")).toHaveLength(1);
+  });
+
+  it("CRITICAL risk also escalates to the owner tier", async () => {
+    const result = await evaluateGovernedAction({
+      title: "Critical access change",
+      entityType: "ops",
+      entityId: "ops-critical",
+      amount: 100,
+      riskLevel: "CRITICAL",
+    });
+    expect(result.policy.tier).toBe("T2");
+    expect(result.approval?.requestedRole).toBe("المالك");
+  });
+
+  it("rejects unlinked actions that would create orphan approvals", async () => {
+    await expect(
+      evaluateGovernedAction({ title: "Orphan spend", amount: 20_000, riskLevel: "LOW" })
+    ).rejects.toThrow(/مرتبطاً بنوع ومعرّف/);
   });
 
   it("uses the authoritative tier matrix (no parallel 1,500 SAR rulebook)", async () => {

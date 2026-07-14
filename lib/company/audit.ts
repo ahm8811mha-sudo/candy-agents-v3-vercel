@@ -8,7 +8,7 @@
  * in-memory ring, consistent with the rest of the company modules.
  */
 
-import { persist, fetchRows, hydrateOnce } from "../supabase";
+import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv } from "../supabase";
 
 export type AuditEntry = {
   id: string;
@@ -19,6 +19,7 @@ export type AuditEntry = {
   entityId: string;
   detail: string;
   tier?: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 };
 
@@ -30,6 +31,8 @@ function genId() {
 }
 
 export type RecordAuditInput = {
+  /** Optional stable id for retry-safe sign-off events. */
+  id?: string;
   actor: string;
   role?: string;
   action: string;
@@ -37,11 +40,12 @@ export type RecordAuditInput = {
   entityId: string;
   detail: string;
   tier?: string;
+  metadata?: Record<string, unknown>;
 };
 
-export function recordAudit(input: RecordAuditInput): AuditEntry {
-  const entry: AuditEntry = {
-    id: genId(),
+function buildEntry(input: RecordAuditInput): AuditEntry {
+  return {
+    id: input.id || genId(),
     actor: input.actor,
     role: input.role,
     action: input.action,
@@ -49,13 +53,13 @@ export function recordAudit(input: RecordAuditInput): AuditEntry {
     entityId: input.entityId,
     detail: input.detail,
     tier: input.tier,
+    metadata: input.metadata,
     createdAt: new Date().toISOString(),
   };
-  store.unshift(entry);
-  if (store.length > MAX) store.length = MAX;
+}
 
-  // Best-effort durable persistence; never blocks or throws into the caller.
-  persist("audit_log", {
+function toRow(entry: AuditEntry): Record<string, unknown> {
+  return {
     id: entry.id,
     actor: entry.actor,
     role: entry.role ?? null,
@@ -64,8 +68,31 @@ export function recordAudit(input: RecordAuditInput): AuditEntry {
     entity_id: entry.entityId,
     detail: entry.detail,
     tier: entry.tier ?? null,
+    metadata: entry.metadata ?? {},
     created_at: entry.createdAt,
-  });
+  };
+}
+
+function addToStore(entry: AuditEntry) {
+  if (store.some((existing) => existing.id === entry.id)) return;
+  store.unshift(entry);
+  if (store.length > MAX) store.length = MAX;
+}
+
+export function recordAudit(input: RecordAuditInput): AuditEntry {
+  const entry = buildEntry(input);
+  addToStore(entry);
+
+  // Best-effort durable persistence; never blocks or throws into the caller.
+  persist("audit_log", toRow(entry));
+  return entry;
+}
+
+/** Durable audit write for governance and sign-off paths. */
+export async function recordAuditCritical(input: RecordAuditInput): Promise<AuditEntry> {
+  const entry = buildEntry(input);
+  if (hasSupabaseEnv()) await persistCritical("audit_log", toRow(entry));
+  addToStore(entry);
   return entry;
 }
 
@@ -85,6 +112,7 @@ export const hydrateAudit = hydrateOnce(async () => {
       entityId: String(r.entity_id ?? ""),
       detail: String(r.detail ?? ""),
       tier: r.tier ? String(r.tier) : undefined,
+      metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
       createdAt: String(r.created_at),
     });
   }
@@ -103,6 +131,19 @@ export function listAudit(filter: AuditFilter = {}, limit = 100): AuditEntry[] {
         (!filter.action || e.action === filter.action)
     )
     .slice(0, limit);
+}
+
+/** Compatibility projection for the enterprise consoles while they move to AuditEntry. */
+export function toLegacyDecisionAuditRow(entry: Record<string, unknown>) {
+  const metadata = (entry.metadata as Record<string, unknown> | null) || {};
+  const action = String(entry.action || "");
+  return {
+    ...entry,
+    decision_type: String(metadata.decisionType || action.split(":", 1)[0] || "AUDIT"),
+    actor_role: String(entry.role || entry.actor || "SYSTEM"),
+    approval_status: String(metadata.approvalStatus || "RECORDED"),
+    immutable_note: String(entry.detail || ""),
+  };
 }
 
 export function auditStats() {

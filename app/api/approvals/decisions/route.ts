@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listApprovals, decideApprovalCritical, approvalStats, type ApprovalStatus } from "@/lib/approvals";
+import {
+  listApprovals,
+  decideApprovalCritical,
+  reopenApprovalCritical,
+  approvalStats,
+  type ApprovalStatus,
+} from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
+import { executeGovernedApprovalDecision } from "@/lib/company/governedApprovalExecution";
 import { authenticateRequest } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
-import { requiredTier } from "@/lib/company/governance";
-import { recordAudit } from "@/lib/company/audit";
+import { approvalTierForDecision } from "@/lib/company/governance";
+import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     // F2 — enforce the authority matrix in the API, not just the UI.
     const target = listApprovals().find((a) => a.id === id);
-    const tier = target?.amount ? requiredTier(target.amount).tier : "T1";
+    const tier = approvalTierForDecision(target?.amount, target?.metadata);
     const user = await authenticateRequest(req);
     const access = canSignOff(user?.role ?? null, tier);
     if (!access.allowed) {
@@ -49,26 +56,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
     }
 
-    // F1 — append-only audit trail for every sign-off.
-    recordAudit({
-      actor: decidedBy,
-      role: user?.role,
-      action: decision === "APPROVED" ? "APPROVE" : "REJECT",
-      entityType: (result.type || "APPROVAL").toLowerCase(),
-      entityId: result.id,
-      detail: `${decision === "APPROVED" ? "اعتماد" : "رفض"}: ${result.title}`,
-      tier,
-    });
-
-    // On approval, run the item's governed side-effect. The important business
-    // fix is IDEA: an approved idea must become an execution project, not only
-    // a green status in the inbox.
     let execution = null;
-    if (decision === "APPROVED") {
-      if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
-      else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
-      else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
-      else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+    try {
+      // F1 — append-only, retry-safe audit trail for every sign-off.
+      await recordAuditCritical({
+        id: `aud-approval-${result.id}-${decision.toLowerCase()}`,
+        actor: decidedBy,
+        role: user?.role,
+        action: decision === "APPROVED" ? "APPROVE" : "REJECT",
+        entityType: (result.type || "APPROVAL").toLowerCase(),
+        entityId: result.id,
+        detail: `${decision === "APPROVED" ? "اعتماد" : "رفض"}: ${result.title}`,
+        tier,
+        metadata: {
+          approvalId: result.id,
+          approvalType: result.type,
+          decision,
+          governanceTier: tier,
+        },
+      });
+
+      // Run the allow-listed business transition. IDEA is also converted to
+      // an execution project instead of only changing color in the inbox.
+      if (result.type === "GENERAL" && result.metadata?.source === "governanceOS") {
+        execution = await executeGovernedApprovalDecision(result.metadata || {}, decision, decidedBy);
+      } else if (decision === "APPROVED") {
+        if (result.type === "TRADE") execution = await executeApprovedTrade(result.metadata || {});
+        else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
+        else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
+        else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+      }
+    } catch (transitionError) {
+      // Do not hide an approved-but-unexecuted item. Restore it to the queue;
+      // every transition above is idempotent and safe to retry.
+      await reopenApprovalCritical(result.id);
+      throw transitionError;
     }
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });

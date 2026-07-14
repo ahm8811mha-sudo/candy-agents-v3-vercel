@@ -233,16 +233,6 @@ export async function createMarketingCampaign(input: CampaignInput) {
   const intelligence = evaluateBusiness(`Marketing campaign ${input.productName} budget ${budget}`, financials);
   const channelId = input.channelId || "google_ads";
   const kpis = buildCampaignKpis(budget, intelligence.riskLevel);
-  const governance = await evaluateGovernedAction({
-    title: `Marketing campaign: ${input.productName}`,
-    entityType: "marketing_campaigns",
-    amount: budget,
-    riskLevel: intelligence.riskLevel,
-    actorRole: "Marketing Director",
-    metadata: { channelId, objective: input.objective },
-  });
-
-  const status = governance.allowedToExecute ? "TESTING" : "PENDING_APPROVAL";
   const { data: campaign, error } = await supabase
     .from("marketing_campaigns")
     .insert({
@@ -252,7 +242,7 @@ export async function createMarketingCampaign(input: CampaignInput) {
       offer: input.offer.trim(),
       channel_id: channelId,
       budget,
-      status,
+      status: "PENDING_GOVERNANCE",
       cost_center_id: input.costCenterId || "cc-marketing",
       product_id: input.productId || null,
       segment_id: input.segmentId || null,
@@ -263,15 +253,25 @@ export async function createMarketingCampaign(input: CampaignInput) {
     .single();
   if (error) throw error;
 
-  if (!governance.allowedToExecute) {
-    await supabase.from("approvals").insert({
-      id: newId("approval"),
-      entity_type: `${governance.requiredRole}_MARKETING_CAMPAIGN_APPROVAL`,
-      entity_id: campaign.id,
-      status: "PENDING",
-      notes: `Campaign ${campaign.name} requires ${governance.requiredRole} approval before execution.`,
+  let governance;
+  try {
+    governance = await evaluateGovernedAction({
+      title: `Marketing campaign: ${input.productName}`,
+      entityType: "marketing_campaigns",
+      entityId: campaign.id,
+      amount: budget,
+      riskLevel: intelligence.riskLevel,
+      actorRole: "Marketing Director",
+      metadata: { actionKind: "MARKETING_CAMPAIGN", channelId, objective: input.objective },
     });
+  } catch (governanceError) {
+    await supabase.from("marketing_campaigns").delete().eq("id", campaign.id);
+    throw governanceError;
   }
+
+  const status = governance.allowedToExecute ? "TESTING" : "PENDING_APPROVAL";
+  const { error: statusError } = await supabase.from("marketing_campaigns").update({ status }).eq("id", campaign.id);
+  if (statusError) throw statusError;
 
   await supabase.from("business_actions").insert({
     action_type: "MARKETING_CAMPAIGN_REVIEW",
@@ -309,7 +309,7 @@ export async function createMarketingCampaign(input: CampaignInput) {
     metadata: { kpis, governance },
   });
 
-  return campaign;
+  return { ...campaign, status };
 }
 
 export async function createCampaignFromRadar() {

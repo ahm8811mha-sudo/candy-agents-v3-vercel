@@ -2,6 +2,7 @@
 
 import { MouseEvent, useState } from "react";
 import { Keyboard, Loader2 } from "lucide-react";
+import Image from "next/image";
 
 type Props = {
   sessionId: string;
@@ -42,11 +43,14 @@ export default function RunnerCommandPanel({ sessionId, shot, onShot, onMessage 
 
   return (
     <div className="statement-list">
-      <img
+      <Image
         alt="runner view"
         src={`data:image/jpeg;base64,${shot}`}
+        width={1280}
+        height={720}
+        unoptimized
         onClick={imagePoint}
-        style={{ width: "100%", borderRadius: 16, border: "1px solid var(--line)", cursor: "crosshair" }}
+        style={{ width: "100%", height: "auto", borderRadius: 16, border: "1px solid var(--line)", cursor: "crosshair" }}
       />
       <div className="form-command-row">
         <button className="secondary-btn" type="button" disabled={working} onClick={() => command({ kind: "key", key: "Tab" })}><Keyboard size={15} /> Tab</button>
