@@ -35,7 +35,7 @@ describe("sales integration (Shopify under company governance)", () => {
   it("recognizing income posts it to the ledger and clears the pending amount", async () => {
     await proposeIncomeRecognition();
     const approval = listApprovals().find((a) => a.type === "INCOME")!;
-    const exec = recognizeIncome(approval.metadata || {});
+    const exec = await recognizeIncome(approval.metadata || {});
     expect(exec.executed).toBe(true);
 
     const con = await getSalesConsole();
@@ -46,7 +46,7 @@ describe("sales integration (Shopify under company governance)", () => {
   it("does not double-recognize the same orders", async () => {
     await proposeIncomeRecognition();
     const approval = listApprovals().find((a) => a.type === "INCOME")!;
-    recognizeIncome(approval.metadata || {});
+    await recognizeIncome(approval.metadata || {});
     const second = await proposeIncomeRecognition();
     expect(second.ok).toBe(false);
     expect(second.reason).toContain("لا مداخيل");

@@ -438,15 +438,16 @@ export async function createCostCenter(input: CostCenterInput) {
 export async function closeAccountingPeriod(period?: string) {
   const consoleData = await getAccountingConsole();
   const selectedPeriod = period || new Date().toISOString().slice(0, 7);
+  const closeId = `close-${selectedPeriod}`;
   const income = consoleData.statements.incomeStatement;
   const governance = await evaluateGovernedAction({
     title: `Close accounting period ${selectedPeriod}`,
     entityType: "accounting_period_closes",
-    entityId: selectedPeriod,
+    entityId: closeId,
     amount: Math.abs(income.netIncome),
     riskLevel: income.netIncome < 0 ? "HIGH" : "LOW",
     actorRole: "CFO",
-    metadata: { period: selectedPeriod },
+    metadata: { actionKind: "ACCOUNTING_PERIOD_CLOSE", period: selectedPeriod },
   });
 
   const supabase = requireSupabase();
@@ -454,7 +455,7 @@ export async function closeAccountingPeriod(period?: string) {
     .from("accounting_period_closes")
     .upsert(
       {
-        id: `close-${selectedPeriod}`,
+        id: closeId,
         period: selectedPeriod,
         status: governance.allowedToExecute ? "CLOSED" : "PENDING_APPROVAL",
         revenue: income.revenue,

@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Sandboxed environments ship a single system Chromium instead of the exact
+// browser build this Playwright version pins. Point PW_CHROMIUM_PATH at it to
+// run browser tests without downloading anything; CI leaves it unset.
+const chromiumPath = process.env.PW_CHROMIUM_PATH;
+const launchOptions = chromiumPath ? { executablePath: chromiumPath } : undefined;
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 45_000,
@@ -20,7 +26,7 @@ export default defineConfig({
     env: process.env,
   },
   projects: [
-    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "iphone", use: { ...devices["iPhone 13"] } },
+    { name: "desktop-chromium", use: { ...devices["Desktop Chrome"], launchOptions } },
+    { name: "iphone", use: { ...devices["iPhone 13"], launchOptions } },
   ],
 });

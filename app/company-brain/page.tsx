@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Brain,
@@ -102,6 +102,19 @@ function timestamp(value?: string | null) {
   return new Intl.DateTimeFormat("ar-SA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+async function fetchPlatformState(action: "read" | "refresh" | "bootstrap") {
+  const mutating = action !== "read";
+  const response = await fetch("/api/company-brain/platform", {
+    method: mutating ? "POST" : "GET",
+    headers: mutating ? { "content-type": "application/json" } : undefined,
+    body: mutating ? JSON.stringify({ action }) : undefined,
+    cache: "no-store",
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || !json.ok) throw new Error(json.error || "تعذر تحميل العقل المؤسسي.");
+  return json as PlatformState & { ok: boolean };
+}
+
 function MetricCard({ icon, label, value, note }: { icon: React.ReactNode; label: string; value: string | number; note: string }) {
   return (
     <article className="bento-card" style={{ minHeight: 148, justifyContent: "space-between" }}>
@@ -129,24 +142,18 @@ export default function CompanyBrainPage() {
   const [opex, setOpex] = useState("30000");
   const bootstrapStarted = useRef(false);
 
-  async function load(action: "read" | "refresh" | "bootstrap" = "read") {
+  const load = useCallback(async (action: "read" | "refresh" | "bootstrap" = "read") => {
     const mutating = action !== "read";
     if (mutating) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/company-brain/platform", {
-        method: mutating ? "POST" : "GET",
-        headers: mutating ? { "content-type": "application/json" } : undefined,
-        body: mutating ? JSON.stringify({ action }) : undefined,
-        cache: "no-store",
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok || !json.ok) throw new Error(json.error || "تعذر تحميل العقل المؤسسي.");
+      let json = await fetchPlatformState(action);
       setState(json);
       if (action === "read" && json.needsBootstrap && !bootstrapStarted.current) {
         bootstrapStarted.current = true;
-        await load("bootstrap");
+        json = await fetchPlatformState("bootstrap");
+        setState(json);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذر تحميل العقل المؤسسي.");
@@ -154,11 +161,11 @@ export default function CompanyBrainPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load("read");
-  }, []);
+  }, [load]);
 
   const domains = useMemo(() => Object.entries(state.twin?.state?.domains || {}), [state.twin]);
   const health = score(state.twin?.health_score);

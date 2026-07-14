@@ -114,7 +114,7 @@ describe("evaluateBusiness", () => {
     expect(result.approval.gate).toBe("OWNER");
   });
 
-  it("sets RISK approval when company is losing", () => {
+  it("escalates a losing company to OWNER/T2", () => {
     const result = evaluateBusiness("مشروع", {
       income: 5000,
       expenses: 10000,
@@ -122,7 +122,8 @@ describe("evaluateBusiness", () => {
       transactionCount: 3,
     });
 
-    expect(result.approval.gate).toBe("RISK");
+    expect(result.approval.gate).toBe("OWNER");
+    expect(result.approval.requiredRole).toBe("OWNER");
   });
 
   it("calculates expense ratio correctly", () => {

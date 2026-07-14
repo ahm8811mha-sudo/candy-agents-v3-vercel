@@ -11,6 +11,8 @@ import { getSupabaseAdmin } from "./supabase";
 import { getMemoryContext } from "./agentMemory";
 import { invalidateCache } from "./cache";
 import { normalizeActionInitialStatus } from "./company/actionQueue";
+import { createApprovalCritical } from "./approvals";
+import { effectiveTier } from "./company/governance";
 
 type ExecutionProject = {
   id: string;
@@ -286,7 +288,7 @@ async function createProjectFlow(
     const project = {
       id: newId("project"),
       name: projectName,
-      status: "ACTIVE",
+      status: intelligence.approval.gate === "AUTO" ? "ACTIVE" : "PENDING_APPROVAL",
       created_at: new Date().toISOString(),
     };
     const tasksCreated = blueprint.tasks.map((task) => ({
@@ -307,17 +309,18 @@ async function createProjectFlow(
     };
   }
 
+  const projectRequiresApproval = intelligence.approval.gate !== "AUTO";
   const { data: project, error: projectError } = await supabase
     .from("projects")
     .insert({
       name: projectName,
       request: request.trim(),
-      status: "ACTIVE",
+      status: projectRequiresApproval ? "PENDING_APPROVAL" : "ACTIVE",
       budget: intelligence.requestedBudget,
       approved_budget: intelligence.approval.gate === "AUTO" ? intelligence.requestedBudget : 0,
       health_score: intelligence.healthScore,
       risk_level: intelligence.riskLevel,
-      approval_status: intelligence.approval.gate === "AUTO" ? "APPROVED" : "PENDING",
+      approval_status: projectRequiresApproval ? "PENDING" : "APPROVED",
       strategic_direction: intelligence.actionToday,
       financial_snapshot: {
         requestedBudget: intelligence.requestedBudget,
@@ -341,7 +344,7 @@ async function createProjectFlow(
     title: task.title,
     description: task.content,
     content: task.content,
-    status: "TODO",
+    status: projectRequiresApproval ? "BLOCKED" : "TODO",
     priority: task.priority,
     progress_percent: 0,
     owner_role: task.ownerRole,
@@ -373,23 +376,26 @@ async function createProjectFlow(
     .select("id,project_id,name,target,current,unit,status");
   if (kpiError) throw kpiError;
 
-  const actionRows = blueprint.actions.map((action) => ({
-    project_id: project.id,
-    action_type: action.actionType,
-    title: action.title,
-    description: action.description,
-    status: normalizeActionInitialStatus({
-      requiresApproval: action.requiresApproval,
-      executionMode: action.executionMode,
-      approvalStatus: action.requiresApproval ? "PENDING" : "NOT_REQUIRED",
-    }),
-    execution_mode: action.executionMode,
-    provider: action.provider || "internal",
-    requires_approval: action.requiresApproval,
-    approval_status: action.requiresApproval ? "PENDING" : "NOT_REQUIRED",
-    payload: buildActionPayload(action, request, intelligence),
-    attempts: 0,
-  }));
+  const actionRows = blueprint.actions.map((action) => {
+    const requiresApproval = projectRequiresApproval || action.requiresApproval;
+    return {
+      project_id: project.id,
+      action_type: action.actionType,
+      title: action.title,
+      description: action.description,
+      status: normalizeActionInitialStatus({
+        requiresApproval,
+        executionMode: action.executionMode,
+        approvalStatus: requiresApproval ? "PENDING" : "NOT_REQUIRED",
+      }),
+      execution_mode: action.executionMode,
+      provider: action.provider || "internal",
+      requires_approval: requiresApproval,
+      approval_status: requiresApproval ? "PENDING" : "NOT_REQUIRED",
+      payload: buildActionPayload(action, request, intelligence),
+      attempts: 0,
+    };
+  });
   const { error: actionsError } = await supabase.from("business_actions").insert(actionRows);
   if (actionsError) throw actionsError;
 
@@ -407,20 +413,32 @@ async function createProjectFlow(
 
   let approval: ExecutionApproval | null = null;
   if (intelligence.approval.requiredRole !== "NONE") {
-    const approvalId = newId("approval");
-    const { data: approvalData, error: approvalError } = await supabase
-      .from("approvals")
-      .insert({
-        id: approvalId,
-        entity_type: `${intelligence.approval.requiredRole}_PROJECT_APPROVAL`,
-        entity_id: project.id,
-        status: "PENDING",
-        notes: intelligence.approval.reason,
-      })
-      .select("id,entity_type,entity_id,status,notes")
-      .single();
-    if (approvalError) throw approvalError;
-    approval = approvalData as ExecutionApproval;
+    const tier = effectiveTier(intelligence.requestedBudget, intelligence.riskLevel);
+    const approvalItem = await createApprovalCritical({
+      type: "GENERAL",
+      title: `اعتماد مشروع التنفيذ: ${projectName}`,
+      detail: intelligence.approval.reason,
+      amount: intelligence.requestedBudget || undefined,
+      requestedRole: tier.approver,
+      dedupeKey: `company-execution-project-${project.id}`,
+      metadata: {
+        source: "governanceOS",
+        actionKind: "COMPANY_EXECUTION_PROJECT",
+        entityType: "projects",
+        entityId: project.id,
+        governanceTier: tier.tier,
+        tier: tier.tier,
+        riskLevel: intelligence.riskLevel,
+        requestedBudget: intelligence.requestedBudget,
+      },
+    });
+    approval = {
+      id: approvalItem.id,
+      entity_type: `${tier.tier}_PROJECT_APPROVAL`,
+      entity_id: project.id,
+      status: approvalItem.status,
+      notes: approvalItem.detail,
+    };
   }
 
   const { error: memoryError } = await supabase.from("business_memory").insert({

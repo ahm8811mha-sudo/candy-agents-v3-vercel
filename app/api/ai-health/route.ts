@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAIProviderStatus } from "@/lib/ai";
+import { aiUsageSummary } from "@/lib/aiUsage";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     ...status,
+    usage: aiUsageSummary(),
     env: {
       AI_PROVIDER: process.env.AI_PROVIDER || null,
       GEMINI_MODEL: process.env.GEMINI_MODEL || null,

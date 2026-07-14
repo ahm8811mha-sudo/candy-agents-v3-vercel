@@ -2,6 +2,7 @@ import { getDashboardData, runCompanyExecution } from "./companyExecutionSystem"
 import { getEnterpriseStatus, runOpportunityRadar, seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { logDecision, seedGovernanceOS } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
+import { toLegacyDecisionAuditRow } from "./company/audit";
 
 type ExecutiveItemInput = {
   title: string;
@@ -51,7 +52,7 @@ export async function getExecutiveOffice() {
     supabase.from("executive_calendar_events").select("*").order("starts_at", { ascending: true }).limit(20),
     supabase.from("executive_meeting_minutes").select("*").order("created_at", { ascending: false }).limit(15),
     supabase.from("executive_daily_briefs").select("*").order("created_at", { ascending: false }).limit(10),
-    supabase.from("decision_audit_log").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
 
   for (const result of [calendarRows, minuteRows, briefRows, auditRows]) {
@@ -73,7 +74,7 @@ export async function getExecutiveOffice() {
     calendarEvents: calendarRows.data || [],
     meetingMinutes: minuteRows.data || [],
     dailyBriefs: briefRows.data || [],
-    auditLog: auditRows.data || [],
+    auditLog: (auditRows.data || []).map(toLegacyDecisionAuditRow),
     operatingBrief: {
       healthScore: enterprise.intelligence?.healthScore || 0,
       riskLevel: enterprise.intelligence?.riskLevel || "LOW",

@@ -77,15 +77,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const rateLimit = await checkRateLimit(req);
-  if (!rateLimit.allowed) {
-    const retryAfter = Math.max(1, Math.ceil((rateLimit.resetAt - Date.now()) / 1000));
-    return NextResponse.json(
-      { ok: false, error: "تم إيقاف المحاولات مؤقتًا. حاول لاحقًا." },
-      { status: 429, headers: { "retry-after": String(retryAfter) } }
-    );
-  }
-
   const body = await req.json().catch(() => ({}));
   const code = String(body.code || "").trim();
   if (code.length < 12 || code.length > 128) {
@@ -97,6 +88,17 @@ export async function POST(req: NextRequest) {
     sha256Hex(expectedCode),
   ]);
   if (suppliedHash !== expectedHash) {
+    // Count failed guesses only. Successful owner unlocks must not consume the
+    // brute-force budget (browser suites and legitimate multi-device use can
+    // otherwise lock out a correct code from a shared IP).
+    const rateLimit = await checkRateLimit(req);
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((rateLimit.resetAt - Date.now()) / 1000));
+      return NextResponse.json(
+        { ok: false, error: "تم إيقاف المحاولات مؤقتًا. حاول لاحقًا." },
+        { status: 429, headers: { "retry-after": String(retryAfter) } }
+      );
+    }
     return NextResponse.json({ ok: false, error: "رمز الوصول غير صحيح." }, { status: 401 });
   }
 

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "./aiUsage";
 
 type AgentOptions = {
   agentName: string;
@@ -6,6 +7,15 @@ type AgentOptions = {
 };
 
 type ProviderName = "gemini" | "claude" | "openai" | "fallback";
+
+export type RawAgentResult = {
+  text: string;
+  provider: ProviderName;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  demo: boolean;
+};
 
 const DEFAULT_SYSTEM = "أنت موظف ذكاء اصطناعي داخل شركة. نفذ المطلوب عمليًا، واكتب بالعربية، ولا تشرح أنك نموذج ذكاء اصطناعي.";
 const DEFAULT_GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"];
@@ -52,7 +62,7 @@ function shouldTryNextGeminiModel(error: unknown) {
   return message.includes("high demand") || message.includes("try again later") || message.includes("resource_exhausted") || message.includes("429") || message.includes("quota");
 }
 
-async function runGeminiModel(model: string, prompt: string, options: AgentOptions) {
+async function runGeminiModel(model: string, prompt: string, options: AgentOptions): Promise<RawAgentResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -67,10 +77,17 @@ async function runGeminiModel(model: string, prompt: string, options: AgentOptio
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Gemini API error ${res.status}`);
-  return extractGeminiText(data) || `لم يتم إرجاع نتيجة من Gemini عبر ${model}.`;
+  return {
+    text: extractGeminiText(data) || `لم يتم إرجاع نتيجة من Gemini عبر ${model}.`,
+    provider: "gemini",
+    model,
+    inputTokens: Number(data?.usageMetadata?.promptTokenCount) || 0,
+    outputTokens: Number(data?.usageMetadata?.candidatesTokenCount) || 0,
+    demo: false,
+  };
 }
 
-async function runGemini(prompt: string, options: AgentOptions) {
+async function runGemini(prompt: string, options: AgentOptions): Promise<RawAgentResult> {
   let lastError: unknown = null;
   for (const model of geminiModels()) {
     try {
@@ -104,15 +121,23 @@ async function runClaude(prompt: string, options: AgentOptions) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Claude API error ${res.status}`);
-  return extractClaudeText(data) || "لم يتم إرجاع نتيجة من Claude.";
+  return {
+    text: extractClaudeText(data) || "لم يتم إرجاع نتيجة من Claude.",
+    provider: "claude" as const,
+    model,
+    inputTokens: Number(data?.usage?.input_tokens) || 0,
+    outputTokens: Number(data?.usage?.output_tokens) || 0,
+    demo: false,
+  };
 }
 
-async function runOpenAI(prompt: string, options: AgentOptions) {
+async function runOpenAI(prompt: string, options: AgentOptions): Promise<RawAgentResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is missing");
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   const client = new OpenAI({ apiKey });
   const completion = await client.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    model,
     temperature: 0.25,
     max_tokens: 900,
     messages: [
@@ -120,7 +145,14 @@ async function runOpenAI(prompt: string, options: AgentOptions) {
       { role: "user", content: prompt },
     ],
   });
-  return completion.choices[0]?.message?.content || "لم يتم إرجاع نتيجة من OpenAI.";
+  return {
+    text: completion.choices[0]?.message?.content || "لم يتم إرجاع نتيجة من OpenAI.",
+    provider: "openai",
+    model,
+    inputTokens: Number(completion.usage?.prompt_tokens) || 0,
+    outputTokens: Number(completion.usage?.completion_tokens) || 0,
+    demo: false,
+  };
 }
 
 function providerErrorMessage(provider: ProviderName, error: unknown) {
@@ -141,14 +173,71 @@ function providerErrorMessage(provider: ProviderName, error: unknown) {
   return `تعذر تنفيذ AI الحقيقي عبر ${name}: ${message.slice(0, 240)}`;
 }
 
-export async function runAgent(prompt: string, options: AgentOptions) {
+/**
+ * Raw agent runner: returns text plus provider/model/token usage and records
+ * the call in the usage ledger. `demo: true` means the caller got the static
+ * fallback, not a real model answer — surface that to users, never hide it.
+ * Throws on provider errors; use runAgent for the message-flavored contract.
+ */
+export async function runAgentRaw(prompt: string, options: AgentOptions): Promise<RawAgentResult> {
   const provider = selectedProvider();
-  if (provider === "fallback") return fallbackAgentOutput(options.agentName);
+  const startedAt = Date.now();
+
+  if (provider === "fallback") {
+    const result: RawAgentResult = {
+      text: fallbackAgentOutput(options.agentName),
+      provider,
+      model: "demo-fallback",
+      inputTokens: 0,
+      outputTokens: 0,
+      demo: true,
+    };
+    recordAiUsage({
+      agentName: options.agentName,
+      provider,
+      model: result.model,
+      durationMs: Date.now() - startedAt,
+      ok: true,
+      demo: true,
+    });
+    return result;
+  }
 
   try {
-    if (provider === "gemini") return await runGemini(prompt, options);
-    if (provider === "claude") return await runClaude(prompt, options);
-    return await runOpenAI(prompt, options);
+    const result =
+      provider === "gemini"
+        ? await runGemini(prompt, options)
+        : provider === "claude"
+          ? await runClaude(prompt, options)
+          : await runOpenAI(prompt, options);
+    recordAiUsage({
+      agentName: options.agentName,
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      durationMs: Date.now() - startedAt,
+      ok: true,
+      demo: false,
+    });
+    return result;
+  } catch (error) {
+    recordAiUsage({
+      agentName: options.agentName,
+      provider,
+      model: "unknown",
+      durationMs: Date.now() - startedAt,
+      ok: false,
+      demo: false,
+    });
+    throw error;
+  }
+}
+
+export async function runAgent(prompt: string, options: AgentOptions) {
+  const provider = selectedProvider();
+  try {
+    return (await runAgentRaw(prompt, options)).text;
   } catch (error) {
     return providerErrorMessage(provider, error);
   }

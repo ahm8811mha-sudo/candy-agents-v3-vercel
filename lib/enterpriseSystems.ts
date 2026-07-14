@@ -3,6 +3,8 @@ import { evaluateBusiness } from "./businessBrain";
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
 import { seedGovernmentRelationsOS } from "./governmentRelations";
 import { getSupabaseAdmin } from "./supabase";
+import { toLegacyDecisionAuditRow } from "./company/audit";
+import { AUTHORITY_MATRIX } from "./company/governance";
 
 type AccountSeed = {
   code: string;
@@ -67,8 +69,9 @@ const commercialStrategy = {
     "Invest in small validated tests first, expand only when contribution margin, customer acquisition cost, and operational capacity are proven.",
   capital_rules: {
     pilot_budget_ratio: 0.15,
-    cfo_gate_above: 5000,
-    ceo_gate_above: 50000,
+    self_execution_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T0")!.maxSAR,
+    ceo_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T1")!.maxSAR,
+    owner_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T2")!.maxSAR,
     stop_loss_rule: "Pause spend when CAC exceeds target or gross margin drops below 30%.",
   },
   target_markets: ["Saudi e-commerce", "gift products", "beauty and care products", "AI-enabled services"],
@@ -117,7 +120,7 @@ export async function getEnterpriseStatus() {
       supabase.from("marketing_campaigns").select("*").order("created_at", { ascending: false }).limit(10),
       supabase.from("opportunity_radar_runs").select("*").order("created_at", { ascending: false }).limit(10),
       supabase.from("company_strategy").select("*").limit(1),
-      supabase.from("decision_audit_log").select("*").order("created_at", { ascending: false }).limit(10),
+      supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(10),
     ]);
 
   for (const result of [accountRows, journalRows, ceoRows, channelRows, campaignRows, radarRows, strategyRows, auditRows]) {
@@ -134,7 +137,7 @@ export async function getEnterpriseStatus() {
     marketingCampaigns: campaignRows.data || [],
     opportunityRuns: radarRows.data || [],
     strategy: strategyRows.data?.[0] || commercialStrategy,
-    audits: auditRows.data || [],
+    audits: (auditRows.data || []).map(toLegacyDecisionAuditRow),
     configured: true,
   };
 }
@@ -356,16 +359,6 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
   const { error: scoreError } = await supabase.from("opportunity_scores").insert(scoreRows);
   if (scoreError) throw scoreError;
 
-  const governance = await evaluateGovernedAction({
-    title: `Opportunity radar pilot: ${opportunity.title}`,
-    entityType: "opportunity_radar_runs",
-    entityId: run.id,
-    amount: requestedBudget,
-    riskLevel: status.intelligence.riskLevel,
-    actorRole: "Opportunity Radar",
-    metadata: { opportunity },
-  });
-
   const { data: campaign, error: campaignError } = await supabase
     .from("marketing_campaigns")
     .insert({
@@ -375,7 +368,7 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
       offer: marketingReview.offer,
       channel_id: best.channel,
       budget: pilotMarketingBudget,
-      status: governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL",
+      status: "PENDING_GOVERNANCE",
       cost_center_id: "cc-radar",
       kpis: {
         cac_target: Math.max(35, Math.round(pilotMarketingBudget / 55)),
@@ -390,6 +383,27 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     .select()
     .single();
   if (campaignError) throw campaignError;
+
+  const governance = await evaluateGovernedAction({
+    title: `Opportunity radar pilot: ${opportunity.title}`,
+    entityType: "opportunity_radar_runs",
+    entityId: run.id,
+    amount: requestedBudget,
+    riskLevel: status.intelligence.riskLevel,
+    actorRole: "Opportunity Radar",
+    metadata: { actionKind: "OPPORTUNITY_RADAR_PILOT", campaignId: campaign.id, opportunity },
+  });
+  const campaignStatus = governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL";
+  const { error: campaignStatusError } = await supabase
+    .from("marketing_campaigns")
+    .update({ status: campaignStatus })
+    .eq("id", campaign.id);
+  if (campaignStatusError) throw campaignStatusError;
+  const { error: runStatusError } = await supabase
+    .from("opportunity_radar_runs")
+    .update({ status: governance.allowedToExecute ? "APPROVED_FOR_PILOT" : "PENDING_CEO_REVIEW" })
+    .eq("id", run.id);
+  if (runStatusError) throw runStatusError;
 
   const { error: ceoError } = await supabase.from("ceo_office_items").insert({
     id: newId("ceo-item"),
@@ -408,11 +422,11 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     action_type: "PROACTIVE_OPPORTUNITY_REVIEW",
     title: "Review proactive opportunity radar proposal",
     description: `${opportunity.next_step} CEO final decision is pending after finance and marketing review.`,
-    status: "WAITING_APPROVAL",
+    status: governance.allowedToExecute ? "QUEUED" : "WAITING_APPROVAL",
     execution_mode: "INTERNAL",
     provider: "CEO Office + CFO + Marketing",
-    requires_approval: true,
-    approval_status: "PENDING",
+    requires_approval: governance.requiresApproval,
+    approval_status: governance.approvalStatus,
     payload: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity, financeReview, marketingReview, ceoDecision },
   });
   if (actionError) throw actionError;

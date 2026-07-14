@@ -8,7 +8,9 @@
  * per process (see hydrateApprovals), so decisions survive serverless restarts.
  */
 
-import { persist, fetchRows, hydrateOnce } from "./supabase";
+import { createHash } from "node:crypto";
+import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
+import { getTenantId, isMultiTenantEnabled } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
@@ -27,6 +29,7 @@ export type ApprovalItem = {
   decidedBy?: string;
   note?: string;
   metadata?: Record<string, unknown>;
+  dedupeKey?: string;
 };
 
 const store: ApprovalItem[] = [];
@@ -49,6 +52,7 @@ function toRow(a: ApprovalItem): Record<string, unknown> {
     decided_by: a.decidedBy ?? null,
     note: a.note ?? null,
     metadata: a.metadata ?? null,
+    dedupe_key: a.dedupeKey ?? null,
   };
 }
 
@@ -66,6 +70,7 @@ function fromRow(r: Record<string, unknown>): ApprovalItem {
     decidedBy: r.decided_by ? String(r.decided_by) : undefined,
     note: r.note ? String(r.note) : undefined,
     metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
+    dedupeKey: r.dedupe_key ? String(r.dedupe_key) : undefined,
   };
 }
 
@@ -93,10 +98,10 @@ export type CreateApprovalInput = {
   id?: string;
 };
 
-export function createApproval(input: CreateApprovalInput): ApprovalItem {
+function findExistingApproval(input: CreateApprovalInput): ApprovalItem | null {
   if (input.dedupeKey) {
     const existing = store.find(
-      (a) => a.status === "PENDING" && a.metadata?.dedupeKey === input.dedupeKey
+      (a) => a.status === "PENDING" && (a.dedupeKey === input.dedupeKey || a.metadata?.dedupeKey === input.dedupeKey)
     );
     if (existing) return existing;
   }
@@ -105,9 +110,15 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     const existing = store.find((a) => a.id === input.id);
     if (existing) return existing;
   }
+  return null;
+}
 
-  const item: ApprovalItem = {
-    id: input.id || genId(),
+function buildApproval(input: CreateApprovalInput): ApprovalItem {
+  const deterministicId = input.dedupeKey
+    ? `apr-dedupe-${createHash("sha256").update(input.dedupeKey).digest("hex").slice(0, 40)}`
+    : undefined;
+  return {
+    id: input.id || deterministicId || genId(),
     type: input.type,
     title: input.title,
     detail: input.detail,
@@ -116,9 +127,61 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
     status: "PENDING",
     createdAt: new Date().toISOString(),
     metadata: { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) },
+    dedupeKey: input.dedupeKey,
   };
+}
+
+async function findDurableApproval(id: string, dedupeKey?: string): Promise<ApprovalItem | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  if (dedupeKey) {
+    let dedupeQuery = supabase
+      .from("company_approvals")
+      .select("*")
+      .eq("dedupe_key", dedupeKey)
+      .eq("status", "PENDING");
+    if (isMultiTenantEnabled()) dedupeQuery = dedupeQuery.eq("tenant_id", getTenantId());
+    const { data: deduped, error: dedupeError } = await dedupeQuery.maybeSingle();
+    if (dedupeError) throw dedupeError;
+    if (deduped) return fromRow(deduped as Record<string, unknown>);
+  }
+  let query = supabase.from("company_approvals").select("*").eq("id", id);
+  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data as Record<string, unknown>) : null;
+}
+
+export function createApproval(input: CreateApprovalInput): ApprovalItem {
+  const existing = findExistingApproval(input);
+  if (existing) return existing;
+
+  const item = buildApproval(input);
   store.unshift(item);
   persist("company_approvals", toRow(item));
+  emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
+  return item;
+}
+
+/**
+ * Awaited variant for API flows: the durable row is committed before the item
+ * is accepted into the store, so success is never reported ahead of persistence.
+ * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
+ */
+export async function createApprovalCritical(input: CreateApprovalInput): Promise<ApprovalItem> {
+  const existing = findExistingApproval(input);
+  if (existing) return existing;
+
+  const item = buildApproval(input);
+  if (hasSupabaseEnv()) {
+    const durable = await findDurableApproval(item.id, item.dedupeKey);
+    if (durable) {
+      if (!store.some((approval) => approval.id === durable.id)) store.unshift(durable);
+      return durable;
+    }
+    await persistCritical("company_approvals", toRow(item));
+  }
+  store.unshift(item);
   emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
   return item;
 }
@@ -143,6 +206,53 @@ export function decideApproval(
   if (note) item.note = note;
   persist("company_approvals", toRow(item));
   emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
+  return item;
+}
+
+/**
+ * Awaited variant for API flows: the decision is committed durably before the
+ * in-memory item flips, so a sign-off can never be reported and then lost.
+ * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
+ */
+export async function decideApprovalCritical(
+  id: string,
+  decision: "APPROVED" | "REJECTED",
+  decidedBy = "CEO",
+  note?: string
+): Promise<ApprovalItem | null> {
+  const item = store.find((a) => a.id === id);
+  if (!item) return null;
+  if (item.status !== "PENDING") return item;
+
+  const decided: ApprovalItem = {
+    ...item,
+    status: decision,
+    decidedAt: new Date().toISOString(),
+    decidedBy,
+    ...(note ? { note } : {}),
+  };
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(decided));
+  Object.assign(item, decided);
+  emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
+  return item;
+}
+
+/**
+ * Restores a failed governed transition to the visible queue so it can be
+ * retried instead of disappearing as an approved-but-unexecuted item.
+ */
+export async function reopenApprovalCritical(id: string): Promise<ApprovalItem | null> {
+  const item = store.find((approval) => approval.id === id);
+  if (!item) return null;
+  const reopened: ApprovalItem = {
+    ...item,
+    status: "PENDING",
+    decidedAt: undefined,
+    decidedBy: undefined,
+    note: undefined,
+  };
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(reopened));
+  Object.assign(item, reopened);
   return item;
 }
 

@@ -1,6 +1,7 @@
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
 import { createHash } from "node:crypto";
+import { toLegacyDecisionAuditRow } from "./company/audit";
 
 type GovernmentDocumentInput = {
   documentId?: string;
@@ -691,7 +692,7 @@ export async function getGovernmentRelationsOS() {
     supabase.from("gov_fee_sources").select("*").order("document_type", { ascending: true }),
     supabase.from("gov_renewal_tasks").select("*").order("due_date", { ascending: true }).limit(80),
     supabase.from("business_integrations").select("*").like("id", "gov-%").order("provider", { ascending: true }),
-    supabase.from("decision_audit_log").select("*").eq("entity_type", "gov_documents").order("created_at", { ascending: false }).limit(30),
+    supabase.from("audit_log").select("*").eq("entity_type", "gov_documents").order("created_at", { ascending: false }).limit(30),
     supabase.from("gov_document_access_logs").select("*").order("created_at", { ascending: false }).limit(50),
     supabase.from("gov_regulatory_sources").select("*").order("title", { ascending: true }),
     supabase.from("gov_regulatory_updates").select("*").order("detected_at", { ascending: false }).limit(50),
@@ -717,7 +718,7 @@ export async function getGovernmentRelationsOS() {
     fees: fees.data || [],
     tasks: tasks.data || [],
     integrations: integrations.data || [],
-    audits: auditRows.data || [],
+    audits: (auditRows.data || []).map(toLegacyDecisionAuditRow),
     accessLogs: accessRows.data || [],
     regulatorySources: sources.data || [],
     regulatoryUpdates: updates.data || [],
@@ -967,7 +968,13 @@ export async function uploadGovernmentDocument(input: GovernmentDocumentInput) {
     amount: number(feeSource?.fee_amount),
     riskLevel: status === "EXPIRED" || extracted.missingFields.length ? "HIGH" : status === "RENEWAL_URGENT" ? "HIGH" : "LOW",
     actorRole: "Government Relations Manager",
-    metadata: { document_id: document.id, status, missingFields: extracted.missingFields, task_id: task.id },
+    metadata: {
+      actionKind: "GOVERNMENT_RENEWAL",
+      document_id: document.id,
+      status,
+      missingFields: extracted.missingFields,
+      renewalTaskId: task.id,
+    },
   });
 
   if (["EXPIRED", "RENEWAL_URGENT", "NEEDS_REVIEW"].includes(status) || extracted.missingFields.length) {
@@ -1528,7 +1535,12 @@ export async function createGovernmentRenewalPlan(documentId: string) {
     amount,
     riskLevel: document.status === "EXPIRED" ? "HIGH" : "LOW",
     actorRole: "Government Relations Manager",
-    metadata: { renewal_task_id: task.id, official_url: feeSource?.official_url, renewal_url: feeSource?.renewal_url },
+    metadata: {
+      actionKind: "GOVERNMENT_RENEWAL",
+      renewalTaskId: task.id,
+      official_url: feeSource?.official_url,
+      renewal_url: feeSource?.renewal_url,
+    },
   });
 
   const { data: action, error: actionError } = await supabase.from("business_actions").insert({
@@ -1540,7 +1552,7 @@ export async function createGovernmentRenewalPlan(documentId: string) {
     provider: document.issuer || feeSource?.issuer || "Government portal",
     requires_approval: governance.requiresApproval,
     approval_status: governance.approvalStatus,
-    payload: { document, task, feeSource, governance },
+    payload: { governed_entity_id: document.id, document, task, feeSource, governance },
   }).select().single();
   if (actionError) throw actionError;
 
