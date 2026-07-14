@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 
 const ownerCode = process.env.ORVANTA_OWNER_ACCESS_KEY || "";
 
+// Network mocks must win over the PWA worker in both Chromium and WebKit.
+test.use({ serviceWorkers: "block" });
+
 async function unlock(page: import("@playwright/test").Page) {
   await page.goto("/login");
   await page.getByLabel("رمز وصول المالك").fill(ownerCode);
@@ -10,10 +13,10 @@ async function unlock(page: import("@playwright/test").Page) {
 }
 
 test("the action queue keeps zero counts legible and compact on mobile", async ({ page }) => {
-  await page.route("**/api/company/actions?**", async (route) => {
+  await page.route(/\/api\/company\/actions\?/, async (route) => {
     await route.fulfill({ json: { ok: true, actions: [] } });
   });
-  await page.route("**/api/integrations/status", async (route) => {
+  await page.route(/\/api\/integrations\/status$/, async (route) => {
     await route.fulfill({
       json: {
         ok: true,
@@ -31,7 +34,9 @@ test("the action queue keeps zero counts legible and compact on mobile", async (
   });
 
   await unlock(page);
-  await page.goto("/operations?tab=dashboard");
+  await page.goto("/operations");
+  await page.getByRole("tab", { name: "لوحة المتابعة" }).click();
+  await expect(page.getByRole("heading", { name: "لوحة متابعة الشركة" })).toBeVisible();
 
   await expect(page.getByText("Google Workspace جاهز للتنفيذ")).toBeVisible();
   for (const label of ["بانتظار", "قيد التنفيذ", "مكتمل", "فشل"]) {
@@ -49,7 +54,7 @@ test("the action queue keeps zero counts legible and compact on mobile", async (
 });
 
 test("a preview deployment explains isolated secrets instead of reporting a false production failure", async ({ page }) => {
-  await page.route("**/api/health", async (route) => {
+  await page.route(/\/api\/health$/, async (route) => {
     await route.fulfill({
       json: {
         ok: true,
@@ -74,7 +79,7 @@ test("a preview deployment explains isolated secrets instead of reporting a fals
       },
     });
   });
-  await page.route("**/api/health/supabase", async (route) => {
+  await page.route(/\/api\/health\/supabase$/, async (route) => {
     await route.fulfill({ status: 503, json: { ok: false, configured: false } });
   });
 
