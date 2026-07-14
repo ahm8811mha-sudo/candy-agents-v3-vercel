@@ -1,6 +1,6 @@
 import { hasSupabaseEnv } from "../supabase";
 import { isAuthEnabled, isPersonalOwnerMode } from "../auth";
-import { isOwnerAccessConfigured } from "../security/personalAccess";
+import { isOwnerAccessConfigured, hasDedicatedCookieSecret } from "../security/personalAccess";
 import { getGoogleWorkspaceStatus } from "../integrations/googleWorkspace";
 
 export type ReadinessSeverity = "PASS" | "WARN" | "FAIL";
@@ -85,6 +85,14 @@ export function getProductionReadiness(): ProductionReadiness {
         : isAuthEnabled()
           ? "Commercial authentication is enabled. Sensitive routes require authenticated roles and tenant context."
           : "AUTH_ENABLED is not true. Commercial routes must fail closed."
+    ),
+    check(
+      "owner-cookie-secret",
+      "Dedicated owner cookie signing secret",
+      hasDedicatedCookieSecret(),
+      hasDedicatedCookieSecret()
+        ? "ORVANTA_OWNER_COOKIE_SECRET is set: session signing is independent of the database key."
+        : "Owner cookies are signed with SUPABASE_SERVICE_ROLE_KEY as a fallback. Set a dedicated ORVANTA_OWNER_COOKIE_SECRET so session security is not coupled to (and rotated with) the database key."
     ),
     check(
       "basic-auth-disabled",

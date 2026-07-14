@@ -17,6 +17,15 @@ export function isOwnerAccessConfigured() {
   return Boolean(signingSecret());
 }
 
+/**
+ * True only when the cookie is signed with its own dedicated secret. Falling
+ * back to SUPABASE_SERVICE_ROLE_KEY works but couples session security to the
+ * database key — production readiness reports it as a failure.
+ */
+export function hasDedicatedCookieSecret() {
+  return Boolean(process.env.ORVANTA_OWNER_COOKIE_SECRET);
+}
+
 function encodeBase64Url(input: string) {
   const bytes = new TextEncoder().encode(input);
   let binary = "";
