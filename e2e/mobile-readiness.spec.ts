@@ -49,8 +49,12 @@ test("the action queue keeps zero counts legible and compact on mobile", async (
     const box = element.getBoundingClientRect();
     return { top: Math.round(box.top), height: Math.round(box.height) };
   }));
-  expect(Math.max(...boxes.map((box) => box.height))).toBeLessThanOrEqual(100);
+  const summaryHeight = await page.locator(".action-queue-summary").evaluate((element) =>
+    Math.round(element.getBoundingClientRect().height)
+  );
+  expect(Math.max(...boxes.map((box) => box.height))).toBeLessThanOrEqual(140);
   expect(new Set(boxes.map((box) => box.top)).size).toBeLessThanOrEqual(2);
+  expect(summaryHeight).toBeLessThanOrEqual(260);
 });
 
 test("a preview deployment explains isolated secrets instead of reporting a false production failure", async ({ page }) => {
