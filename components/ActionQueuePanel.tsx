@@ -55,6 +55,7 @@ type IntegrationPlan = {
 type IntegrationStatus = {
   googleWorkspace: {
     enabled: boolean;
+    disabledByFlag: boolean;
     credentialsConfigured: boolean;
     capabilities: Record<"gmail" | "sheets" | "drive", boolean>;
     missingEnvironmentVariables: string[];
@@ -87,7 +88,9 @@ function integrationLink(result?: IntegrationResult) {
 export default function ActionQueuePanel() {
   const [actions, setActions] = useState<CompanyAction[]>([]);
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [integrationUnavailable, setIntegrationUnavailable] = useState(false);
   const [executingId, setExecutingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -109,11 +112,15 @@ export default function ActionQueuePanel() {
       const integrationData = await integrationResponse.json().catch(() => null);
       if (integrationResponse.ok && integrationData?.ok) {
         setIntegrationStatus(integrationData as IntegrationStatus);
+        setIntegrationUnavailable(false);
+      } else {
+        setIntegrationUnavailable(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل قائمة الأفعال.");
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }
 
@@ -161,8 +168,8 @@ export default function ActionQueuePanel() {
   );
 
   return (
-    <section className="delivery-panel fade-in">
-      <div className="delivery-header">
+    <section className="delivery-panel fade-in action-queue-panel">
+      <div className="delivery-header action-queue-header">
         <div>
           <span className="eyebrow"><Activity size={16} /> Action Queue</span>
           <h2>ماذا حدث بعد الاعتماد؟</h2>
@@ -174,30 +181,42 @@ export default function ActionQueuePanel() {
       </div>
 
       {integrationStatus && (
-        <div className={`notice ${googleReady ? "done" : "warning"}`}>
+        <div className={`notice integration-notice ${googleReady ? "done" : "warning"}`}>
           <PlugZap size={17} />
           <div>
             <strong>{googleReady ? "Google Workspace جاهز للتنفيذ" : "Google Workspace يحتاج إعداد البيئة"}</strong>
             <p>
               {googleReady
                 ? "يمكن الآن إنشاء مسودات Gmail، وتسجيل الأفعال في Sheets، وحفظ الملفات في Drive من نفس قائمة التنفيذ."
-                : `الكود جاهز، والمتبقي إضافة: ${integrationStatus.googleWorkspace.missingEnvironmentVariables.join(", ")}`}
+                : integrationStatus.googleWorkspace.disabledByFlag
+                  ? "التكامل متوقف صراحةً عبر GOOGLE_INTEGRATIONS_ENABLED=false. غيّر القيمة إلى true بعد اعتماد التشغيل."
+                  : `أكمل متغيرات OAuth التالية: ${integrationStatus.googleWorkspace.missingEnvironmentVariables.join(", ")}`}
             </p>
           </div>
         </div>
       )}
 
+      {integrationUnavailable && (
+        <p className="notice integration-notice warning">
+          تعذر قراءة حالة Google Workspace الآن. بقيت قائمة التنفيذ متاحة ويمكن إعادة الفحص من زر التحديث.
+        </p>
+      )}
+
       {error && <p className="notice error">{error}</p>}
       {message && <p className="notice done">{message}</p>}
 
-      <div className="finance-summary" style={{ marginBottom: 16 }}>
+      <div className="finance-summary action-queue-summary" aria-label="ملخص قائمة التنفيذ">
         <Metric title="بانتظار" value={summary.waiting} />
         <Metric title="قيد التنفيذ" value={summary.running} />
         <Metric title="مكتمل" value={summary.done} />
         <Metric title="فشل" value={summary.failed} />
       </div>
 
-      {actions.length === 0 ? (
+      {!loaded && loading ? (
+        <div className="action-queue-loading" role="status">
+          <RefreshCcw className="spin" size={20} /> جارٍ تحميل قائمة التنفيذ…
+        </div>
+      ) : actions.length === 0 ? (
         <div className="empty-state">
           <Clock3 size={34} />
           <strong>لا توجد أفعال تنفيذية بعد</strong>
@@ -266,9 +285,9 @@ export default function ActionQueuePanel() {
 
 function Metric({ title, value }: { title: string; value: number }) {
   return (
-    <article className="metric-card green">
+    <article className="metric-card green action-queue-metric" aria-label={`${title}: ${value}`}>
       <small>{title}</small>
-      <strong>{value.toLocaleString("ar-SA")}</strong>
+      <strong>{value.toLocaleString("ar-SA-u-nu-latn")}</strong>
     </article>
   );
 }

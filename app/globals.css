@@ -515,6 +515,44 @@ label {
 .metric-card.red strong { color: var(--red); }
 .metric-card.amber strong { color: var(--amber); }
 
+/* Action Queue uses a compact operational summary. Keep it distinct from the
+   finance grids, which intentionally stack into a single column on mobile. */
+.action-queue-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.action-queue-metric {
+  min-height: 92px;
+  align-content: center;
+  box-shadow: none;
+}
+
+.integration-notice {
+  width: 100%;
+  align-items: flex-start;
+  border-radius: 10px;
+  padding: 13px 15px;
+  line-height: 1.7;
+}
+
+.integration-notice p { margin: 3px 0 0; font-weight: 700; }
+.integration-notice.warning { color: var(--amber); background: rgba(244, 183, 64, 0.09); }
+
+.action-queue-loading {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
 .secondary-btn {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -2123,6 +2161,7 @@ label {
   .employee-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .department-hero, .finance-grid, .department-workbench, .department-board, .intelligence-grid, .opportunity-grid, .enterprise-grid, .enterprise-thesis, .enterprise-lists, .ops-metrics, .ops-workbench, .ops-board, .ops-board.two, .ops-form-grid, .ops-form-grid.three { grid-template-columns: 1fr; flex-direction: column; align-items: flex-start; }
   .finance-summary, .department-capabilities { grid-template-columns: 1fr; }
+  .action-queue-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .transaction-row { grid-template-columns: 1fr; }
   .apple-header { align-items: flex-start; flex-direction: column; }
   .apple-metrics, .apple-metrics.extended, .apple-sections, .apple-command-center { grid-template-columns: 1fr; }
@@ -2166,4 +2205,9 @@ label {
   .quick-nav { grid-template-columns: repeat(2, 1fr); }
   .section-tabs { gap: 2px; padding: 3px; }
   .section-tab { padding: 8px 12px; font-size: var(--text-xs); }
+  .action-queue-header { flex-direction: row; align-items: flex-start; }
+  .action-queue-header .secondary-btn { min-height: 38px; padding: 8px 11px; flex-shrink: 0; }
+  .action-queue-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .action-queue-metric { min-height: 82px; padding: 12px; }
+  .action-queue-metric strong { font-size: 1.55rem; font-variant-numeric: tabular-nums; }
 }
