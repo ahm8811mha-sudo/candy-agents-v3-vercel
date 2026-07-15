@@ -1,9 +1,13 @@
 import { runCompanyExecution } from "./companyExecutionSystem";
 import { requireSupabaseForWrite } from "./supabase";
 import { logActivity } from "./logger";
-import type { AccessActor } from "./accessControl";
+import type { AuthUser } from "./auth";
 
-export async function runSafeExecution(request: string, actor: AccessActor) {
+export async function runSafeExecution(
+  request: string,
+  actor: Pick<AuthUser, "id" | "role" | "name">,
+  idempotencyKey?: string
+) {
   requireSupabaseForWrite();
 
   await logActivity({
@@ -13,7 +17,11 @@ export async function runSafeExecution(request: string, actor: AccessActor) {
     metadata: { role: actor.role, request: request.slice(0, 500) },
   });
 
-  const result = await runCompanyExecution(request);
+  const result = await runCompanyExecution(request, {
+    idempotencyKey,
+    actorId: actor.id,
+    actorRole: actor.role,
+  });
 
   if (!result.saved) {
     await logActivity({

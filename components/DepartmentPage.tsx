@@ -277,9 +277,9 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
     setError("");
     setLastResult("");
     try {
-      const res = await fetch("/api/company-execution", {
+      const res = await fetch("/api/owner-execution", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           request: `[${title}] ${trimmed}`,
         }),

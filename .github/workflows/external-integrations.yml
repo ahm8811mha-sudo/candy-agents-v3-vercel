@@ -2,6 +2,16 @@ name: External Integration Canaries
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "15 2 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/external-canary.mjs"
+      - "scripts/record-readiness-evidence.mjs"
+      - ".github/workflows/external-integrations.yml"
+      - "lib/integrations/**"
+      - "app/api/finance/zatca/sandbox/**"
   pull_request:
     paths:
       - "scripts/external-canary.mjs"
@@ -30,6 +40,8 @@ jobs:
       ZATCA_SANDBOX_TOKEN: ${{ secrets.ZATCA_SANDBOX_TOKEN }}
       COMPANY_LEGAL_NAME: ${{ secrets.COMPANY_LEGAL_NAME }}
       COMPANY_VAT_NUMBER: ${{ secrets.COMPANY_VAT_NUMBER }}
+      PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +49,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
 
       - name: Verify external test credentials exist
         id: credentials
@@ -64,6 +79,21 @@ jobs:
       - name: Run real external canaries
         if: steps.credentials.outputs.ready == 'true'
         run: node scripts/external-canary.mjs
+
+      - name: Record verified Google capability evidence
+        if: steps.credentials.outputs.ready == 'true' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in google.drive.file google.gmail.draft google.sheets.row google.calendar.event; do
+            npm run readiness:evidence -- \
+              --key "capability:$key" \
+              --environment production \
+              --status PASS \
+              --expires-hours 720 \
+              --details "{\"canary\":\"$key\",\"cleanupRequired\":true,\"report\":\"external-canary-report.json\"}" \
+              --optional
+          done
 
       - name: Upload external evidence
         if: always()

@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId, isMultiTenantEnabled } from "../tenant";
+import type { ApprovalItem } from "../approvals";
 
 export type GovernedActionKind =
   | "ACCOUNTING_PERIOD_CLOSE"
@@ -9,6 +10,82 @@ export type GovernedActionKind =
   | "COMPANY_EXECUTION_PROJECT";
 
 type Decision = "APPROVED" | "REJECTED";
+
+export function isCompanyExecutionApproval(approval: ApprovalItem | null | undefined) {
+  return approval?.type === "GENERAL"
+    && approval.metadata?.source === "governanceOS"
+    && approval.metadata?.actionKind === "COMPANY_EXECUTION_PROJECT";
+}
+
+/**
+ * Commits the sign-off, project/work-item transition, workflow completion,
+ * audit event, and outbox event in one database transaction. This path is kept
+ * separate from the compatibility transitions below because execution bundles
+ * have a durable workflow identity and must never be partially approved.
+ */
+export async function decideCompanyExecutionApprovalCritical(input: {
+  approval: ApprovalItem;
+  decision: Decision;
+  decidedBy: string;
+  note?: string;
+  actorRole?: string;
+  tier: string;
+}) {
+  if (!isCompanyExecutionApproval(input.approval)) {
+    throw new Error("Approval is not a company execution decision.");
+  }
+  const supabase = getSupabaseAdmin();
+  if (!supabase) throw new Error("Supabase is required for atomic execution approval.");
+
+  const auditId = `aud-approval-${input.approval.id}-${input.decision.toLowerCase()}`;
+  const { data, error } = await supabase.rpc("orvanta_decide_execution_bundle", {
+    p_approval_id: input.approval.id,
+    p_decision: input.decision,
+    p_decided_by: input.decidedBy,
+    p_note: input.note || null,
+    p_audit: {
+      id: auditId,
+      role: input.actorRole || null,
+      tier: input.tier,
+      detail: `${input.decision === "APPROVED" ? "اعتماد" : "رفض"}: ${input.approval.title}`,
+      metadata: {
+        approvalId: input.approval.id,
+        approvalType: input.approval.type,
+        decision: input.decision,
+        governanceTier: input.tier,
+      },
+    },
+  });
+  if (error) throw new Error(`Atomic execution approval failed: ${error.message}`);
+  if (!data || typeof data !== "object") throw new Error("Atomic execution approval returned an invalid response.");
+
+  const row = data as Record<string, unknown>;
+  const approvalRow = row.approval && typeof row.approval === "object"
+    ? row.approval as Record<string, unknown>
+    : null;
+  if (!approvalRow) throw new Error("Atomic execution approval did not return the durable approval row.");
+  const auditRow = row.audit && typeof row.audit === "object"
+    ? row.audit as Record<string, unknown>
+    : null;
+  const [{ rememberDurableApprovalRow }, { rememberDurableAuditRow }] = await Promise.all([
+    import("../approvals"),
+    import("./audit"),
+  ]);
+  if (auditRow) rememberDurableAuditRow(auditRow);
+
+  return {
+    approval: rememberDurableApprovalRow(approvalRow),
+    execution: {
+      actionKind: "COMPANY_EXECUTION_PROJECT" as const,
+      entityId: String(input.approval.metadata?.entityId || ""),
+      decision: input.decision,
+      atomic: true,
+      idempotent: Boolean(row.idempotent),
+      project: row.project || null,
+      workflow: row.workflow || null,
+    },
+  };
+}
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";

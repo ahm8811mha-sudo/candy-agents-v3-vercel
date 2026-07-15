@@ -154,9 +154,9 @@ export default function StrategyRunner() {
     const request = String(form.get("request") || "").trim();
 
     try {
-      const res = await fetch("/api/company-execution", {
+      const res = await fetch("/api/owner-execution", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ request }),
       });
       const data = await res.json();

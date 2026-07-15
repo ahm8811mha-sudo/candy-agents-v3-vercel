@@ -235,7 +235,7 @@ POST /api/company
 Execution API:
 
 ```txt
-POST /api/company-execution
+POST /api/owner-execution
 { "request": "اعتماد مشروع متجر إلكتروني بميزانية 50,000 ريال وتحويله إلى مشروع ومهام" }
 ```
 

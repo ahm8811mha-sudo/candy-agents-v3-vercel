@@ -29,6 +29,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "");
+    const idempotencyKey = String(req.headers.get("idempotency-key") || body.idempotencyKey || "").slice(0, 256) || undefined;
 
     if (action === "seed") {
       await seedEnterpriseOperatingSystem();
@@ -37,17 +38,17 @@ export async function POST(req: Request) {
     }
 
     if (action === "journal") {
-      const result = await postJournalEntry(body.data);
+      const result = await postJournalEntry({ ...(body.data || {}), reference: body.data?.reference || idempotencyKey });
       return NextResponse.json({ ok: true, result });
     }
 
     if (action === "invoice") {
-      const result = await createAccountingInvoice(body.data);
+      const result = await createAccountingInvoice({ ...(body.data || {}), idempotencyKey });
       return NextResponse.json({ ok: true, result });
     }
 
     if (action === "bank") {
-      const result = await addBankTransaction(body.data);
+      const result = await addBankTransaction({ ...(body.data || {}), idempotencyKey });
       return NextResponse.json({ ok: true, result });
     }
 

@@ -74,6 +74,15 @@ function fromRow(r: Record<string, unknown>): ApprovalItem {
   };
 }
 
+/** Cache a row that was already committed by a larger database transaction. */
+export function rememberDurableApprovalRow(row: Record<string, unknown>): ApprovalItem {
+  const item = fromRow(row);
+  const index = store.findIndex((approval) => approval.id === item.id);
+  if (index >= 0) store[index] = item;
+  else store.unshift(item);
+  return item;
+}
+
 /** Hydrate the store from Supabase once per process (before reads). */
 export const hydrateApprovals = hydrateOnce(async () => {
   const rows = await fetchRows("company_approvals", { orderBy: "created_at", limit: 200 });

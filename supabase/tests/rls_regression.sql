@@ -17,6 +17,7 @@ insert into expected_protected_tables (table_name) values
   ('accounting_journal_entries'),
   ('accounting_journal_lines'),
   ('accounting_periods'),
+  ('ai_usage_log'),
   ('gov_documents'),
   ('gov_document_extractions'),
   ('failed_writes'),
@@ -86,7 +87,7 @@ begin
     and table_name in (
       'failed_writes','cron_runs','system_alerts','dead_letter_jobs',
       'integration_attempts','external_receipts','backup_verification_runs',
-      'accounting_periods','readiness_evidence',
+      'accounting_periods','ai_usage_log','readiness_evidence',
       'company_knowledge_nodes','company_knowledge_edges','company_feature_values',
       'company_intelligence_snapshots','decision_recommendations','simulation_runs',
       'autonomous_plans','company_learning_events','executive_narratives',

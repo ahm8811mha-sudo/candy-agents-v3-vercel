@@ -5,11 +5,16 @@ import {
   reopenApprovalCritical,
   approvalStats,
   type ApprovalStatus,
+  type ApprovalItem,
 } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
-import { executeGovernedApprovalDecision } from "@/lib/company/governedApprovalExecution";
+import {
+  decideCompanyExecutionApprovalCritical,
+  executeGovernedApprovalDecision,
+  isCompanyExecutionApproval,
+} from "@/lib/company/governedApprovalExecution";
 import { authenticateRequest } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { approvalTierForDecision } from "@/lib/company/governance";
@@ -51,46 +56,64 @@ export async function POST(req: NextRequest) {
     }
 
     const decidedBy = user?.name || String(body.decidedBy || "المالك");
-    const result = await decideApprovalCritical(id, decision, decidedBy, body.note ? String(body.note) : undefined);
-    if (!result) {
-      return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
-    }
+    const note = body.note ? String(body.note) : undefined;
+    let result: ApprovalItem | null = null;
+    let execution: unknown = null;
 
-    let execution = null;
-    try {
-      // F1 — append-only, retry-safe audit trail for every sign-off.
-      await recordAuditCritical({
-        id: `aud-approval-${result.id}-${decision.toLowerCase()}`,
-        actor: decidedBy,
-        role: user?.role,
-        action: decision === "APPROVED" ? "APPROVE" : "REJECT",
-        entityType: (result.type || "APPROVAL").toLowerCase(),
-        entityId: result.id,
-        detail: `${decision === "APPROVED" ? "اعتماد" : "رفض"}: ${result.title}`,
+    if (target && isCompanyExecutionApproval(target)) {
+      // The canonical execution path commits the approval and every dependent
+      // state change in one transaction; there is nothing to reopen on error.
+      const atomic = await decideCompanyExecutionApprovalCritical({
+        approval: target,
+        decision,
+        decidedBy,
+        note,
+        actorRole: user?.role,
         tier,
-        metadata: {
-          approvalId: result.id,
-          approvalType: result.type,
-          decision,
-          governanceTier: tier,
-        },
       });
-
-      // Run the allow-listed business transition. IDEA is also converted to
-      // an execution project instead of only changing color in the inbox.
-      if (result.type === "GENERAL" && result.metadata?.source === "governanceOS") {
-        execution = await executeGovernedApprovalDecision(result.metadata || {}, decision, decidedBy);
-      } else if (decision === "APPROVED") {
-        if (result.type === "TRADE") execution = await executeApprovedTrade({ ...(result.metadata || {}), approvalId: result.id });
-        else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
-        else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
-        else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+      result = atomic.approval;
+      execution = atomic.execution;
+    } else {
+      result = await decideApprovalCritical(id, decision, decidedBy, note);
+      if (!result) {
+        return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
       }
-    } catch (transitionError) {
-      // Do not hide an approved-but-unexecuted item. Restore it to the queue;
-      // every transition above is idempotent and safe to retry.
-      await reopenApprovalCritical(result.id);
-      throw transitionError;
+
+      try {
+        // F1 — append-only, retry-safe audit trail for every sign-off.
+        await recordAuditCritical({
+          id: `aud-approval-${result.id}-${decision.toLowerCase()}`,
+          actor: decidedBy,
+          role: user?.role,
+          action: decision === "APPROVED" ? "APPROVE" : "REJECT",
+          entityType: (result.type || "APPROVAL").toLowerCase(),
+          entityId: result.id,
+          detail: `${decision === "APPROVED" ? "اعتماد" : "رفض"}: ${result.title}`,
+          tier,
+          metadata: {
+            approvalId: result.id,
+            approvalType: result.type,
+            decision,
+            governanceTier: tier,
+          },
+        });
+
+        // Run the allow-listed business transition. IDEA is also converted to
+        // an execution project instead of only changing color in the inbox.
+        if (result.type === "GENERAL" && result.metadata?.source === "governanceOS") {
+          execution = await executeGovernedApprovalDecision(result.metadata || {}, decision, decidedBy);
+        } else if (decision === "APPROVED") {
+          if (result.type === "TRADE") execution = await executeApprovedTrade({ ...(result.metadata || {}), approvalId: result.id });
+          else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
+          else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
+          else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+        }
+      } catch (transitionError) {
+        // Do not hide an approved-but-unexecuted item. Restore it to the queue;
+        // every compatibility transition above is idempotent and safe to retry.
+        await reopenApprovalCritical(result.id);
+        throw transitionError;
+      }
     }
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });

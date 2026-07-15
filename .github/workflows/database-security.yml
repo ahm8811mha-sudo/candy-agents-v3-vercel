@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 20
     env:
       PGURL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+      PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +72,22 @@ jobs:
           echo "commit=${GITHUB_SHA}" >> database-security-evidence.txt
           echo "migration_count=$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l)" >> database-security-evidence.txt
           echo "regression_suite_count=$(find supabase/tests -maxdepth 1 -type f -name '*.sql' | wc -l)" >> database-security-evidence.txt
+
+      - name: Record passing database evidence
+        if: steps.configuration.outputs.configured == 'true' && github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          for key in migration-chain-applied rls-regression execution-transaction-smoke accounting-controls-smoke; do
+            npm run readiness:evidence -- \
+              --key "$key" \
+              --environment staging \
+              --status PASS \
+              --expires-hours 336 \
+              --details "{\"stagingVerified\":true,\"migrationCount\":$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l),\"regressionSuiteCount\":$(find supabase/tests -maxdepth 1 -type f -name '*.sql' | wc -l)}" \
+              --optional
+          done
 
       - uses: actions/upload-artifact@v4
         if: steps.configuration.outputs.configured == 'true'

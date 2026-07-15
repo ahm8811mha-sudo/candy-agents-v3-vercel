@@ -93,6 +93,88 @@ end $$;
 
 do $$
 declare
+  v_tenant text := 'orvanta-accounting-regression';
+  v_suffix text := replace(gen_random_uuid()::text, '-', '');
+  v_invoice_id uuid := gen_random_uuid();
+  v_contact_id uuid := gen_random_uuid();
+  v_bank_account_id uuid := gen_random_uuid();
+  v_bank_transaction_id uuid := gen_random_uuid();
+  v_invoice_result jsonb;
+  v_bank_first jsonb;
+  v_bank_second jsonb;
+  v_invoice_count integer;
+  v_line_debit numeric;
+  v_line_credit numeric;
+  v_bank_balance numeric;
+begin
+  insert into public.accounting_accounts (
+    id, tenant_id, code, name, type, normal_balance, is_system, active
+  ) values
+    (gen_random_uuid(), v_tenant, '1100', 'Regression receivable', 'ASSET', 'DEBIT', true, true),
+    (gen_random_uuid(), v_tenant, '4000', 'Regression revenue', 'REVENUE', 'CREDIT', true, true)
+  on conflict (code) do nothing;
+
+  v_invoice_result := public.orvanta_create_accounting_invoice(
+    v_tenant,
+    jsonb_build_object(
+      'id', v_invoice_id,
+      'contactId', v_contact_id,
+      'invoiceType', 'SALES',
+      'contactName', 'Rollback customer',
+      'subtotal', 100,
+      'tax', 15,
+      'taxRate', 0.15,
+      'taxInvoiceNumber', 'REG-TAX-' || v_suffix,
+      'entryNumber', 'REG-INVOICE-JE-' || v_suffix
+    )
+  );
+
+  select count(*) into v_invoice_count
+  from public.accounting_invoices
+  where tenant_id = v_tenant and id = v_invoice_id;
+
+  select coalesce(sum(l.debit), 0), coalesce(sum(l.credit), 0)
+    into v_line_debit, v_line_credit
+  from public.accounting_journal_lines l
+  join public.accounting_journal_entries e on e.id = l.entry_id
+  where e.tenant_id = v_tenant and e.entry_number = 'REG-INVOICE-JE-' || v_suffix;
+
+  v_bank_first := public.orvanta_add_bank_transaction(
+    v_tenant,
+    jsonb_build_object(
+      'bankAccountId', v_bank_account_id,
+      'transactionId', v_bank_transaction_id,
+      'bankName', 'Regression bank ' || v_suffix,
+      'description', 'Atomic bank movement',
+      'amount', 250
+    )
+  );
+  v_bank_second := public.orvanta_add_bank_transaction(
+    v_tenant,
+    jsonb_build_object(
+      'bankAccountId', v_bank_account_id,
+      'transactionId', v_bank_transaction_id,
+      'bankName', 'Regression bank ' || v_suffix,
+      'description', 'Atomic bank movement',
+      'amount', 250
+    )
+  );
+
+  select balance into v_bank_balance
+  from public.accounting_bank_accounts
+  where tenant_id = v_tenant and id = v_bank_account_id;
+
+  insert into accounting_control_test_results values
+    ('invoice_and_journal_are_atomic',
+      v_invoice_count = 1 and v_line_debit = 115 and v_line_credit = 115 and (v_invoice_result ->> 'idempotent')::boolean = false,
+      format('invoice=%s, debit=%s, credit=%s', v_invoice_count, v_line_debit, v_line_credit)),
+    ('bank_retry_is_idempotent',
+      v_bank_balance = 250 and (v_bank_first ->> 'idempotent')::boolean = false and (v_bank_second ->> 'idempotent')::boolean = true,
+      format('balance=%s', v_bank_balance));
+end $$;
+
+do $$
+declare
   broken text;
 begin
   select string_agg(test_name||' ('||coalesce(detail,'')||')', ', ' order by test_name)

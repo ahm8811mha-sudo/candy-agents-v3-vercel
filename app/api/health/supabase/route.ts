@@ -3,7 +3,7 @@ import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-const BUILD_MARKER = "road-to-8-v1";
+const BUILD_MARKER = "production-readiness-v2";
 
 function connectedHost(): string | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
