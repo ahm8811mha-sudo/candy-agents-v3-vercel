@@ -49,7 +49,8 @@ const PAGE_TITLES: Array<[string, string]> = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const authPage = pathname.startsWith("/login");
+  // The facade ("/") renders bare: it carries its own nav and sections.
+  const authPage = pathname.startsWith("/login") || pathname === "/";
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(0);
 
