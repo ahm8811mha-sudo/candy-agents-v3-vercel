@@ -443,3 +443,134 @@
 
 /* the brand mark reads in light ink on the facade's dark surface */
 .fx-root .orvanta-lockup--mark { color: var(--fx-strong); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ORVANTA THEME — the facade's world carried across the whole app.
+   Remaps the app's design tokens to the teal-black brand palette so
+   every inner page (inbox, departments, operations, office, status,
+   login) lives on the same surface as the facade.
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="orvanta"] {
+  --bg: #061418;
+  --panel: #0a2027;
+  --panel-2: #0d2731;
+  --field: #081b21;
+  --field-2: #06161b;
+  --line: rgba(126, 196, 209, 0.14);
+  --text: #e8f1f1;
+  --text-strong: #ffffff;
+  --muted: #8ea9ae;
+  --muted-2: #a5bcc0;
+  --primary: #0797b7;
+  --primary-2: #4cc0d8;
+  --accent-sky: #63c8dd;
+  --accent-sky-soft: rgba(99, 200, 221, 0.12);
+  --green: #3ecfa0;
+  --amber: #f0b64a;
+  --red: #ef6f6c;
+  --green-soft: rgba(62, 207, 160, 0.13);
+  --amber-soft: rgba(240, 182, 74, 0.14);
+  --red-soft: rgba(239, 111, 108, 0.13);
+  --shadow: 0 18px 50px rgba(2, 10, 13, 0.45);
+  --shadow-ceo: 0 18px 50px rgba(2, 10, 13, 0.45);
+  --brand-gradient: linear-gradient(135deg, #0d7f99, #0797b7);
+  --action-bg: #4cc0d8;
+  --action-text: #04191f;
+  --orvanta-ink: #e8f1f1;
+  --orvanta-soft-text: #8ea9ae;
+}
+
+/* one display voice across the app */
+[data-theme="orvanta"] h1,
+[data-theme="orvanta"] h2 {
+  font-family: "Reem Kufi", "Cairo", system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* filled actions: ink label on the teal fill, no hover jump.
+   (orvanta-logo-final.css pins these blue with !important — outrank it) */
+[data-theme="orvanta"] .primary-btn {
+  background: var(--action-bg) !important;
+  color: var(--action-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 3px rgba(7, 151, 183, 0.12) !important;
+}
+[data-theme="orvanta"] .primary-btn:hover:not(:disabled) {
+  filter: none;
+  transform: none;
+  background: color-mix(in srgb, #4cc0d8 86%, #ffffff) !important;
+}
+[data-theme="orvanta"] .shell-link.is-active {
+  background: var(--action-bg) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .brand-state-card {
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+/* the sidebar note is a paragraph block, not a status pill */
+[data-theme="orvanta"] .shell-sidebar .notice { border-radius: 14px; }
+[data-theme="orvanta"] .input:focus,
+[data-theme="orvanta"] .textarea:focus {
+  box-shadow: 0 0 0 3px var(--accent-sky-soft);
+}
+
+/* brand marks flip to light ink on the dark surface */
+[data-theme="orvanta"] .orvanta-lockup--mark,
+[data-theme="orvanta"] .orvanta-mark,
+[data-theme="orvanta"] .shell-sidebar__brand .orvanta-mark { color: var(--text-strong); }
+[data-theme="orvanta"] .shell-topbar__brand { color: var(--text-strong); }
+[data-theme="orvanta"] .orvanta-wordmark b { color: var(--text-strong); }
+[data-theme="orvanta"] .orvanta-wordmark small { color: var(--muted); }
+
+/* sidebar brand: bare mark and type on the surface, no white card */
+[data-theme="orvanta"] .shell-sidebar__brand {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.shell-sidebar__brand-text { display: grid; gap: 3px; line-height: 1.2; }
+.shell-sidebar__brand-text b {
+  font-family: "Reem Kufi", "Cairo", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-strong);
+}
+.shell-sidebar__brand-text small { font-size: 0.64rem; color: var(--muted); }
+
+/* the three inner pages built on .hero-scenic join the dark world
+   (brand.css pins them light with !important, so match specificity) */
+[data-theme="orvanta"] .hero-scenic {
+  border: 1px solid var(--line) !important;
+  background:
+    linear-gradient(215deg, rgba(7, 151, 183, 0.18) 0%, transparent 46%),
+    linear-gradient(180deg, #082027, #061418) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .hero-title { color: var(--text-strong) !important; }
+[data-theme="orvanta"] .hero-title em {
+  background: none !important;
+  -webkit-text-fill-color: var(--accent-sky) !important;
+  color: var(--accent-sky) !important;
+}
+[data-theme="orvanta"] .hero-sub { color: var(--muted) !important; }
+[data-theme="orvanta"] .hero-pill {
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+  color: var(--accent-sky) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .hero-actions .secondary-btn {
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+}
+[data-theme="orvanta"] .hero-logos { color: var(--muted) !important; }
+[data-theme="orvanta"] .hero-logos i { background: var(--muted) !important; }

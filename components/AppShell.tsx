@@ -119,7 +119,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className={`shell-sidebar ${open ? "open" : ""}`} aria-label="التنقل الرئيسي">
         <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)} aria-label="Orvanta — الصفحة الرئيسية">
-          <OrvantaLogo size={154} subtitle="AI Company Operating System" priority />
+          <OrvantaLogo size={44} showWordmark={false} priority />
+          <span className="shell-sidebar__brand-text">
+            <b>أورفانتا</b>
+            <small>AI Business OS</small>
+          </span>
         </Link>
 
         <div className="shell-group">التنقل الرئيسي</div>
