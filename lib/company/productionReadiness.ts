@@ -107,7 +107,9 @@ export function getProductionReadiness(): ProductionReadiness {
       "supabase-service-role",
       "Durable server persistence",
       hasSupabaseEnv() && hasServerSecret,
-      hasServerSecret
+      supabaseEnvironment.configurationIssue === "PROJECT_MISMATCH"
+        ? "The Supabase URL and server key belong to different projects. Replace the Vercel server key with a key from the configured project; writes remain blocked until they match."
+        : hasServerSecret
         ? `${supabaseEnvironment.keySource} is configured for server-only writes.`
         : "SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY) is missing. Projects, approvals, audit, actions, workflow state, and ledger cannot be durable."
     ),

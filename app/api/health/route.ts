@@ -27,7 +27,7 @@ export async function GET() {
       arabicName: "أورفانتا",
       tagline: "AI Operating System for Business",
     },
-    version: "3.3.0-production-readiness",
+    version: "3.3.1-production-readiness-truth",
     accessMode: readiness.accessMode,
     productionReady: readiness.okForProduction,
     readiness,

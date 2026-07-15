@@ -37,6 +37,7 @@ describe("Supabase persistence helpers (graceful degradation)", () => {
     const readiness = getSupabaseEnvironmentReadiness();
 
     expect(readiness).toMatchObject({ configured: false, hasUrl: false, hasServerKey: false, keySource: null });
+    expect(readiness).toMatchObject({ projectAlignment: "UNKNOWN", configurationIssue: null });
     expect(readiness.missingEnvironmentVariables).toEqual([
       "NEXT_PUBLIC_SUPABASE_URL (أو SUPABASE_URL)",
       "SUPABASE_SECRET_KEY (أو SUPABASE_SERVICE_ROLE_KEY)",
@@ -59,7 +60,35 @@ describe("Supabase persistence helpers (graceful degradation)", () => {
     expect(getSupabaseEnvironmentReadiness()).toMatchObject({
       configured: true,
       keySource: "SUPABASE_SERVICE_ROLE_KEY",
+      projectAlignment: "UNKNOWN",
     });
+  });
+
+  it("fails closed when a legacy service-role JWT belongs to another project", () => {
+    const payload = Buffer.from(JSON.stringify({ ref: "different-project", role: "service_role" }))
+      .toString("base64url");
+    process.env.SUPABASE_URL = "https://expected-project.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = `header.${payload}.signature`;
+
+    expect(getSupabaseEnvironmentReadiness()).toMatchObject({
+      configured: false,
+      hasUrl: true,
+      hasServerKey: true,
+      projectAlignment: "MISMATCH",
+      configurationIssue: "PROJECT_MISMATCH",
+    });
+    expect(hasSupabaseEnv()).toBe(false);
+  });
+
+  it("accepts a matching legacy service-role JWT without exposing its value", () => {
+    const payload = Buffer.from(JSON.stringify({ ref: "expected-project", role: "service_role" }))
+      .toString("base64url");
+    process.env.SUPABASE_URL = "https://expected-project.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = `header.${payload}.signature`;
+
+    const readiness = getSupabaseEnvironmentReadiness();
+    expect(readiness).toMatchObject({ configured: true, projectAlignment: "MATCH", configurationIssue: null });
+    expect(JSON.stringify(readiness)).not.toContain(payload);
   });
 
   it("persist is a silent no-op without env (never throws)", () => {
