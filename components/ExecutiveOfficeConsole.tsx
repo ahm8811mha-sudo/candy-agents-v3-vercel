@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowRight,
@@ -48,29 +48,63 @@ type OfficeData = {
   auditLog?: Array<{ id: string; decision_type: string; action: string; approval_status: string; created_at: string }>;
 };
 
+type DatabaseIssue = {
+  isPreview: boolean;
+  productionUrl: string | null;
+  missingEnvironmentVariables: string[];
+  message: string;
+};
+
+function databaseIssueFromResponse(json: Record<string, unknown>): DatabaseIssue | null {
+  if (json.code !== "SUPABASE_NOT_CONFIGURED") return null;
+  const deployment = (json.deployment || {}) as Record<string, unknown>;
+  return {
+    isPreview: deployment.isPreview === true,
+    productionUrl: typeof deployment.productionUrl === "string" ? deployment.productionUrl : null,
+    missingEnvironmentVariables: Array.isArray(json.missingEnvironmentVariables)
+      ? json.missingEnvironmentVariables.filter((item): item is string => typeof item === "string")
+      : [],
+    message: typeof json.error === "string" ? json.error : "قاعدة البيانات غير مهيأة لهذا النشر.",
+  };
+}
+
+function apiErrorMessage(json: Record<string, unknown>, fallback: string) {
+  return typeof json.error === "string" ? json.error : fallback;
+}
+
 export default function ExecutiveOfficeConsole() {
   const [data, setData] = useState<OfficeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [databaseIssue, setDatabaseIssue] = useState<DatabaseIssue | null>(null);
 
-  async function load() {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/executive-office", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل مكتب المدير التنفيذي.");
-      setData(json);
+      const res = await fetch("/api/executive-office", { cache: "no-store", signal });
+      const json = (await res.json()) as Record<string, unknown>;
+      const issue = databaseIssueFromResponse(json);
+      if (issue) {
+        setData(null);
+        setDatabaseIssue(issue);
+        return;
+      }
+      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تحميل مكتب المدير التنفيذي."));
+      setData(json as unknown as OfficeData);
+      setDatabaseIssue(null);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "تعذر تحميل مكتب المدير التنفيذي.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }
+  }, []);
 
   async function run(action: string, payload: Record<string, unknown> = {}) {
+    if (databaseIssue) return false;
     setWorking(action);
     setMessage("");
     setError("");
@@ -80,12 +114,20 @@ export default function ExecutiveOfficeConsole() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...payload }),
       });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ أمر مكتب CEO.");
+      const json = (await res.json()) as Record<string, unknown>;
+      const issue = databaseIssueFromResponse(json);
+      if (issue) {
+        setData(null);
+        setDatabaseIssue(issue);
+        return false;
+      }
+      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تنفيذ أمر مكتب CEO."));
       setMessage(successText(action));
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر مكتب CEO.");
+      return false;
     } finally {
       setWorking("");
     }
@@ -93,8 +135,9 @@ export default function ExecutiveOfficeConsole() {
 
   function submitDirective(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("create-item", {
+    void run("create-item", {
       data: {
         title: String(form.get("title") || ""),
         notes: String(form.get("notes") || ""),
@@ -103,19 +146,25 @@ export default function ExecutiveOfficeConsole() {
         ownerRole: "CEO Office",
         dueDays: Number(form.get("dueDays") || 1),
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitExecution(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("execute", { request: String(form.get("request") || "") }).then(() => event.currentTarget.reset());
+    void run("execute", { request: String(form.get("request") || "") }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitCalendar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("calendar-event", {
+    void run("calendar-event", {
       data: {
         title: String(form.get("title") || ""),
         eventType: String(form.get("eventType") || "FOLLOW_UP"),
@@ -123,13 +172,16 @@ export default function ExecutiveOfficeConsole() {
         durationMinutes: Number(form.get("durationMinutes") || 30),
         notes: String(form.get("notes") || ""),
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitMinutes(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("meeting-minutes", {
+    void run("meeting-minutes", {
       data: {
         title: String(form.get("title") || ""),
         attendees: String(form.get("attendees") || "CEO Office,CFO,Marketing Director")
@@ -139,14 +191,19 @@ export default function ExecutiveOfficeConsole() {
         decisions: String(form.get("decisions") || ""),
         actionItems: [{ title: String(form.get("actionItem") || "Follow up decision"), owner: "Chief of Staff" }],
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   const brief = data?.operatingBrief;
+  const databaseReady = Boolean(data && !databaseIssue);
 
   return (
     <main className="company-app ops-console">
@@ -164,41 +221,64 @@ export default function ExecutiveOfficeConsole() {
           </p>
           <div className="department-hero-actions">
             <span>
-              <Target size={16} /> صحة الشركة {brief?.healthScore || 0}/100
+              <Target size={16} /> صحة الشركة {brief ? `${brief.healthScore}/100` : "—"}
             </span>
             <span>
-              <ShieldAlert size={16} /> المخاطر {brief?.riskLevel || "LOW"}
+              <ShieldAlert size={16} /> المخاطر {brief?.riskLevel || "—"}
             </span>
           </div>
         </div>
         <div className="department-badge">
           <strong>CEO Office</strong>
-          <small>Command ready</small>
+          <small className={databaseReady ? "" : "is-warning"}>
+            {databaseReady ? "Command ready" : loading ? "جارٍ التحقق" : databaseIssue?.isPreview ? "Preview isolated" : "Database required"}
+          </small>
         </div>
       </section>
 
       <section className="enterprise-actions">
-        <button className="secondary-btn" onClick={load} disabled={loading}>
+        <button className="secondary-btn" onClick={() => void load()} disabled={loading}>
           {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
           تحديث المكتب
         </button>
-        <button className="primary-btn" onClick={() => run("radar")} disabled={Boolean(working)}>
+        <button className="primary-btn" onClick={() => void run("radar")} disabled={Boolean(working) || !databaseReady}>
           {working === "radar" ? <Loader2 className="spin" size={18} /> : <Radar size={18} />}
           تشغيل رادار الفرص
         </button>
-        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "MORNING" })} disabled={Boolean(working)}>
+        <button className="secondary-btn" onClick={() => void run("daily-brief", { briefType: "MORNING" })} disabled={Boolean(working) || !databaseReady}>
           {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <ClipboardList size={18} />}
           ملخص صباحي
         </button>
-        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "END_OF_DAY" })} disabled={Boolean(working)}>
+        <button className="secondary-btn" onClick={() => void run("daily-brief", { briefType: "END_OF_DAY" })} disabled={Boolean(working) || !databaseReady}>
           {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <CalendarCheck size={18} />}
           ملخص نهاية اليوم
         </button>
+        {databaseIssue && (
+          <div className="status-banner warn executive-database-status" role="status">
+            <span className="status-dot warn" />
+            <div>
+              <strong>{databaseIssue.isPreview ? "نسخة المعاينة معزولة عن بيانات الإنتاج" : "اتصال قاعدة البيانات مطلوب"}</strong>
+              <p>{databaseIssue.message}</p>
+              <div className="executive-database-status__actions">
+                {databaseIssue.isPreview && databaseIssue.productionUrl ? (
+                  <a className="secondary-btn btn-sm" href={databaseIssue.productionUrl}>فتح النسخة الإنتاجية</a>
+                ) : (
+                  <Link className="secondary-btn btn-sm" href="/status">فتح حالة النظام</Link>
+                )}
+              </div>
+              {databaseIssue.missingEnvironmentVariables.length > 0 && (
+                <small>المتغيرات المطلوبة في بيئة النشر: {databaseIssue.missingEnvironmentVariables.join("، ")}</small>
+              )}
+            </div>
+          </div>
+        )}
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
 
-      <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
+      {data && (
+        <>
+          <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
 
       <section className="ops-card executive-brief">
         <span className="eyebrow">
@@ -380,6 +460,8 @@ export default function ExecutiveOfficeConsole() {
           ))}
         </Panel>
       </section>
+        </>
+      )}
     </main>
   );
 }
@@ -411,7 +493,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "ceo-items",
       icon: CalendarCheck,
       label: "بنود متابعة CEO",
-      value: brief?.pendingItems || ceoItems.length,
+      value: brief?.pendingItems ?? ceoItems.length,
       sourceType: "ceo-item",
       items: ceoItems.map((c) => ({
         id: c.id,
@@ -424,7 +506,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "approvals",
       icon: CheckCircle2,
       label: "اعتمادات تنتظر قرار",
-      value: brief?.waitingApprovals || approvals.length,
+      value: brief?.waitingApprovals ?? approvals.length,
       sourceType: "approval",
       items: approvals.map((a) => ({
         id: a.id,
@@ -437,7 +519,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "risks",
       icon: ShieldAlert,
       label: "مخاطر مرتفعة",
-      value: brief?.highRisks || highRisks.length,
+      value: brief?.highRisks ?? highRisks.length,
       sourceType: "alert",
       items: highRisks.map((a) => ({
         id: a.id,
@@ -450,7 +532,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "projects",
       icon: BriefcaseBusiness,
       label: "مشاريع نشطة",
-      value: brief?.activeProjects || projects.length,
+      value: brief?.activeProjects ?? projects.length,
       sourceType: "project",
       items: projects.map((p) => ({
         id: p.id,
@@ -463,7 +545,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "late-tasks",
       icon: ClipboardList,
       label: "مهام متأخرة",
-      value: brief?.lateTasks || lateTasks.length,
+      value: brief?.lateTasks ?? lateTasks.length,
       sourceType: "task",
       items: lateTasks.map((t) => ({
         id: t.id,

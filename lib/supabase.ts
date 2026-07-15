@@ -5,15 +5,48 @@ import { withTenant, isMultiTenantEnabled, getTenantId } from "./tenant";
 let adminClient: SupabaseClient | null = null;
 
 function supabaseUrl() {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
 }
 
 function supabaseServerKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase's current server-key name is SUPABASE_SECRET_KEY. Keep the
+  // legacy service-role alias so existing deployments continue to work.
+  return process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+}
+
+export type SupabaseEnvironmentReadiness = {
+  configured: boolean;
+  hasUrl: boolean;
+  hasServerKey: boolean;
+  keySource: "SUPABASE_SECRET_KEY" | "SUPABASE_SERVICE_ROLE_KEY" | null;
+  missingEnvironmentVariables: string[];
+};
+
+/** Safe configuration diagnostics. Never returns a URL or secret value. */
+export function getSupabaseEnvironmentReadiness(): SupabaseEnvironmentReadiness {
+  const hasUrl = Boolean(supabaseUrl());
+  const keySource = process.env.SUPABASE_SECRET_KEY?.trim()
+    ? "SUPABASE_SECRET_KEY"
+    : process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+      ? "SUPABASE_SERVICE_ROLE_KEY"
+      : null;
+  const hasServerKey = Boolean(keySource);
+  const missingEnvironmentVariables: string[] = [];
+
+  if (!hasUrl) missingEnvironmentVariables.push("NEXT_PUBLIC_SUPABASE_URL (أو SUPABASE_URL)");
+  if (!hasServerKey) missingEnvironmentVariables.push("SUPABASE_SECRET_KEY (أو SUPABASE_SERVICE_ROLE_KEY)");
+
+  return {
+    configured: hasUrl && hasServerKey,
+    hasUrl,
+    hasServerKey,
+    keySource,
+    missingEnvironmentVariables,
+  };
 }
 
 export function hasSupabaseEnv() {
-  return Boolean(supabaseUrl() && supabaseServerKey());
+  return getSupabaseEnvironmentReadiness().configured;
 }
 
 export function requireSupabaseForWrite() {
@@ -28,7 +61,7 @@ export function getSupabaseAdmin() {
   if (!url || !key) return null;
   if (!adminClient) {
     adminClient = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
   }
   return adminClient;

@@ -31,7 +31,8 @@
 
 **التفعيل:** شغّل `docs/supabase-schema.sql` في Supabase → SQL Editor، ثم أضف في
 Vercel → Settings → Environment Variables المتغيّرين `NEXT_PUBLIC_SUPABASE_URL`
-و`SUPABASE_SERVICE_ROLE_KEY` (لا تُلصق المفاتيح في المحادثة أو المستودع). بدون
+و`SUPABASE_SECRET_KEY` (أو الاسم القديم `SUPABASE_SERVICE_ROLE_KEY`؛ لا تُلصق
+المفاتيح في المحادثة أو المستودع). بدون
 هذه المتغيّرات يبقى النظام يعمل بالذاكرة كما هو — تدهور آمن.
 
 النمط التقني: كتابة فورية غير حاجبة (`persist`) + تحميل مرة واحدة لكل نسخة
