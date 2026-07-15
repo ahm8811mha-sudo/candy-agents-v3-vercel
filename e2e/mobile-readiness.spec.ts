@@ -6,9 +6,15 @@ const ownerCode = process.env.ORVANTA_OWNER_ACCESS_KEY || "";
 test.use({ serviceWorkers: "block" });
 
 async function unlock(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  await page.getByLabel("رمز وصول المالك").fill(ownerCode);
-  await page.getByRole("button", { name: "فتح النسخة الخاصة" }).click();
+  // Layout tests should not duplicate the dedicated login-UI journey. Using
+  // the browser context's request client shares the signed cookie with the
+  // page and avoids a WebKit navigation race under parallel CI load.
+  const response = await page.context().request.post("/api/owner-access", {
+    data: { code: ownerCode },
+  });
+  expect(response.status()).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({ ok: true, authenticated: true });
+  await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
 }
 
