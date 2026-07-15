@@ -1,0 +1,576 @@
+/* ═══════════════════════════════════════════════════════════════
+   ORVANTA FACADE — واجهة الموقع الواحدة
+   World: teal-black drawn from the Orvanta mark (#0797B7).
+   Display: Reem Kufi (geometric Kufi) · Body: Cairo (app voice).
+   Scoped under .fx-root so app themes never leak in.
+   ═══════════════════════════════════════════════════════════════ */
+@import url("https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&display=swap");
+
+.fx-root {
+  --fx-ink: #061418;
+  --fx-ink-2: #082027;
+  --fx-ink-3: #0b2831;
+  --fx-surface: #0d2731;
+  --fx-text: #e8f1f1;
+  --fx-strong: #ffffff;
+  --fx-muted: #8ea9ae;
+  --fx-faint: #698a90;
+  --fx-accent: #63c8dd;
+  --fx-accent-deep: #0797b7;
+  --fx-btn-fill: #4cc0d8;
+  --fx-btn-ink: #04191f;
+  --fx-display: "Reem Kufi", "Cairo", system-ui, sans-serif;
+  --fx-body: "Cairo", system-ui, sans-serif;
+  --fx-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--fx-ink);
+  color: var(--fx-text);
+  font-family: var(--fx-body);
+  overflow-x: clip;
+}
+
+/* grain substrate — behind content, never over it */
+.fx-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--fx-grain);
+  pointer-events: none;
+  z-index: 0;
+}
+.fx-root > * { position: relative; z-index: 1; }
+
+.fx-wrap {
+  width: min(1160px, 100% - clamp(32px, 8vw, 96px));
+  margin-inline: auto;
+}
+
+/* ── Nav: contained floating island ─────────────────────────── */
+.fx-nav {
+  position: fixed;
+  top: 14px;
+  inset-inline: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.fx-nav__bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2.5vw, 28px);
+  padding: 9px 12px 9px 9px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--fx-ink-2) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fx-surface) 70%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+.fx-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding-inline-end: 6px;
+  color: var(--fx-strong);
+  font-family: var(--fx-display);
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.fx-nav__brand svg { display: block; }
+.fx-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.fx-nav__links a {
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--fx-muted);
+  transition: color 160ms ease, background 160ms ease;
+}
+.fx-nav__links a:hover {
+  color: var(--fx-strong);
+  background: color-mix(in srgb, var(--fx-surface) 60%, transparent);
+}
+.fx-enter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 11px;
+  padding: 10px 18px;
+  background: var(--fx-btn-fill);
+  color: var(--fx-btn-ink);
+  font-family: var(--fx-body);
+  font-weight: 800;
+  font-size: 0.84rem;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 3px color-mix(in srgb, var(--fx-accent-deep) 12%, transparent);
+  transition: background 180ms ease;
+}
+.fx-enter:hover { background: color-mix(in srgb, var(--fx-btn-fill) 86%, #ffffff); }
+.fx-enter .fx-arrow { transition: transform 200ms cubic-bezier(0.3, 0.9, 0.4, 1); }
+.fx-enter:hover .fx-arrow { transform: translate(-3px, -3px); }
+
+@media (max-width: 860px) {
+  .fx-nav__links { display: none; }
+}
+
+/* ── Hero: owns the first screen ────────────────────────────── */
+.fx-hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  /* directional dawn rake from the top start-edge (right, RTL) */
+  background:
+    linear-gradient(215deg, color-mix(in srgb, var(--fx-accent-deep) 26%, transparent) 0%, transparent 42%),
+    linear-gradient(180deg, var(--fx-ink-2) 0%, var(--fx-ink) 78%);
+}
+.fx-hero__field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.fx-hero__field path { will-change: stroke-dashoffset; }
+@media (prefers-reduced-motion: no-preference) {
+  .fx-hero__field .fx-flow {
+    stroke-dasharray: 260 90;
+    animation: fxFlow 26s linear infinite;
+  }
+  .fx-hero__field .fx-flow--slow { animation-duration: 40s; }
+}
+@keyframes fxFlow { to { stroke-dashoffset: -700; } }
+
+.fx-hero__inner {
+  position: relative;
+  padding-block: 140px clamp(96px, 15vh, 170px);
+  display: grid;
+  gap: 26px;
+  justify-items: start;
+  text-align: start;
+  max-width: 960px;
+}
+.fx-hero__mark { margin-inline-start: -10px; color: var(--fx-strong); }
+.fx-hero h1 {
+  margin: 0;
+  font-family: var(--fx-display);
+  font-weight: 700;
+  font-size: clamp(1.85rem, 4.3vw, 3.05rem);
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+  color: var(--fx-strong);
+}
+.fx-hero h1 em {
+  font-style: normal;
+  color: var(--fx-accent);
+}
+.fx-hero__sub {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--fx-muted);
+  font-size: 1.02rem;
+  line-height: 2.1;
+}
+
+/* ── Live ticker riding the hero's bottom edge ──────────────── */
+.fx-ticker {
+  border-top: 1px solid color-mix(in srgb, var(--fx-surface) 85%, transparent);
+  background: color-mix(in srgb, var(--fx-ink-2) 55%, transparent);
+  overflow: hidden;
+  padding-block: 13px;
+  mask-image: linear-gradient(to left, transparent, #000 6%, #000 94%, transparent);
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 6%, #000 94%, transparent);
+}
+.fx-ticker__track {
+  display: flex;
+  gap: 48px;
+  width: max-content;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--fx-muted);
+  font-variant-numeric: tabular-nums;
+}
+.fx-ticker__track b { color: var(--fx-text); font-weight: 800; }
+.fx-ticker__track .fx-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--fx-accent-deep);
+  vertical-align: middle;
+  margin-inline-end: 9px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fx-ticker__track { animation: fxTicker 46s linear infinite; }
+}
+@keyframes fxTicker { to { transform: translateX(50%); } }
+
+/* ── Sections: one continuous surface, tones hand off ───────── */
+.fx-section { padding-block: clamp(84px, 12vh, 150px); }
+.fx-section--lift {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--fx-ink-2) 70%, transparent) 22%, color-mix(in srgb, var(--fx-ink-2) 70%, transparent) 78%, transparent);
+}
+
+/* section that opens with a giant figure */
+.fx-lede {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(14px, 3vw, 30px);
+  flex-wrap: wrap;
+}
+.fx-lede__num {
+  font-family: var(--fx-display);
+  font-weight: 700;
+  font-size: clamp(4.4rem, 12vw, 8.4rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--fx-strong);
+  font-variant-numeric: tabular-nums;
+}
+.fx-lede__label {
+  font-size: clamp(1.05rem, 2.4vw, 1.45rem);
+  font-weight: 800;
+  color: var(--fx-muted);
+  max-width: 20ch;
+  line-height: 1.9;
+}
+
+/* section that opens with a full sentence */
+.fx-sentence {
+  margin: 0 0 clamp(36px, 6vh, 64px);
+  font-family: var(--fx-display);
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3.6vw, 2.5rem);
+  line-height: 1.8;
+  color: var(--fx-strong);
+  max-width: 26ch;
+}
+.fx-sentence em { font-style: normal; color: var(--fx-accent); }
+
+/* today's decision — real sentence, real type, no ornament */
+.fx-decision {
+  margin-block: clamp(38px, 6vh, 60px) 0;
+  padding: clamp(22px, 4vw, 36px) clamp(24px, 4vw, 40px);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--fx-surface) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fx-surface) 90%, var(--fx-accent-deep) 10%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+}
+.fx-decision p {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+  font-weight: 700;
+  line-height: 2;
+  color: var(--fx-text);
+  max-width: 52ch;
+}
+.fx-decision small {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--fx-faint);
+}
+
+/* aligned figure row — every column shares the same baselines */
+.fx-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(20px, 4vw, 44px);
+}
+.fx-figure { display: grid; grid-template-rows: auto auto; align-content: start; gap: 10px; }
+.fx-figure b {
+  font-family: var(--fx-display);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 4.6vw, 3.2rem);
+  letter-spacing: 0.05em;
+  line-height: 1.15;
+  color: var(--fx-strong);
+  font-variant-numeric: tabular-nums;
+}
+.fx-figure span { color: var(--fx-muted); font-size: 0.86rem; font-weight: 700; line-height: 1.8; }
+@media (max-width: 700px) {
+  .fx-figures { grid-template-columns: 1fr; }
+}
+
+/* section action: a quiet, authored link (no button pair) */
+.fx-more {
+  margin-top: clamp(30px, 5vh, 52px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 0.94rem;
+  color: var(--fx-accent);
+}
+.fx-more .fx-arrow { transition: transform 220ms cubic-bezier(0.3, 0.9, 0.4, 1); }
+.fx-more:hover .fx-arrow { transform: translate(-4px, -4px); }
+.fx-more:hover { color: color-mix(in srgb, var(--fx-accent) 70%, #ffffff); }
+
+/* ── Departments: bare typographic entries, no tiles ────────── */
+.fx-depts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(6px, 1.4vw, 14px) clamp(28px, 5vw, 64px);
+}
+.fx-dept {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 16px;
+  row-gap: 4px;
+  align-items: center;
+  padding: clamp(18px, 3vh, 26px) 18px;
+  border-radius: 16px;
+  transition: background 200ms ease;
+}
+.fx-dept:hover { background: color-mix(in srgb, var(--fx-surface) 55%, transparent); }
+.fx-dept__name {
+  font-family: var(--fx-display);
+  font-weight: 600;
+  font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+  color: var(--fx-text);
+  transition: color 200ms ease;
+}
+.fx-dept:hover .fx-dept__name { color: var(--fx-strong); }
+.fx-dept__desc { grid-column: 1; color: var(--fx-faint); font-size: 0.82rem; font-weight: 700; }
+.fx-dept .fx-arrow {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: var(--fx-faint);
+  transition: transform 220ms cubic-bezier(0.3, 0.9, 0.4, 1), color 200ms ease;
+}
+.fx-dept:hover .fx-arrow {
+  color: var(--fx-accent);
+  transform: translate(-5px, -5px);
+}
+@media (max-width: 760px) {
+  .fx-depts { grid-template-columns: 1fr; }
+}
+
+/* ── Live office rows ───────────────────────────────────────── */
+.fx-pulse {
+  margin-top: clamp(30px, 5vh, 48px);
+  display: grid;
+  gap: 10px;
+}
+.fx-pulse__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 20px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--fx-surface) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  font-size: 0.9rem;
+  line-height: 1.8;
+}
+.fx-pulse__row b { color: var(--fx-strong); font-weight: 800; }
+.fx-pulse__row span { color: var(--fx-muted); min-width: 0; }
+.fx-pulse__kind {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  color: var(--fx-accent);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.fx-pulse__empty { color: var(--fx-faint); font-weight: 700; font-size: 0.9rem; }
+
+/* ── Footer: links above, oversized wordmark flush bottom ───── */
+.fx-footer {
+  position: relative;
+  padding-top: clamp(70px, 10vh, 120px);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, #03090b 85%, transparent));
+  overflow: hidden;
+}
+.fx-footer__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 5vw, 56px);
+  padding-bottom: clamp(48px, 8vh, 90px);
+}
+.fx-footer__col { display: grid; gap: 12px; align-content: start; }
+.fx-footer__col h3 {
+  margin: 0 0 6px;
+  font-family: var(--fx-display);
+  font-weight: 600;
+  font-size: 0.98rem;
+  color: var(--fx-text);
+}
+.fx-footer__col a {
+  color: var(--fx-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: fit-content;
+  transition: color 160ms ease;
+}
+.fx-footer__col a:hover { color: var(--fx-accent); }
+.fx-footer__col p { margin: 0; color: var(--fx-faint); font-size: 0.82rem; line-height: 2; max-width: 34ch; }
+@media (max-width: 700px) {
+  .fx-footer__grid { grid-template-columns: 1fr; }
+}
+.fx-footer__mark {
+  display: block;
+  text-align: center;
+  margin-bottom: -0.26em; /* deliberate bleed off the bottom edge */
+  font-family: var(--fx-display);
+  font-weight: 700;
+  font-size: clamp(2.9rem, 12.5vw, 11rem);
+  line-height: 1;
+  letter-spacing: 0.1em;
+  padding-inline-start: 0.1em; /* optically re-center against tracking */
+  color: color-mix(in srgb, var(--fx-accent-deep) 26%, var(--fx-ink-3));
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* honest fallbacks */
+.fx-skel { color: var(--fx-faint); }
+
+/* the brand mark reads in light ink on the facade's dark surface */
+.fx-root .orvanta-lockup--mark { color: var(--fx-strong); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ORVANTA THEME — the facade's world carried across the whole app.
+   Remaps the app's design tokens to the teal-black brand palette so
+   every inner page (inbox, departments, operations, office, status,
+   login) lives on the same surface as the facade.
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="orvanta"] {
+  --bg: #061418;
+  --panel: #0a2027;
+  --panel-2: #0d2731;
+  --field: #081b21;
+  --field-2: #06161b;
+  --line: rgba(126, 196, 209, 0.14);
+  --text: #e8f1f1;
+  --text-strong: #ffffff;
+  --muted: #8ea9ae;
+  --muted-2: #a5bcc0;
+  --primary: #0797b7;
+  --primary-2: #4cc0d8;
+  --accent-sky: #63c8dd;
+  --accent-sky-soft: rgba(99, 200, 221, 0.12);
+  --green: #3ecfa0;
+  --amber: #f0b64a;
+  --red: #ef6f6c;
+  --green-soft: rgba(62, 207, 160, 0.13);
+  --amber-soft: rgba(240, 182, 74, 0.14);
+  --red-soft: rgba(239, 111, 108, 0.13);
+  --shadow: 0 18px 50px rgba(2, 10, 13, 0.45);
+  --shadow-ceo: 0 18px 50px rgba(2, 10, 13, 0.45);
+  --brand-gradient: linear-gradient(135deg, #0d7f99, #0797b7);
+  --action-bg: #4cc0d8;
+  --action-text: #04191f;
+  --orvanta-ink: #e8f1f1;
+  --orvanta-soft-text: #8ea9ae;
+}
+
+/* one display voice across the app */
+[data-theme="orvanta"] h1,
+[data-theme="orvanta"] h2 {
+  font-family: "Reem Kufi", "Cairo", system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* filled actions: ink label on the teal fill, no hover jump.
+   (orvanta-logo-final.css pins these blue with !important — outrank it) */
+[data-theme="orvanta"] .primary-btn {
+  background: var(--action-bg) !important;
+  color: var(--action-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 3px rgba(7, 151, 183, 0.12) !important;
+}
+[data-theme="orvanta"] .primary-btn:hover:not(:disabled) {
+  filter: none;
+  transform: none;
+  background: color-mix(in srgb, #4cc0d8 86%, #ffffff) !important;
+}
+[data-theme="orvanta"] .shell-link.is-active {
+  background: var(--action-bg) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .brand-state-card {
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+/* the sidebar note is a paragraph block, not a status pill */
+[data-theme="orvanta"] .shell-sidebar .notice { border-radius: 14px; }
+[data-theme="orvanta"] .input:focus,
+[data-theme="orvanta"] .textarea:focus {
+  box-shadow: 0 0 0 3px var(--accent-sky-soft);
+}
+
+/* brand marks flip to light ink on the dark surface */
+[data-theme="orvanta"] .orvanta-lockup--mark,
+[data-theme="orvanta"] .orvanta-mark,
+[data-theme="orvanta"] .shell-sidebar__brand .orvanta-mark { color: var(--text-strong); }
+[data-theme="orvanta"] .shell-topbar__brand { color: var(--text-strong); }
+[data-theme="orvanta"] .orvanta-wordmark b { color: var(--text-strong); }
+[data-theme="orvanta"] .orvanta-wordmark small { color: var(--muted); }
+
+/* sidebar brand: bare mark and type on the surface, no white card */
+[data-theme="orvanta"] .shell-sidebar__brand {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.shell-sidebar__brand-text { display: grid; gap: 3px; line-height: 1.2; }
+.shell-sidebar__brand-text b {
+  font-family: "Reem Kufi", "Cairo", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-strong);
+}
+.shell-sidebar__brand-text small { font-size: 0.64rem; color: var(--muted); }
+
+/* the three inner pages built on .hero-scenic join the dark world
+   (brand.css pins them light with !important, so match specificity) */
+[data-theme="orvanta"] .hero-scenic {
+  border: 1px solid var(--line) !important;
+  background:
+    linear-gradient(215deg, rgba(7, 151, 183, 0.18) 0%, transparent 46%),
+    linear-gradient(180deg, #082027, #061418) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .hero-title { color: var(--text-strong) !important; }
+[data-theme="orvanta"] .hero-title em {
+  background: none !important;
+  -webkit-text-fill-color: var(--accent-sky) !important;
+  color: var(--accent-sky) !important;
+}
+[data-theme="orvanta"] .hero-sub { color: var(--muted) !important; }
+[data-theme="orvanta"] .hero-pill {
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+  color: var(--accent-sky) !important;
+  box-shadow: none !important;
+}
+[data-theme="orvanta"] .hero-actions .secondary-btn {
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+}
+[data-theme="orvanta"] .hero-logos { color: var(--muted) !important; }
+[data-theme="orvanta"] .hero-logos i { background: var(--muted) !important; }

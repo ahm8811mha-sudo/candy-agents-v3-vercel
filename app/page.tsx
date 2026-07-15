@@ -1,7 +1,7 @@
-import CompanyOverview from "@/components/CompanyOverview";
+import OrvantaFacade from "@/components/OrvantaFacade";
 
 export const dynamic = "force-dynamic";
 
 export default function HomePage() {
-  return <CompanyOverview />;
+  return <OrvantaFacade />;
 }

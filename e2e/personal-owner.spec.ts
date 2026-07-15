@@ -21,7 +21,7 @@ test("anonymous visitors are redirected and the trusted owner device unlocks", a
 
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: /شركة كاملة تعمل بالذكاء الاصطناعي، من القرار إلى التنفيذ/ })
+    page.getByRole("heading", { name: /شركة كاملة يديرها الذكاء الاصطناعي/ })
   ).toBeVisible();
 
   await page.goto("/status");

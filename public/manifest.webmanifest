@@ -9,8 +9,8 @@
   "orientation": "portrait-primary",
   "dir": "rtl",
   "lang": "ar-SA",
-  "background_color": "#f5f6f8",
-  "theme_color": "#12314f",
+  "background_color": "#061418",
+  "theme_color": "#061418",
   "categories": ["business", "productivity", "finance"],
   "icons": [
     { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
