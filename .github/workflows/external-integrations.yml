@@ -66,12 +66,12 @@ jobs:
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "push" ]; then
               echo "ready=false" >> "$GITHUB_OUTPUT"
-              echo "::notice::External canaries skipped on this pull request because optional test credentials are not configured."
+              echo "::notice::External canaries skipped for this code gate because isolated test credentials are not configured. LIVE capability evidence remains unavailable."
               exit 0
             fi
-            echo "External canaries require test credentials in GitHub Actions secrets for manual runs."
+            echo "Scheduled and manual external canaries require isolated test credentials in GitHub Actions secrets."
             exit 2
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin, hasSupabaseEnv } from "@/lib/supabase";
+import { getSupabaseAdmin, getSupabaseEnvironmentReadiness, hasSupabaseEnv } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-const BUILD_MARKER = "production-readiness-v2";
+const BUILD_MARKER = "production-readiness-v3";
 
 function connectedHost(): string | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -39,12 +39,16 @@ const TABLES = [
 ];
 
 export async function GET() {
+  const environment = getSupabaseEnvironmentReadiness();
   if (!hasSupabaseEnv()) {
     return NextResponse.json({
       ok: false,
       build: BUILD_MARKER,
       configured: false,
-      message: "Supabase غير مهيأ. النسخة في وضع قراءة محدود ولا يجوز اعتبار الكتابات أو التنفيذ دائمًا.",
+      configurationIssue: environment.configurationIssue,
+      message: environment.configurationIssue === "PROJECT_MISMATCH"
+        ? "عنوان مشروع Supabase ومفتاح الخادم لا يتبعان المشروع نفسه. تم إيقاف الكتابات حتى استبدال المفتاح في Vercel."
+        : "Supabase غير مهيأ. النسخة في وضع قراءة محدود ولا يجوز اعتبار الكتابات أو التنفيذ دائمًا.",
     }, { status: 503 });
   }
 

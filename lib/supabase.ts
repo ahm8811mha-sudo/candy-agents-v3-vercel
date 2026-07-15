@@ -14,33 +14,70 @@ function supabaseServerKey() {
   return process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 }
 
+function projectRefFromUrl(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const match = new URL(value).hostname.match(/^([a-z0-9-]+)\.supabase\.co$/i);
+    return match?.[1]?.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+function projectRefFromLegacyJwt(value: string | undefined) {
+  if (!value) return null;
+  const payload = value.split(".")[1];
+  if (!payload) return null;
+  try {
+    const decoded = Buffer.from(payload, "base64url").toString("utf8");
+    const parsed = JSON.parse(decoded) as { ref?: unknown };
+    return typeof parsed.ref === "string" && parsed.ref.trim()
+      ? parsed.ref.trim().toLowerCase()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export type SupabaseEnvironmentReadiness = {
   configured: boolean;
   hasUrl: boolean;
   hasServerKey: boolean;
   keySource: "SUPABASE_SECRET_KEY" | "SUPABASE_SERVICE_ROLE_KEY" | null;
+  projectAlignment: "MATCH" | "MISMATCH" | "UNKNOWN";
+  configurationIssue: "PROJECT_MISMATCH" | null;
   missingEnvironmentVariables: string[];
 };
 
 /** Safe configuration diagnostics. Never returns a URL or secret value. */
 export function getSupabaseEnvironmentReadiness(): SupabaseEnvironmentReadiness {
-  const hasUrl = Boolean(supabaseUrl());
+  const url = supabaseUrl();
+  const serverKey = supabaseServerKey();
+  const hasUrl = Boolean(url);
   const keySource = process.env.SUPABASE_SECRET_KEY?.trim()
     ? "SUPABASE_SECRET_KEY"
     : process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
       ? "SUPABASE_SERVICE_ROLE_KEY"
       : null;
   const hasServerKey = Boolean(keySource);
+  const urlProjectRef = projectRefFromUrl(url);
+  const keyProjectRef = projectRefFromLegacyJwt(serverKey);
+  const projectAlignment = urlProjectRef && keyProjectRef
+    ? urlProjectRef === keyProjectRef ? "MATCH" : "MISMATCH"
+    : "UNKNOWN";
+  const configurationIssue = projectAlignment === "MISMATCH" ? "PROJECT_MISMATCH" : null;
   const missingEnvironmentVariables: string[] = [];
 
   if (!hasUrl) missingEnvironmentVariables.push("NEXT_PUBLIC_SUPABASE_URL (أو SUPABASE_URL)");
   if (!hasServerKey) missingEnvironmentVariables.push("SUPABASE_SECRET_KEY (أو SUPABASE_SERVICE_ROLE_KEY)");
 
   return {
-    configured: hasUrl && hasServerKey,
+    configured: hasUrl && hasServerKey && projectAlignment !== "MISMATCH",
     hasUrl,
     hasServerKey,
     keySource,
+    projectAlignment,
+    configurationIssue,
     missingEnvironmentVariables,
   };
 }
@@ -58,7 +95,7 @@ export function requireSupabaseForWrite() {
 export function getSupabaseAdmin() {
   const url = supabaseUrl();
   const key = supabaseServerKey();
-  if (!url || !key) return null;
+  if (!url || !key || !getSupabaseEnvironmentReadiness().configured) return null;
   if (!adminClient) {
     adminClient = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
