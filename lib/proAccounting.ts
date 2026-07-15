@@ -1,7 +1,9 @@
 import { calculateFinancials } from "./accountingSystem";
+import { postAccountingEntry } from "./accountingRepository";
 import { seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { evaluateGovernedAction, logDecision } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
+import { getTenantId } from "./tenant";
 
 type Account = {
   id: string;
@@ -252,49 +254,54 @@ function buildAgingReport(invoices: any[]) {
   return { receivables: sales, payables: purchases };
 }
 
+export type JournalLineInput = {
+  accountCode: string;
+  debit?: number;
+  credit?: number;
+  memo?: string;
+};
+
+/**
+ * Multi-line posting through the SAME atomic RPC path as the rest of the
+ * system (orvanta_post_journal_entry): balance validation, advisory-lock
+ * idempotency, and no half-posted entries. This module previously inserted
+ * the entry and its lines in two separate statements with status POSTED —
+ * a failure between them left an orphaned posted header.
+ */
+export async function postJournalLines(input: {
+  memo: string;
+  lines: JournalLineInput[];
+  costCenterId?: string;
+  source?: string;
+  reference?: string;
+}) {
+  return postAccountingEntry({
+    memo: input.memo,
+    source: input.source || "manual",
+    reference: input.reference,
+    costCenterId: input.costCenterId,
+    lines: input.lines.map((line) => ({
+      accountCode: line.accountCode,
+      debit: number(line.debit),
+      credit: number(line.credit),
+      memo: line.memo,
+    })),
+  });
+}
+
 export async function postJournalEntry(input: JournalInput) {
   const amount = number(input.amount);
   if (amount <= 0) throw new Error("Amount must be greater than zero.");
   if (!input.memo?.trim()) throw new Error("Memo is required.");
-
-  const supabase = requireSupabase();
-  const { byCode } = await getAccountsMap();
-  const debitAccount = byCode.get(input.debitCode);
-  const creditAccount = byCode.get(input.creditCode);
-  if (!debitAccount || !creditAccount) throw new Error("Invalid accounting account code.");
-
-  const { data: entry, error: entryError } = await supabase
-    .from("accounting_journal_entries")
-    .insert({
-      entry_number: nowCode("JE"),
-      memo: input.memo.trim(),
-      source: input.source || "manual",
-      status: "POSTED",
-      cost_center_id: input.costCenterId || null,
-    })
-    .select()
-    .single();
-  if (entryError) throw entryError;
-
-  const { error: lineError } = await supabase.from("accounting_journal_lines").insert([
-    {
-      entry_id: entry.id,
-      account_id: debitAccount.id,
-      memo: input.memo.trim(),
-      debit: amount,
-      credit: 0,
-    },
-    {
-      entry_id: entry.id,
-      account_id: creditAccount.id,
-      memo: input.memo.trim(),
-      debit: 0,
-      credit: amount,
-    },
-  ]);
-  if (lineError) throw lineError;
-
-  return entry;
+  return postJournalLines({
+    memo: input.memo.trim(),
+    costCenterId: input.costCenterId,
+    source: input.source || "manual",
+    lines: [
+      { accountCode: input.debitCode, debit: amount },
+      { accountCode: input.creditCode, credit: amount },
+    ],
+  });
 }
 
 export async function createAccountingInvoice(input: InvoiceInput) {
@@ -333,23 +340,32 @@ export async function createAccountingInvoice(input: InvoiceInput) {
     .single();
   if (invoiceError) throw invoiceError;
 
+  // VAT must never sit inside revenue or expense: output VAT on sales is a
+  // liability (2100 Tax payable), and input VAT on purchases debits the same
+  // control account so the net position is what gets remitted to ZATCA.
   if (input.invoiceType === "SALES") {
-    await postJournalEntry({
+    await postJournalLines({
       memo: `Sales invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      debitCode: "1100",
-      creditCode: "4000",
-      amount: total,
       costCenterId: input.costCenterId,
       source: "invoice",
+      reference: `INV-${invoice.id}`,
+      lines: [
+        { accountCode: "1100", debit: total, memo: "Accounts receivable (gross)" },
+        { accountCode: "4000", credit: subtotal, memo: "Revenue (net of VAT)" },
+        ...(tax > 0 ? [{ accountCode: "2100", credit: tax, memo: "Output VAT payable" }] : []),
+      ],
     });
   } else {
-    await postJournalEntry({
+    await postJournalLines({
       memo: `Purchase invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      debitCode: "5200",
-      creditCode: "2000",
-      amount: total,
       costCenterId: input.costCenterId,
       source: "invoice",
+      reference: `INV-${invoice.id}`,
+      lines: [
+        { accountCode: "5200", debit: subtotal, memo: "Expense (net of VAT)" },
+        ...(tax > 0 ? [{ accountCode: "2100", debit: tax, memo: "Recoverable input VAT" }] : []),
+        { accountCode: "2000", credit: total, memo: "Accounts payable (gross)" },
+      ],
     });
   }
 
@@ -473,6 +489,30 @@ export async function closeAccountingPeriod(period?: string) {
     .select()
     .single();
   if (error) throw error;
+
+  // The summary row above is reporting only. What actually blocks posting is
+  // accounting_periods.status, which orvanta_assert_accounting_period_open
+  // checks inside the database — so an executed close must flip it too.
+  if (governance.allowedToExecute) {
+    const [year, month] = selectedPeriod.split("-").map(Number);
+    const startsOn = `${selectedPeriod}-01`;
+    const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const { error: periodError } = await supabase.from("accounting_periods").upsert(
+      {
+        tenant_id: getTenantId(),
+        period_name: selectedPeriod,
+        starts_on: startsOn,
+        ends_on: endsOn,
+        status: "CLOSED",
+        closed_at: new Date().toISOString(),
+        closed_by: "CFO",
+        closing_note: `Period close executed with net income ${income.netIncome}.`,
+      },
+      { onConflict: "tenant_id,period_name" }
+    );
+    if (periodError) throw periodError;
+  }
+
   return { close: data, governance };
 }
 

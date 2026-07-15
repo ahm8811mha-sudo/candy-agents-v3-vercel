@@ -8,7 +8,8 @@
  * per process (see hydrateApprovals), so decisions survive serverless restarts.
  */
 
-import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv } from "./supabase";
+import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
+import { isMultiTenantEnabled, getTenantId } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
@@ -134,6 +135,55 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
 }
 
 /**
+ * hydrateOnce freezes each serverless instance on its first snapshot, so an
+ * item created on instance A is invisible to a pre-hydrated instance B. These
+ * helpers read through to the database when the local store misses, keeping
+ * decisions and dedupe correct across instances.
+ */
+async function fetchApprovalById(id: string): Promise<ApprovalItem | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  let query = supabase.from("company_approvals").select("*").eq("id", id).limit(1);
+  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
+  const { data, error } = await query;
+  if (error || !data?.[0]) return null;
+  return fromRow(data[0] as Record<string, unknown>);
+}
+
+async function fetchPendingApprovalByDedupeKey(dedupeKey: string): Promise<ApprovalItem | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  let query = supabase
+    .from("company_approvals")
+    .select("*")
+    .eq("status", "PENDING")
+    .eq("metadata->>dedupeKey", dedupeKey)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
+  const { data, error } = await query;
+  if (error || !data?.[0]) return null;
+  return fromRow(data[0] as Record<string, unknown>);
+}
+
+/** Adopt a database row into the local store (no duplicates). */
+function adoptIntoStore(item: ApprovalItem): ApprovalItem {
+  const local = store.find((a) => a.id === item.id);
+  if (local) return local;
+  store.unshift(item);
+  return item;
+}
+
+/** Find an approval locally, falling back to the database across instances. */
+export async function getApprovalCritical(id: string): Promise<ApprovalItem | null> {
+  const local = store.find((a) => a.id === id);
+  if (local) return local;
+  if (!hasSupabaseEnv()) return null;
+  const remote = await fetchApprovalById(id);
+  return remote ? adoptIntoStore(remote) : null;
+}
+
+/**
  * Awaited variant for API flows: the durable row is committed before the item
  * is accepted into the store, so success is never reported ahead of persistence.
  * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
@@ -141,6 +191,18 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
 export async function createApprovalCritical(input: CreateApprovalInput): Promise<ApprovalItem> {
   const existing = findExistingApproval(input);
   if (existing) return existing;
+
+  // Cross-instance dedupe: another instance may already hold this item.
+  if (hasSupabaseEnv()) {
+    if (input.dedupeKey) {
+      const remote = await fetchPendingApprovalByDedupeKey(input.dedupeKey);
+      if (remote) return adoptIntoStore(remote);
+    }
+    if (input.id) {
+      const remote = await fetchApprovalById(input.id);
+      if (remote) return adoptIntoStore(remote);
+    }
+  }
 
   const item = buildApproval(input);
   if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(item));
@@ -183,7 +245,12 @@ export async function decideApprovalCritical(
   decidedBy = "CEO",
   note?: string
 ): Promise<ApprovalItem | null> {
-  const item = store.find((a) => a.id === id);
+  let item = store.find((a) => a.id === id);
+  if (!item && hasSupabaseEnv()) {
+    // Created on another instance after this one hydrated — read through.
+    const remote = await fetchApprovalById(id);
+    if (remote) item = adoptIntoStore(remote);
+  }
   if (!item) return null;
   if (item.status !== "PENDING") return item;
 

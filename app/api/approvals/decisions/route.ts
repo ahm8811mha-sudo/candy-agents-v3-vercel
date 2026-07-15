@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listApprovals, decideApprovalCritical, approvalStats, type ApprovalStatus } from "@/lib/approvals";
+import { listApprovals, getApprovalCritical, decideApprovalCritical, approvalStats, type ApprovalStatus } from "@/lib/approvals";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
     }
 
     // F2 — enforce the authority matrix in the API, not just the UI.
-    const target = listApprovals().find((a) => a.id === id);
+    // Read-through lookup: the item may live on another serverless instance.
+    const target = await getApprovalCritical(id);
     const tier = target?.amount ? requiredTier(target.amount).tier : "T1";
     const user = await authenticateRequest(req);
     const access = canSignOff(user?.role ?? null, tier);
