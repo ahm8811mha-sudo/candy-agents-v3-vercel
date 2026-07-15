@@ -15,7 +15,7 @@
 ```text
 ORVANTA_OWNER_SECRET=generate-a-long-random-value
 ORVANTA_ADMIN_SECRET=generate-a-different-long-random-value
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_SECRET_KEY=your-server-secret-key
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 ```
 

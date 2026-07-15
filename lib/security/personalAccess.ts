@@ -10,7 +10,10 @@ type OwnerAccessPayload = {
 };
 
 function signingSecret() {
-  return process.env.ORVANTA_OWNER_COOKIE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return process.env.ORVANTA_OWNER_COOKIE_SECRET
+    || process.env.SUPABASE_SECRET_KEY
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || "";
 }
 
 export function isOwnerAccessConfigured() {
@@ -19,7 +22,7 @@ export function isOwnerAccessConfigured() {
 
 /**
  * True only when the cookie is signed with its own dedicated secret. Falling
- * back to SUPABASE_SERVICE_ROLE_KEY works but couples session security to the
+ * back to the Supabase server secret works but couples session security to the
  * database key — production readiness reports it as a failure.
  */
 export function hasDedicatedCookieSecret() {

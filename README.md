@@ -99,7 +99,7 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<server-only service role key>
+SUPABASE_SECRET_KEY=<server-only secret key>
 
 AUTH_ENABLED=true
 API_SECRET_KEY=<strong internal api secret>
@@ -123,7 +123,7 @@ GOOGLE_DRIVE_FOLDER_ID=
 
 Important security rule:
 
-- Server writes require `SUPABASE_SERVICE_ROLE_KEY`.
+- Server writes require `SUPABASE_SECRET_KEY`; the legacy `SUPABASE_SERVICE_ROLE_KEY` name remains supported during migration.
 - Do not use `SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` for governance, approvals, ledger, audit, or execution writes.
 - Keep `AUTH_ENABLED=true` in production.
 - `/api/health` exposes production readiness checks. Production should not be considered ready unless `productionReady=true`.

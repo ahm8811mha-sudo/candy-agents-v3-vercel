@@ -996,6 +996,39 @@ label {
   padding: 16px;
 }
 
+.department-badge small.is-warning {
+  color: var(--amber);
+}
+
+.executive-database-status {
+  flex-basis: 100%;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.executive-database-status > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.executive-database-status p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.executive-database-status small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.executive-database-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .enterprise-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

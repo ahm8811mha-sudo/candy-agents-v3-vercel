@@ -14,7 +14,7 @@ This document describes the production setup for the Correspondence Center.
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_SECRET_KEY=
 RESEND_API_KEY=
 CORRESPONDENCE_FROM_EMAIL=official@yourdomain.com
 CORRESPONDENCE_REPLY_TO=info@yourdomain.com

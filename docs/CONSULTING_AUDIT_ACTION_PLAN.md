@@ -23,7 +23,7 @@ Idea → Feasibility → Approval → Execution → KPI Review → Scale / Hold 
 | الأولوية | الملاحظة | القرار التنفيذي | الحالة |
 |---|---|---|---|
 | P0 | اعتماد الفكرة كان لا يغلق دورة التنفيذ | عند اعتماد `IDEA` من مركز القرار يتم إنشاء مشروع + مهام + KPIs + actions + audit | ✅ مطبق في `lib/company/ideaExecution.ts` و`app/api/approvals/decisions/route.ts` |
-| P0 | استخدام Supabase anon key للكتابة من الخادم خطر | الخادم لا يقبل إلا `SUPABASE_SERVICE_ROLE_KEY` | ✅ مطبق في `lib/supabase.ts` |
+| P0 | استخدام Supabase anon key للكتابة من الخادم خطر | الخادم لا يقبل إلا `SUPABASE_SECRET_KEY` أو الاسم القديم `SUPABASE_SERVICE_ROLE_KEY` | ✅ مطبق في `lib/supabase.ts` |
 | P0 | الإنتاج يجب ألا يعمل بصلاحيات مفتوحة | `AUTH_ENABLED=true` إلزامي في الإنتاج | مطلوب في Vercel |
 | P0 | وجود أكثر من مصدر مالي | جعل Ledger هو المصدر المالي الرسمي | مطلوب |
 | P0 | معظم الأفعال الخارجية جاهزة للتكامل فقط | تحويل `READY_FOR_INTEGRATION` إلى تكاملات حقيقية تدريجيًا | مطلوب |
@@ -201,7 +201,7 @@ Output Contract:
 
 ```env
 AUTH_ENABLED=true
-SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_SECRET_KEY=...
 NEXT_PUBLIC_SUPABASE_URL=...
 OPENAI_API_KEY=...
 API_SECRET_KEY=...
@@ -301,7 +301,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 | اليوم | المهمة |
 |---|---|
 | 1 | تفعيل AUTH_ENABLED في Vercel |
-| 1 | ضبط SUPABASE_SERVICE_ROLE_KEY فقط للكتابة من الخادم |
+| 1 | ضبط SUPABASE_SECRET_KEY فقط للكتابة من الخادم (أو الاسم القديم أثناء الانتقال) |
 | 2 | تشغيل `docs/supabase-schema.sql` |
 | 2 | التأكد أن approval IDEA ينشئ مشروع فعلي |
 | 3 | إضافة Timeline للـ project بعد الاعتماد |

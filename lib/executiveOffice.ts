@@ -46,21 +46,32 @@ export async function getExecutiveOffice() {
   await seedEnterpriseOperatingSystem();
   await seedGovernanceOS();
   const supabase = requireSupabase();
-  const [enterprise, dashboard, calendarRows, minuteRows, briefRows, auditRows] = await Promise.all([
+  const [enterprise, dashboard, approvalRows, calendarRows, minuteRows, briefRows, auditRows] = await Promise.all([
     getEnterpriseStatus(),
     getDashboardData(),
+    supabase.from("company_approvals").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("executive_calendar_events").select("*").order("starts_at", { ascending: true }).limit(20),
     supabase.from("executive_meeting_minutes").select("*").order("created_at", { ascending: false }).limit(15),
     supabase.from("executive_daily_briefs").select("*").order("created_at", { ascending: false }).limit(10),
     supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
 
-  for (const result of [calendarRows, minuteRows, briefRows, auditRows]) {
+  for (const result of [approvalRows, calendarRows, minuteRows, briefRows, auditRows]) {
     if (result.error) throw result.error;
   }
 
+  // The generic dashboard still carries legacy employee-report approvals.
+  // The executive office must use the unified governance decision center.
+  const unifiedApprovals = (approvalRows.data || []).map((approval: any) => ({
+    ...approval,
+    entity_type: approval.type,
+    entity_id: approval.metadata?.entityId || approval.metadata?.entity_id || approval.id,
+    notes: approval.detail || approval.note || "",
+  }));
+  const executiveDashboard = { ...dashboard, approvals: unifiedApprovals };
+
   const pendingItems = (enterprise.ceoItems || []).filter((item: any) => item.status !== "DONE" && item.status !== "CLOSED");
-  const waitingApprovals = (dashboard.approvals || []).filter((approval: any) => approval.status === "PENDING");
+  const waitingApprovals = unifiedApprovals.filter((approval: any) => approval.status === "PENDING");
   const waitingActions = (dashboard.actions || []).filter((action: any) => action.approval_status === "PENDING");
   const highRisks = (dashboard.alerts || []).filter((alert: any) => ["HIGH", "CRITICAL"].includes(alert.severity));
   const lateTasks = (dashboard.tasks || []).filter((task: any) => {
@@ -70,7 +81,7 @@ export async function getExecutiveOffice() {
 
   return {
     enterprise,
-    dashboard,
+    dashboard: executiveDashboard,
     calendarEvents: calendarRows.data || [],
     meetingMinutes: minuteRows.data || [],
     dailyBriefs: briefRows.data || [],

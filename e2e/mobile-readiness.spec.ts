@@ -99,3 +99,43 @@ test("a preview deployment explains isolated secrets instead of reporting a fals
   await expect(page.getByText("النشر على Vercel")).toBeVisible();
   await expect(page.getByText("النشر يعمل")).toBeVisible();
 });
+
+test("the executive office replaces the raw Supabase error with an actionable preview state", async ({ page }) => {
+  await page.route(/\/api\/executive-office$/, async (route) => {
+    await route.fulfill({
+      status: 503,
+      json: {
+        ok: false,
+        code: "SUPABASE_NOT_CONFIGURED",
+        configured: false,
+        error: "هذه نسخة معاينة معزولة ولا تحتوي على اتصال قاعدة البيانات. افتح النسخة الإنتاجية لعرض بيانات المكتب التنفيذي الفعلية.",
+        deployment: {
+          environment: "preview",
+          isPreview: true,
+          productionUrl: "https://candy-agents-v3-vercel.vercel.app",
+        },
+        missingEnvironmentVariables: [
+          "NEXT_PUBLIC_SUPABASE_URL (أو SUPABASE_URL)",
+          "SUPABASE_SECRET_KEY (أو SUPABASE_SERVICE_ROLE_KEY)",
+        ],
+      },
+    });
+  });
+
+  await unlock(page);
+  await page.goto("/departments/executive");
+
+  await expect(page.getByText("نسخة المعاينة معزولة عن بيانات الإنتاج")).toBeVisible();
+  await expect(page.getByRole("link", { name: "فتح النسخة الإنتاجية" })).toHaveAttribute(
+    "href",
+    "https://candy-agents-v3-vercel.vercel.app"
+  );
+  await expect(page.getByText("Supabase is not configured.")).toHaveCount(0);
+  await expect(page.getByText("صحة الشركة —")).toBeVisible();
+  await expect(page.getByText("Preview isolated")).toBeVisible();
+  await expect(page.getByRole("button", { name: "تشغيل رادار الفرص" })).toBeDisabled();
+  await expect(page.locator(".ops-metrics")).toHaveCount(0);
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
