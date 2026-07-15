@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import "./brand.css";
-import "./orvanta-exact-logo.css";
 import "./orvanta-logo-final.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";

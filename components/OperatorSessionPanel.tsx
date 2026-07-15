@@ -133,6 +133,7 @@ export default function OperatorSessionPanel() {
                 <button className="secondary-btn" type="button" onClick={() => startRemote(session)} disabled={working}><Monitor size={15} /> إرسال للـ Runner</button>
                 <button className="secondary-btn" type="button" onClick={() => refreshRemote(session)} disabled={working}><RefreshCw size={15} /> تحديث اللقطة</button>
               </div>
+              {/* eslint-disable-next-line @next/next/no-img-element -- live base64 screenshot; next/image cannot optimize data: URIs */}
               {shots[session.id] && <img alt="remote browser" src={`data:image/jpeg;base64,${shots[session.id]}`} style={{ width: "100%", borderRadius: 16, border: "1px solid var(--line)" }} />}
               <select className="input" value={session.status} onChange={(e) => patchLocal(session.id, (s) => ({ ...s, status: e.target.value }))}>
                 <option value="READY">جاهزة</option>

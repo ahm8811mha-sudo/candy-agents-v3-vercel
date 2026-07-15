@@ -1,10 +1,13 @@
-/* Candy Agents — Unified Theme Layer (ADDITIVE, mergeable)
- * Add ONE line at the top of app/globals.css (after the Cairo @import):
- *     @import "./unified-theme.css";
- * 100% additive: does NOT rename or remove any existing class. */
+/* Theme-scope layer (loaded FIRST via @import in globals.css, so globals.css
+ * wins any shared token name at :root).
+ *
+ * Ownership contract:
+ *   - globals.css        → authoritative base tokens (:root) + component styles
+ *   - unified-theme.css  → [data-theme] scopes + tokens that only exist here
+ *   - brand.css          → brand identity tokens/classes only
+ * Never redefine a token here that globals.css already defines at :root. */
 
 :root {
-  --panel-2: #192230;
   --field: #0f1520;
   --field-2: #0b1018;
   --muted-2: #b8c5d5;
@@ -21,7 +24,6 @@
 
   --radius-control: 8px;
   --radius-card: 10px;
-  --radius-lg: 16px;
   --radius-xl: 22px;
   --radius-pill: 999px;
   --shadow-ceo: 0 18px 50px rgba(0, 0, 0, 0.07);

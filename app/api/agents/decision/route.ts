@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { logAgentRun, runDecisionAgent } from "@/lib/agents";
+import { logAgentRun, runDecisionAgent } from "@/lib/agentRunner";
 
 export async function POST(req: Request) {
   try {

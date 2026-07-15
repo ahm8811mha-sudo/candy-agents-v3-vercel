@@ -14,7 +14,7 @@
 | مركز القرار (الاعتمادات المعلقة) | `lib/approvals.ts` | `company_approvals` | الكتابة عبر `createApprovalCritical` / `decideApprovalCritical` |
 | سجل التدقيق | `lib/company/audit.ts` | `audit_log` | append-only |
 | القيود المحاسبية | `lib/accountingRepository.ts` | `accounting_journal_entries/lines` عبر RPC `orvanta_post_journal_entry` | `lib/company/ledger.ts` طبقة توافق فوقه |
-| سجل الوكلاء والهيكل التنظيمي | `lib/company/agents.ts` | — | `lib/agents.ts` = مشغّل الوكلاء (prompt runner) وليس سجلاً |
+| سجل الوكلاء والهيكل التنظيمي | `lib/company/agents.ts` | — | مشغّل الوكلاء أعيدت تسميته إلى `lib/agentRunner.ts` |
 | استدعاء نماذج AI | `lib/ai.ts` + `lib/aiStructured.ts` | `ai_usage_log` | القرارات المنظمة عبر `runAgentStructured` حصراً |
 | تنفيذ الفكرة المعتمدة | `lib/company/ideaExecution.ts` | `projects/tasks/kpis/business_actions` | يُستدعى من مسار الاعتماد |
 | قائمة الإجراءات | `lib/company/actionQueue.ts` | `business_actions` | |
@@ -72,7 +72,7 @@ lib/integrations/googleCalendar.ts
 | 1 | ثلاثة محركات تنفيذ: `companyExecutionSystem.ts` (562 سطراً) و`company/ideaExecution.ts` و`company-os/lifecycle.ts` | `company/ideaExecution` للدورة الأساسية، وتحويل `companyExecutionSystem` إلى واجهة قراءة (dashboard) فقط | كبير — جلسة مستقلة |
 | 2 | `proAccounting.ts` (581 سطراً) يحمل دليل حسابات وقيوداً خاصة به | إعادة توجيه ترحيلاته إلى `accountingRepository` (RPC) وإبقاؤه طبقة تقارير | متوسط |
 | 3 | `enterpriseSystems.ts` يكرر أفكار/فرص `company/ideas` | تحويل مساراته إلى `company/ideas` + `governanceOS` (المدموج) | متوسط |
-| 4 | تسمية مضللة: `lib/agents.ts` (مشغّل) مقابل `lib/company/agents.ts` (سجل) | إعادة تسمية `lib/agents.ts` إلى `lib/agentRunner.ts` | صغير |
+| 4 | ~~تسمية مضللة: `lib/agents.ts` مقابل `lib/company/agents.ts`~~ | ✅ نُفّذ: أعيدت التسمية إلى `lib/agentRunner.ts` | مكتمل |
 
 > تنبيه للموجات القادمة: إضافة "منصة" جديدة (كما حدث مع Company Brain) دون
 > المرور بجدول الوحدات المرجعية أعلاه يعيد إنتاج نفس الانقسام الذي أغلقناه هنا.

@@ -86,17 +86,6 @@ function requireSupabase() {
   return supabase;
 }
 
-async function getAccountsMap() {
-  await seedEnterpriseOperatingSystem();
-  const supabase = requireSupabase();
-  const { data, error } = await supabase.from("accounting_accounts").select("*").order("code", { ascending: true });
-  if (error) throw error;
-
-  const accounts = (data || []) as Account[];
-  const byCode = new Map(accounts.map((account) => [account.code, account]));
-  return { accounts, byCode };
-}
-
 function balanceFor(account: Account, debit: number, credit: number) {
   return account.normal_balance === "DEBIT" ? debit - credit : credit - debit;
 }

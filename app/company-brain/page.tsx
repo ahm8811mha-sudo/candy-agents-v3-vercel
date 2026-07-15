@@ -158,6 +158,8 @@ export default function CompanyBrainPage() {
 
   useEffect(() => {
     void load("read");
+    // mount-only bootstrap; load reads current state via refs/setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const domains = useMemo(() => Object.entries(state.twin?.state?.domains || {}), [state.twin]);

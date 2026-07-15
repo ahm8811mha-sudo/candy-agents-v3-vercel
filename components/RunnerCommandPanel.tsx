@@ -42,6 +42,7 @@ export default function RunnerCommandPanel({ sessionId, shot, onShot, onMessage 
 
   return (
     <div className="statement-list">
+      {/* eslint-disable-next-line @next/next/no-img-element -- live base64 screenshot; next/image cannot optimize data: URIs */}
       <img
         alt="runner view"
         src={`data:image/jpeg;base64,${shot}`}
