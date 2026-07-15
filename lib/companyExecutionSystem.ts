@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from "./supabase";
 import { getMemoryContext } from "./agentMemory";
 import { invalidateCache } from "./cache";
 import { normalizeActionInitialStatus } from "./company/actionQueue";
+import { createApprovalCritical } from "./approvals";
 
 type ExecutionProject = {
   id: string;
@@ -405,22 +406,33 @@ async function createProjectFlow(
     if (alertError) throw alertError;
   }
 
+  // Gated projects wait in the UNIFIED decision center (company_approvals),
+  // not the legacy approvals table the owner inbox never reads. The decisions
+  // route recognizes kind=PROJECT_APPROVAL and flips the project + unblocks
+  // its queued actions on sign-off (applyProjectApprovalDecision below).
   let approval: ExecutionApproval | null = null;
   if (intelligence.approval.requiredRole !== "NONE") {
-    const approvalId = newId("approval");
-    const { data: approvalData, error: approvalError } = await supabase
-      .from("approvals")
-      .insert({
-        id: approvalId,
-        entity_type: `${intelligence.approval.requiredRole}_PROJECT_APPROVAL`,
-        entity_id: project.id,
-        status: "PENDING",
-        notes: intelligence.approval.reason,
-      })
-      .select("id,entity_type,entity_id,status,notes")
-      .single();
-    if (approvalError) throw approvalError;
-    approval = approvalData as ExecutionApproval;
+    const item = await createApprovalCritical({
+      type: "GENERAL",
+      title: `اعتماد مشروع: ${projectName}`,
+      detail: `${intelligence.approval.reason} · الميزانية المطلوبة ${Math.round(intelligence.requestedBudget).toLocaleString("ar-SA")} ر.س`,
+      amount: intelligence.requestedBudget > 0 ? intelligence.requestedBudget : undefined,
+      requestedRole: intelligence.approval.requiredRole,
+      dedupeKey: `project-${project.id}`,
+      metadata: {
+        kind: "PROJECT_APPROVAL",
+        projectId: String(project.id),
+        requiredRole: intelligence.approval.requiredRole,
+        source: "companyExecutionSystem",
+      },
+    });
+    approval = {
+      id: item.id,
+      entity_type: `${intelligence.approval.requiredRole}_PROJECT_APPROVAL`,
+      entity_id: String(project.id),
+      status: item.status,
+      notes: intelligence.approval.reason,
+    };
   }
 
   const { error: memoryError } = await supabase.from("business_memory").insert({
@@ -510,6 +522,87 @@ export async function runCompanyExecution(request: string): Promise<CompanyExecu
   };
 }
 
+export type ProjectApprovalDecisionResult = {
+  ok: boolean;
+  projectId: string;
+  unblockedActions: number;
+  reason: string;
+};
+
+/**
+ * Execution side-effect for unified decision-center sign-offs on gated
+ * projects (metadata.kind === "PROJECT_APPROVAL"). Returns null when the
+ * item is not a project approval so other GENERAL items pass through.
+ */
+export async function applyProjectApprovalDecision(
+  metadata: Record<string, unknown> | undefined,
+  decision: "APPROVED" | "REJECTED"
+): Promise<ProjectApprovalDecisionResult | null> {
+  if (!metadata || metadata.kind !== "PROJECT_APPROVAL") return null;
+  const projectId = String(metadata.projectId || "");
+  if (!projectId) {
+    return { ok: false, projectId: "", unblockedActions: 0, reason: "لا يوجد projectId في بيانات الاعتماد." };
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return { ok: false, projectId, unblockedActions: 0, reason: "يتطلب تفعيل المشروع اتصال Supabase." };
+  }
+
+  if (decision === "APPROVED") {
+    const { data: projectRow, error: readError } = await supabase
+      .from("projects")
+      .select("id,budget")
+      .eq("id", projectId)
+      .single();
+    if (readError) throw readError;
+
+    const { error: projectError } = await supabase
+      .from("projects")
+      .update({ approval_status: "APPROVED", approved_budget: projectRow?.budget ?? 0 })
+      .eq("id", projectId);
+    if (projectError) throw projectError;
+
+    const { data: unblocked, error: actionsError } = await supabase
+      .from("business_actions")
+      .update({ status: "QUEUED", approval_status: "APPROVED" })
+      .eq("project_id", projectId)
+      .eq("status", "WAITING_APPROVAL")
+      .select("id");
+    if (actionsError) throw actionsError;
+
+    invalidateCache("dashboard-data");
+    return {
+      ok: true,
+      projectId,
+      unblockedActions: unblocked?.length ?? 0,
+      reason: `تم تفعيل المشروع وفك حجز ${unblocked?.length ?? 0} إجراء من قائمة التنفيذ.`,
+    };
+  }
+
+  const { error: projectError } = await supabase
+    .from("projects")
+    .update({ approval_status: "REJECTED", status: "ON_HOLD" })
+    .eq("id", projectId);
+  if (projectError) throw projectError;
+
+  const { data: cancelled, error: actionsError } = await supabase
+    .from("business_actions")
+    .update({ status: "CANCELLED", approval_status: "REJECTED" })
+    .eq("project_id", projectId)
+    .eq("status", "WAITING_APPROVAL")
+    .select("id");
+  if (actionsError) throw actionsError;
+
+  invalidateCache("dashboard-data");
+  return {
+    ok: true,
+    projectId,
+    unblockedActions: 0,
+    reason: `تم رفض المشروع وإيقافه، وأُلغي ${cancelled?.length ?? 0} إجراء كان بانتظار الاعتماد.`,
+  };
+}
+
 export async function getDashboardData() {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -536,7 +629,7 @@ export async function getDashboardData() {
     supabase.from("business_alerts").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_kpis").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_actions").select("*").order("created_at", { ascending: false }).limit(50),
-    supabase.from("approvals").select("*").order("created_at", { ascending: false }).limit(20),
+    supabase.from("company_approvals").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_memory").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
 
@@ -556,7 +649,14 @@ export async function getDashboardData() {
     alerts: alerts.data || [],
     kpis: kpis.data || [],
     actions: actions.data || [],
-    approvals: approvals.data || [],
+    // Unified decision-center rows, with legacy-shape aliases so existing
+    // dashboard consumers (entity_type/entity_id/notes) keep rendering.
+    approvals: (approvals.data || []).map((row: Record<string, unknown>) => ({
+      ...row,
+      entity_type: row.type ?? "GENERAL",
+      entity_id: String((row.metadata as Record<string, unknown> | null)?.projectId ?? row.id),
+      notes: row.detail ?? null,
+    })),
     memory: memory.data || [],
   };
 }

@@ -69,7 +69,7 @@ lib/integrations/googleCalendar.ts
 
 | # | التكرار | الوحدة المرجعية المقترحة | الحجم |
 |---|---|---|---|
-| 1 | ثلاثة محركات تنفيذ: `companyExecutionSystem.ts` (562 سطراً) و`company/ideaExecution.ts` و`company-os/lifecycle.ts` | `company/ideaExecution` للدورة الأساسية، وتحويل `companyExecutionSystem` إلى واجهة قراءة (dashboard) فقط | كبير — جلسة مستقلة |
+| 1 | ثلاثة محركات تنفيذ: `companyExecutionSystem.ts` و`company/ideaExecution.ts` و`company-os/workflowRuntime.ts` | ✅ **المرحلة الأولى نُفّذت — مركز قرار واحد للمحركات الثلاثة**: اعتمادات مشاريع v1 تحولت من جدول `approvals` القديم إلى `company_approvals` عبر `createApprovalCritical` مع `kind=PROJECT_APPROVAL`؛ مسار `/api/approvals/decisions` يفعّل المشروع ويفك حجز إجراءاته (أو يوقفه عند الرفض) عبر `applyProjectApprovalDecision`؛ لوحة `getDashboardData` تقرأ المركز الموحد؛ حذف تكرار اعتماد الحملات في `marketingOS`. **المتبقي (مرحلة ثانية)**: ترحيل خطوات التنفيذ نفسها (blueprint) إلى `workflowRuntime` كمحرك خطوات وحيد، وربط اعتماد الحملة بقلب حالة `marketing_campaigns` | المرحلة 2 — جلسة مستقلة |
 | 2 | `proAccounting.ts` (581 سطراً) يحمل دليل حسابات وقيوداً خاصة به | إعادة توجيه ترحيلاته إلى `accountingRepository` (RPC) وإبقاؤه طبقة تقارير | متوسط |
 | 3 | `enterpriseSystems.ts` يكرر أفكار/فرص `company/ideas` | تحويل مساراته إلى `company/ideas` + `governanceOS` (المدموج) | متوسط |
 | 4 | ~~تسمية مضللة: `lib/agents.ts` مقابل `lib/company/agents.ts`~~ | ✅ نُفّذ: أعيدت التسمية إلى `lib/agentRunner.ts` | مكتمل |

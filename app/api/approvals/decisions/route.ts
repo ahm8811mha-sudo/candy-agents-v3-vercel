@@ -3,6 +3,7 @@ import { listApprovals, getApprovalCritical, decideApprovalCritical, approvalSta
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
+import { applyProjectApprovalDecision } from "@/lib/companyExecutionSystem";
 import { authenticateRequest } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { requiredTier } from "@/lib/company/governance";
@@ -70,6 +71,12 @@ export async function POST(req: NextRequest) {
       else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
       else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
       else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+    }
+    // Gated projects react to BOTH outcomes: approval activates the project
+    // and unblocks its queued actions; rejection puts it on hold. Returns
+    // null for GENERAL items that are not project approvals.
+    if (result.type === "GENERAL" && execution === null) {
+      execution = await applyProjectApprovalDecision(result.metadata || {}, decision);
     }
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });

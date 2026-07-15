@@ -319,13 +319,13 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
     setApprovalSaving(id);
     setError("");
     try {
-      const res = await fetch("/api/approvals/decision", {
+      const res = await fetch("/api/approvals/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, approverId: `${icon}-manager` }),
+        body: JSON.stringify({ id, decision: status, decidedBy: `${icon}-manager` }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.message || "تعذر تحديث الموافقة.");
+      if (!res.ok || !json.ok) throw new Error(json.error || json.message || "تعذر تحديث الموافقة.");
       await loadDashboard();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحديث الموافقة.");

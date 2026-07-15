@@ -263,15 +263,10 @@ export async function createMarketingCampaign(input: CampaignInput) {
     .single();
   if (error) throw error;
 
-  if (!governance.allowedToExecute) {
-    await supabase.from("approvals").insert({
-      id: newId("approval"),
-      entity_type: `${governance.requiredRole}_MARKETING_CAMPAIGN_APPROVAL`,
-      entity_id: campaign.id,
-      status: "PENDING",
-      notes: `Campaign ${campaign.name} requires ${governance.requiredRole} approval before execution.`,
-    });
-  }
+  // The pending sign-off already lives in the unified decision center:
+  // evaluateGovernedAction created it in company_approvals. The old duplicate
+  // insert into the legacy approvals table (invisible to the owner inbox)
+  // was removed with the engine unification.
 
   await supabase.from("business_actions").insert({
     action_type: "MARKETING_CAMPAIGN_REVIEW",
