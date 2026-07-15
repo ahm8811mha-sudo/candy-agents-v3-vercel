@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, probeSupabaseConnection, type SupabaseConnectionStatus } from "../supabase";
 import {
   getProductionReadiness,
   type ProductionReadiness,
@@ -33,6 +33,19 @@ function recent(value: unknown, maximumHours: number) {
 
 export async function getEvidenceAwareProductionReadiness(): Promise<ProductionReadiness> {
   const readiness = getProductionReadiness();
+  const connection = await probeSupabaseConnection();
+  if (!connection.ready) {
+    const details: Record<Exclude<SupabaseConnectionStatus, "READY">, string> = {
+      NOT_CONFIGURED: "Supabase server persistence is not configured for this deployment.",
+      PROJECT_MISMATCH: "The Supabase URL and server key belong to different projects. Server writes remain blocked.",
+      AUTH_REJECTED: "Supabase rejected the configured server key. Replace SUPABASE_SECRET_KEY with a valid Secret key for the linked project.",
+      SCHEMA_UNAVAILABLE: "The Supabase server key is accepted, but the authoritative schema probe is unavailable.",
+      UNAVAILABLE: "Supabase could not be reached. Evidence queries were skipped to avoid repeated failed requests.",
+    };
+    replaceCheck(readiness, "supabase-service-role", false, details[connection.status]);
+    readiness.okForProduction = readiness.checks.every((item) => item.severity !== "FAIL");
+    return readiness;
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) return readiness;
   const tenantId = process.env.ORVANTA_TENANT_ID?.trim() || "golden-star";

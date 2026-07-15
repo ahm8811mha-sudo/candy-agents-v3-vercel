@@ -1,10 +1,11 @@
-import { afterAll, beforeEach, describe, it, expect, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import {
   persist,
   fetchRows,
   getSupabaseEnvironmentReadiness,
   hydrateOnce,
   hasSupabaseEnv,
+  probeSupabaseConnection,
 } from "../lib/supabase";
 
 const SUPABASE_ENV_KEYS = [
@@ -17,6 +18,10 @@ const originalEnvironment = Object.fromEntries(SUPABASE_ENV_KEYS.map((key) => [k
 
 beforeEach(() => {
   for (const key of SUPABASE_ENV_KEYS) delete process.env[key];
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 afterAll(() => {
@@ -89,6 +94,36 @@ describe("Supabase persistence helpers (graceful degradation)", () => {
     const readiness = getSupabaseEnvironmentReadiness();
     expect(readiness).toMatchObject({ configured: true, projectAlignment: "MATCH", configurationIssue: null });
     expect(JSON.stringify(readiness)).not.toContain(payload);
+  });
+
+  it("verifies an opaque secret key with one cached read-only probe", async () => {
+    process.env.SUPABASE_URL = "https://probe-ready.supabase.co";
+    process.env.SUPABASE_SECRET_KEY = "sb_secret_probe-ready";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 200,
+      headers: { "content-range": "0-0/0" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(probeSupabaseConnection({ force: true })).resolves.toMatchObject({
+      ready: true,
+      status: "READY",
+    });
+    await expect(probeSupabaseConnection()).resolves.toMatchObject({ ready: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies a rejected server key without exposing it", async () => {
+    process.env.SUPABASE_URL = "https://probe-rejected.supabase.co";
+    process.env.SUPABASE_SECRET_KEY = "sb_secret_never-return-this-value";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ message: "Invalid API key" }),
+      { status: 401, headers: { "content-type": "application/json" } }
+    )));
+
+    const readiness = await probeSupabaseConnection({ force: true });
+    expect(readiness).toMatchObject({ ready: false, status: "AUTH_REJECTED" });
+    expect(JSON.stringify(readiness)).not.toContain("never-return-this-value");
   });
 
   it("persist is a silent no-op without env (never throws)", () => {

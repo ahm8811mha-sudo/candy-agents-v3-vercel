@@ -49,6 +49,7 @@ type OfficeData = {
 };
 
 type DatabaseIssue = {
+  code: string;
   isPreview: boolean;
   productionUrl: string | null;
   missingEnvironmentVariables: string[];
@@ -56,9 +57,11 @@ type DatabaseIssue = {
 };
 
 function databaseIssueFromResponse(json: Record<string, unknown>): DatabaseIssue | null {
-  if (json.code !== "SUPABASE_NOT_CONFIGURED") return null;
+  const code = String(json.code || "");
+  if (!["SUPABASE_NOT_CONFIGURED", "SUPABASE_AUTH_REJECTED", "SUPABASE_SCHEMA_UNAVAILABLE", "SUPABASE_UNAVAILABLE"].includes(code)) return null;
   const deployment = (json.deployment || {}) as Record<string, unknown>;
   return {
+    code,
     isPreview: deployment.isPreview === true,
     productionUrl: typeof deployment.productionUrl === "string" ? deployment.productionUrl : null,
     missingEnvironmentVariables: Array.isArray(json.missingEnvironmentVariables)
@@ -204,6 +207,15 @@ export default function ExecutiveOfficeConsole() {
 
   const brief = data?.operatingBrief;
   const databaseReady = Boolean(data && !databaseIssue);
+  const databaseBadge = databaseReady
+    ? "Command ready"
+    : loading
+      ? "جارٍ التحقق"
+      : databaseIssue?.isPreview
+        ? "Preview isolated"
+        : databaseIssue?.code === "SUPABASE_AUTH_REJECTED"
+          ? "Database key rejected"
+          : "Database required";
 
   return (
     <main className="company-app ops-console">
@@ -231,7 +243,7 @@ export default function ExecutiveOfficeConsole() {
         <div className="department-badge">
           <strong>CEO Office</strong>
           <small className={databaseReady ? "" : "is-warning"}>
-            {databaseReady ? "Command ready" : loading ? "جارٍ التحقق" : databaseIssue?.isPreview ? "Preview isolated" : "Database required"}
+            {databaseBadge}
           </small>
         </div>
       </section>
@@ -257,7 +269,13 @@ export default function ExecutiveOfficeConsole() {
           <div className="status-banner warn executive-database-status" role="status">
             <span className="status-dot warn" />
             <div>
-              <strong>{databaseIssue.isPreview ? "نسخة المعاينة معزولة عن بيانات الإنتاج" : "اتصال قاعدة البيانات مطلوب"}</strong>
+              <strong>
+                {databaseIssue.isPreview
+                  ? "نسخة المعاينة معزولة عن بيانات الإنتاج"
+                  : databaseIssue.code === "SUPABASE_AUTH_REJECTED"
+                    ? "مفتاح قاعدة البيانات مرفوض"
+                    : "اتصال قاعدة البيانات مطلوب"}
+              </strong>
               <p>{databaseIssue.message}</p>
               <div className="executive-database-status__actions">
                 {databaseIssue.isPreview && databaseIssue.productionUrl ? (

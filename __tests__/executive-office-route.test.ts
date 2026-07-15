@@ -1,5 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const supabaseMocks = vi.hoisted(() => ({
+  probeSupabaseConnection: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/supabase")>();
+  return { ...actual, probeSupabaseConnection: supabaseMocks.probeSupabaseConnection };
+});
+
 vi.mock("@/lib/executiveOffice", () => ({
   createExecutiveItem: vi.fn(),
   createExecutiveCalendarEvent: vi.fn(),
@@ -27,6 +36,12 @@ const originalEnvironment = Object.fromEntries(ENV_KEYS.map((key) => [key, proce
 beforeEach(() => {
   vi.clearAllMocks();
   for (const key of ENV_KEYS) delete process.env[key];
+  supabaseMocks.probeSupabaseConnection.mockResolvedValue({
+    ready: true,
+    status: "READY",
+    keySource: "SUPABASE_SECRET_KEY",
+    configurationIssue: null,
+  });
 });
 
 afterAll(() => {
@@ -86,6 +101,30 @@ describe("executive office database readiness", () => {
     expect(response.status).toBe(200);
     expect(json).toMatchObject({ ok: true, operatingBrief: { healthScore: 82 } });
     expect(JSON.stringify(json)).not.toContain("sb_secret_server-only");
+  });
+
+  it("reports a rejected production key as an actionable 503", async () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SECRET_KEY = "sb_secret_rejected";
+    supabaseMocks.probeSupabaseConnection.mockResolvedValue({
+      ready: false,
+      status: "AUTH_REJECTED",
+      keySource: "SUPABASE_SECRET_KEY",
+      configurationIssue: null,
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toMatchObject({
+      code: "SUPABASE_AUTH_REJECTED",
+      configured: false,
+      connectionStatus: "AUTH_REJECTED",
+    });
+    expect(json.error).toContain("SUPABASE_SECRET_KEY");
+    expect(getExecutiveOffice).not.toHaveBeenCalled();
   });
 
   it("does not expose internal database errors to the browser", async () => {
