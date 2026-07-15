@@ -79,6 +79,24 @@ function addToStore(entry: AuditEntry) {
   if (store.length > MAX) store.length = MAX;
 }
 
+/** Cache an append-only row that was committed inside another atomic RPC. */
+export function rememberDurableAuditRow(row: Record<string, unknown>): AuditEntry {
+  const entry: AuditEntry = {
+    id: String(row.id),
+    actor: String(row.actor || "system"),
+    role: row.role ? String(row.role) : undefined,
+    action: String(row.action || "EXECUTION_RECORDED"),
+    entityType: String(row.entity_type || "project"),
+    entityId: String(row.entity_id || ""),
+    detail: String(row.detail || ""),
+    tier: row.tier ? String(row.tier) : undefined,
+    metadata: (row.metadata as Record<string, unknown> | null) || undefined,
+    createdAt: String(row.created_at || new Date().toISOString()),
+  };
+  addToStore(entry);
+  return entry;
+}
+
 export function recordAudit(input: RecordAuditInput): AuditEntry {
   const entry = buildEntry(input);
   addToStore(entry);

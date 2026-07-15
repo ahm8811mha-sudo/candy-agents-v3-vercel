@@ -2,6 +2,11 @@ import { calculateFinancials } from "./accountingSystem";
 import { seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { evaluateGovernedAction, logDecision } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
+import {
+  addAccountingBankTransactionAtomic,
+  createAccountingInvoiceAtomic,
+  postAccountingEntry,
+} from "./accountingRepository";
 
 type Account = {
   id: string;
@@ -39,6 +44,7 @@ type InvoiceInput = {
   taxRate?: number;
   costCenterId?: string;
   notes?: string;
+  idempotencyKey?: string;
 };
 
 type JournalInput = {
@@ -48,12 +54,14 @@ type JournalInput = {
   amount: number;
   costCenterId?: string;
   source?: string;
+  reference?: string;
 };
 
 type BankInput = {
   description: string;
   amount: number;
   bankName?: string;
+  idempotencyKey?: string;
 };
 
 type CostCenterInput = {
@@ -62,12 +70,6 @@ type CostCenterInput = {
   ownerRole: string;
   monthlyBudget: number;
 };
-
-const currencyFormatter = new Intl.NumberFormat("ar-SA", {
-  style: "currency",
-  currency: "SAR",
-  maximumFractionDigits: 0,
-});
 
 function number(value: unknown) {
   const parsed = Number(value);
@@ -82,17 +84,6 @@ function requireSupabase() {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured.");
   return supabase;
-}
-
-async function getAccountsMap() {
-  await seedEnterpriseOperatingSystem();
-  const supabase = requireSupabase();
-  const { data, error } = await supabase.from("accounting_accounts").select("*").order("code", { ascending: true });
-  if (error) throw error;
-
-  const accounts = (data || []) as Account[];
-  const byCode = new Map(accounts.map((account) => [account.code, account]));
-  return { accounts, byCode };
 }
 
 function balanceFor(account: Account, debit: number, credit: number) {
@@ -256,160 +247,26 @@ export async function postJournalEntry(input: JournalInput) {
   const amount = number(input.amount);
   if (amount <= 0) throw new Error("Amount must be greater than zero.");
   if (!input.memo?.trim()) throw new Error("Memo is required.");
-
-  const supabase = requireSupabase();
-  const { byCode } = await getAccountsMap();
-  const debitAccount = byCode.get(input.debitCode);
-  const creditAccount = byCode.get(input.creditCode);
-  if (!debitAccount || !creditAccount) throw new Error("Invalid accounting account code.");
-
-  const { data: entry, error: entryError } = await supabase
-    .from("accounting_journal_entries")
-    .insert({
-      entry_number: nowCode("JE"),
-      memo: input.memo.trim(),
-      source: input.source || "manual",
-      status: "POSTED",
-      cost_center_id: input.costCenterId || null,
-    })
-    .select()
-    .single();
-  if (entryError) throw entryError;
-
-  const { error: lineError } = await supabase.from("accounting_journal_lines").insert([
-    {
-      entry_id: entry.id,
-      account_id: debitAccount.id,
-      memo: input.memo.trim(),
-      debit: amount,
-      credit: 0,
-    },
-    {
-      entry_id: entry.id,
-      account_id: creditAccount.id,
-      memo: input.memo.trim(),
-      debit: 0,
-      credit: amount,
-    },
-  ]);
-  if (lineError) throw lineError;
-
-  return entry;
+  return postAccountingEntry({
+    memo: input.memo.trim(),
+    source: input.source || "professional-accounting",
+    reference: input.reference,
+    costCenterId: input.costCenterId,
+    lines: [
+      { accountCode: input.debitCode, debit: amount, credit: 0 },
+      { accountCode: input.creditCode, debit: 0, credit: amount },
+    ],
+  });
 }
 
 export async function createAccountingInvoice(input: InvoiceInput) {
-  const subtotal = number(input.subtotal);
-  const tax = number(input.tax);
-  const taxRate = number(input.taxRate) || (subtotal > 0 ? tax / subtotal : 0);
-  const total = subtotal + tax;
-  if (!input.contactName?.trim()) throw new Error("Contact name is required.");
-  if (total <= 0) throw new Error("Invoice total must be greater than zero.");
-
-  const supabase = requireSupabase();
-  const contactType = input.invoiceType === "SALES" ? "CUSTOMER" : "VENDOR";
-  const { data: contact, error: contactError } = await supabase
-    .from("accounting_contacts")
-    .insert({ type: contactType, name: input.contactName.trim() })
-    .select()
-    .single();
-  if (contactError) throw contactError;
-
-  const { data: invoice, error: invoiceError } = await supabase
-    .from("accounting_invoices")
-    .insert({
-      contact_id: contact.id,
-      invoice_type: input.invoiceType,
-      status: "ISSUED",
-      subtotal,
-      tax,
-      tax_rate: taxRate,
-      tax_invoice_number: nowCode(input.invoiceType === "SALES" ? "TAX-S" : "TAX-P"),
-      total,
-      paid: 0,
-      cost_center_id: input.costCenterId || null,
-      notes: input.notes?.trim() || null,
-    })
-    .select()
-    .single();
-  if (invoiceError) throw invoiceError;
-
-  if (input.invoiceType === "SALES") {
-    await postJournalEntry({
-      memo: `Sales invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      debitCode: "1100",
-      creditCode: "4000",
-      amount: total,
-      costCenterId: input.costCenterId,
-      source: "invoice",
-    });
-  } else {
-    await postJournalEntry({
-      memo: `Purchase invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      debitCode: "5200",
-      creditCode: "2000",
-      amount: total,
-      costCenterId: input.costCenterId,
-      source: "invoice",
-    });
-  }
-
-  await logDecision({
-    decisionType: "TAX_INVOICE_ISSUED",
-    entityType: "accounting_invoices",
-    entityId: invoice.id,
-    actorRole: "CFO",
-    action: `${input.invoiceType} invoice issued and posted`,
-    amount: total,
-    riskLevel: "LOW",
-    approvalStatus: "POSTED",
-    metadata: { contact_id: contact.id, tax, taxRate, costCenterId: input.costCenterId },
-  });
-
-  return invoice;
+  const result = await createAccountingInvoiceAtomic(input);
+  return result.invoice;
 }
 
 export async function addBankTransaction(input: BankInput) {
-  const amount = number(input.amount);
-  if (!input.description?.trim()) throw new Error("Bank transaction description is required.");
-  if (amount === 0) throw new Error("Bank transaction amount cannot be zero.");
-
-  const supabase = requireSupabase();
-  const bankName = input.bankName?.trim() || "Main operating bank";
-  let bankAccountId = "";
-
-  const existing = await supabase.from("accounting_bank_accounts").select("*").eq("name", bankName).limit(1);
-  if (existing.error) throw existing.error;
-
-  if (existing.data?.[0]?.id) {
-    bankAccountId = existing.data[0].id;
-  } else {
-    const { data: account, error } = await supabase
-      .from("accounting_bank_accounts")
-      .insert({ name: bankName, provider: "manual", currency: "SAR", balance: 0 })
-      .select()
-      .single();
-    if (error) throw error;
-    bankAccountId = account.id;
-  }
-
-  const { data: transaction, error: transactionError } = await supabase
-    .from("accounting_bank_transactions")
-    .insert({
-      bank_account_id: bankAccountId,
-      description: input.description.trim(),
-      amount,
-      status: "UNMATCHED",
-    })
-    .select()
-    .single();
-  if (transactionError) throw transactionError;
-
-  await supabase
-    .from("accounting_bank_accounts")
-    .update({ balance: number(existing.data?.[0]?.balance) + amount })
-    .eq("id", bankAccountId);
-
-  return transaction;
+  const result = await addAccountingBankTransactionAtomic(input);
+  return result.transaction;
 }
 
 export async function createCostCenter(input: CostCenterInput) {

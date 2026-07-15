@@ -4,7 +4,7 @@ import { isPersonalOwnerMode } from "../auth";
 import { buildDecisionPacket } from "./board";
 import { canReserveBudget } from "./finance";
 import { classifyRisk } from "./governance";
-import { createCompanyEvent } from "./events";
+import { createCompanyEvent, eventToOutboxRecord } from "./events";
 import { appendCompanyEvent } from "./outboxPublisher";
 import type { ExecutiveRole, RiskLevel } from "./types";
 
@@ -148,18 +148,8 @@ export async function startIdeaToInvestmentWorkflow(args: StartWorkflowInput) {
     created_at: now,
   };
 
-  const { data: existing } = await supabase
-    .from("workflow_instances")
-    .select("*")
-    .eq("tenant_id", args.tenantId)
-    .eq("correlation_id", correlationId)
-    .maybeSingle();
-  if (existing) return { instance: existing as RuntimeRow, reused: true };
-
-  const { error: instanceError } = await supabase.from("workflow_instances").insert(instance);
-  if (instanceError) throw instanceError;
-
   const steps = IDEA_TO_INVESTMENT_WORKFLOW.steps.map((step, index) => ({
+    id: randomUUID(),
     tenant_id: args.tenantId,
     workflow_instance_id: instanceId,
     step_key: step,
@@ -170,9 +160,6 @@ export async function startIdeaToInvestmentWorkflow(args: StartWorkflowInput) {
     input: {},
     available_at: now,
   }));
-  const { error: stepsError } = await supabase.from("workflow_steps").insert(steps);
-  if (stepsError) throw stepsError;
-
   const event = createCompanyEvent({
     type: "workflow.started",
     tenantId: args.tenantId,
@@ -183,8 +170,29 @@ export async function startIdeaToInvestmentWorkflow(args: StartWorkflowInput) {
     correlationId,
     payload: { workflowId: IDEA_TO_INVESTMENT_WORKFLOW.id, title: args.input.title },
   });
-  await appendCompanyEvent(event);
-  return { instance, reused: false };
+  const outbox = eventToOutboxRecord(event);
+  const { data, error } = await supabase.rpc("orvanta_start_workflow_bundle", {
+    p_instance: instance,
+    p_steps: steps,
+    p_event: {
+      id: event.id,
+      tenant_id: event.tenantId,
+      event_type: event.type,
+      event_version: event.version,
+      actor_id: event.actorId,
+      actor_type: event.actorType,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      correlation_id: event.correlationId,
+      causation_id: event.causationId || null,
+      payload: event.payload,
+      occurred_at: event.occurredAt,
+    },
+    p_outbox: outbox,
+  });
+  if (error) throw new Error(`Atomic workflow start failed: ${error.message}`);
+  const result = data as { instance?: RuntimeRow; reused?: boolean } | null;
+  return { instance: result?.instance || instance, reused: Boolean(result?.reused) };
 }
 
 async function requiredApprovalsSatisfied(tenantId: string, decisionId: string, required: ExecutiveRole[]) {
@@ -433,6 +441,7 @@ export async function runWorkflowTick(options: { tenantId?: string; limit?: numb
   let query = supabase
     .from("workflow_steps")
     .select("*, workflow_instances!inner(*)")
+    .eq("workflow_instances.workflow_id", IDEA_TO_INVESTMENT_WORKFLOW.id)
     .in("status", ["PENDING", "RETRY", "WAITING_APPROVAL"])
     .lte("available_at", now)
     .order("available_at", { ascending: true })

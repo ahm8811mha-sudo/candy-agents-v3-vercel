@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:smoke": "node scripts/production-smoke.mjs",
+    "readiness:evidence": "node scripts/record-readiness-evidence.mjs",
     "google:oauth": "node scripts/google-oauth.mjs"
   },
   "dependencies": {

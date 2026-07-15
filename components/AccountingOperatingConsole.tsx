@@ -85,7 +85,7 @@ export default function AccountingOperatingConsole() {
     try {
       const res = await fetch("/api/accounting-pro", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify(action === "close-period" ? { action, period: payload?.period } : { action, data: payload }),
       });
       const json = await res.json();

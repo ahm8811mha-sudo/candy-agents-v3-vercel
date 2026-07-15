@@ -120,6 +120,12 @@ export function getProductionReadiness(): ProductionReadiness {
         : "Apply the ordered Supabase migrations in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
     ),
     check(
+      "execution-transaction",
+      "Atomic execution bundle",
+      false,
+      "No current rollback-safe execution transaction evidence is stored yet."
+    ),
+    check(
       "migration-baseline",
       "Ordered migration baseline",
       enabled("ORVANTA_MIGRATIONS_BASELINED"),

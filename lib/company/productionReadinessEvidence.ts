@@ -38,10 +38,11 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
   const tenantId = process.env.ORVANTA_TENANT_ID?.trim() || "golden-star";
   const evidenceEnvironment = readiness.mode === "production" ? "production" : "development";
 
-  const [evidenceResult, cronResult, capabilityResult, backupResult, companyBrainResult, coreProbes] = await Promise.all([
+  const [evidenceResult, cronResult, capabilityResult, receiptResult, backupResult, companyBrainResult, coreProbes] = await Promise.all([
     supabase.from("readiness_evidence").select("*").eq("environment", evidenceEnvironment).order("performed_at", { ascending: false }).limit(200),
     supabase.from("cron_runs").select("job_name,status,completed_at,started_at").eq("tenant_id", tenantId).in("job_name", ["system-watchdog", "failed-write-recovery"]).order("started_at", { ascending: false }).limit(20),
-    supabase.from("capability_registry").select("capability_key,status,evidence_required"),
+    supabase.from("capability_registry").select("capability_key,status,evidence_required,integration"),
+    supabase.from("external_receipts").select("integration,operation,verified,verified_at,created_at").eq("verified", true).order("created_at", { ascending: false }).limit(500),
     supabase.from("backup_verification_runs").select("status,completed_at,started_at,backup_reference,restore_target").order("started_at", { ascending: false }).limit(10),
     supabase.from("company_ingestion_runs").select("id,status,completed_at,started_at,failures").eq("tenant_id", tenantId).eq("pipeline", "operational-to-company-brain-v1").order("started_at", { ascending: false }).limit(1).maybeSingle(),
     Promise.all([
@@ -85,6 +86,14 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     passingEvidence("migration-chain-applied")
       ? "The ordered migration chain is recorded as applied and verified."
       : "No current migration-chain evidence is stored."
+  );
+  replaceCheck(
+    readiness,
+    "execution-transaction",
+    passingEvidence("execution-transaction-smoke"),
+    passingEvidence("execution-transaction-smoke")
+      ? "The canonical execution RPC passed rollback-safe atomicity, idempotency, workflow, audit, and outbox checks."
+      : "No current execution transaction smoke evidence is stored."
   );
   replaceCheck(
     readiness,
@@ -161,14 +170,32 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
   );
 
   const capabilities = capabilityResult.error ? [] : capabilityResult.data || [];
-  const capabilityPassed = capabilities.length > 0 && capabilities.every((row) => VALID_CAPABILITY_STATES.has(String(row.status)));
+  const receipts = receiptResult.error ? [] : receiptResult.data || [];
+  const hasRecentReceipt = (integration: unknown) => receipts.some(
+    (row) =>
+      String(row.integration || "").toUpperCase() === String(integration || "").toUpperCase() &&
+      row.verified === true &&
+      recent(row.verified_at || row.created_at, 90 * 24)
+  );
+  const capabilityHasEvidence = (row: Record<string, unknown>) => {
+    if (String(row.status) !== "LIVE" || row.evidence_required !== true) return true;
+    const capabilityKey = String(row.capability_key || "");
+    if (capabilityKey === "finance.journal.post") return passingEvidence("accounting-controls-smoke");
+    return hasRecentReceipt(row.integration) || passingEvidence(`capability:${capabilityKey}`);
+  };
+  const invalidCapabilities = (capabilities as Record<string, unknown>[]).filter(
+    (row) => !VALID_CAPABILITY_STATES.has(String(row.status)) || !capabilityHasEvidence(row)
+  );
+  const capabilityPassed = capabilities.length > 0 && invalidCapabilities.length === 0;
   replaceCheck(
     readiness,
     "capability-registry",
     capabilityPassed,
     capabilityPassed
-      ? `${capabilities.length} capabilities are explicitly classified without ambiguous execution claims.`
-      : "The capability registry is empty, unavailable, or contains an invalid status."
+      ? `${capabilities.length} capabilities are explicitly classified and every LIVE evidence-required claim has a current verified receipt or canary record.`
+      : invalidCapabilities.length
+        ? `Capability evidence is missing or invalid for: ${invalidCapabilities.map((row) => String(row.capability_key)).join(", ")}.`
+        : "The capability registry is empty or unavailable."
   );
 
   const backups = backupResult.error ? [] : backupResult.data || [];
