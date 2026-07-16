@@ -1,7 +1,7 @@
-import EmployeeRuntimePanelV2 from "@/components/EmployeeRuntimePanelV2";
+import EmployeeRuntimeConsole from "@/components/EmployeeRuntimeConsole";
 
 export const dynamic = "force-dynamic";
 
 export default function EmployeeRuntimePage() {
-  return <EmployeeRuntimePanelV2 />;
+  return <EmployeeRuntimeConsole />;
 }
