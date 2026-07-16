@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
-import { runOrderToCash } from "@/lib/employee-runtime/engine";
+import { runOrderToCash } from "@/lib/employee-runtime/runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +25,25 @@ export async function POST(req: NextRequest) {
       paymentReference: body.paymentReference ? String(body.paymentReference) : undefined,
       channel: body.channel ? String(body.channel) : "direct",
       requestedBy: auth.context.actor.name,
-      unavailableEmployeeIds: Array.isArray(body.unavailableEmployeeIds) ? body.unavailableEmployeeIds.map(String) : [],
+      unavailableEmployeeIds: Array.isArray(body.unavailableEmployeeIds)
+        ? body.unavailableEmployeeIds.map(String)
+        : [],
     });
-    return NextResponse.json({ ok: true, ...result, requestId: auth.context.requestId }, { status: result.reused ? 200 : 201 });
+    return NextResponse.json(
+      { ok: true, ...result, requestId: auth.context.requestId },
+      { status: result.reused ? 200 : 201 }
+    );
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Order-to-cash execution failed.", requestId: auth.context.requestId }, { status: 400 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Order-to-cash execution failed.",
+        requestId: auth.context.requestId,
+      },
+      { status: 400 }
+    );
   }
 }
