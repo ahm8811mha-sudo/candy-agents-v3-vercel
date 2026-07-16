@@ -22,14 +22,14 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
     id: "abdulrahman", name: "عبدالرحمن", title: "المدير المالي", department: "المالية",
     reportsTo: "sultan", backupEmployeeId: "ameen", authorityLimitSAR: 5_000, maxAutonomousRisk: "MEDIUM",
     capabilities: ["CREATE_BUDGET", "CHECK_CASH_POSITION", "APPROVE_EXPENSE_T0", "REVIEW_MARGIN", "RECONCILE_PAYMENT", "GENERATE_PNL", "ESCALATE_FINANCIAL_EXCEPTION"],
-    sopIds: ["SOP-FIN-001", "SOP-FIN-002", "SOP-OTC-001"],
+    sopIds: ["SOP-FIN-001", "SOP-FIN-002", "SOP-OTC-001", "SOP-P2P-001"],
     kpis: [kpi("forecast_accuracy", "دقة التوقع المالي", "PERCENT", "HIGHER_IS_BETTER", 90, 80, 65), kpi("budget_variance", "انحراف الميزانية", "PERCENT", "LOWER_IS_BETTER", 5, 10, 15)],
   },
   {
     id: "ameen", name: "أمين", title: "المحاسب العام", department: "المحاسبة",
     reportsTo: "abdulrahman", backupEmployeeId: "abdulrahman", authorityLimitSAR: 0, maxAutonomousRisk: "LOW",
     capabilities: ["CREATE_JOURNAL_ENTRY", "CREATE_SALES_INVOICE", "CREATE_PURCHASE_INVOICE", "POST_COGS", "RECONCILE_PAYMENT", "CLOSE_ACCOUNTING_PERIOD"],
-    sopIds: ["SOP-ACC-001", "SOP-ACC-002", "SOP-OTC-001"],
+    sopIds: ["SOP-ACC-001", "SOP-ACC-002", "SOP-OTC-001", "SOP-P2P-001"],
     kpis: [kpi("balanced_entry_rate", "نسبة القيود المتوازنة", "PERCENT", "HIGHER_IS_BETTER", 100, 99, 97), kpi("duplicate_entry_rate", "القيود المكررة", "PERCENT", "LOWER_IS_BETTER", 0, 0.5, 1)],
   },
   {
@@ -42,8 +42,8 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
   {
     id: "fahad", name: "فهد", title: "مدير العمليات", department: "العمليات",
     reportsTo: "sultan", backupEmployeeId: "khalid", authorityLimitSAR: 5_000, maxAutonomousRisk: "MEDIUM",
-    capabilities: ["CREATE_PROJECT", "CREATE_TASK", "ASSIGN_TASK", "CREATE_FULFILLMENT_ORDER", "VERIFY_DELIVERY", "MANAGE_BLOCKER", "RUN_QUALITY_CHECK"],
-    sopIds: ["SOP-OPS-001", "SOP-OPS-002", "SOP-OTC-001"],
+    capabilities: ["CREATE_PROJECT", "CREATE_TASK", "ASSIGN_TASK", "CREATE_FULFILLMENT_ORDER", "RECORD_GOODS_RECEIPT", "VERIFY_DELIVERY", "MANAGE_BLOCKER", "RUN_QUALITY_CHECK"],
+    sopIds: ["SOP-OPS-001", "SOP-OPS-002", "SOP-OTC-001", "SOP-P2P-001", "SOP-IDEA-001"],
     kpis: [kpi("on_time_delivery", "التسليم في الموعد", "PERCENT", "HIGHER_IS_BETTER", 95, 85, 75), kpi("first_time_success", "النجاح من أول محاولة", "PERCENT", "HIGHER_IS_BETTER", 95, 85, 70)],
   },
   {
@@ -57,7 +57,7 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
     id: "khalid", name: "خالد", title: "مدير المشتريات وسلاسل الإمداد", department: "المشتريات",
     reportsTo: "sultan", backupEmployeeId: "fahad", authorityLimitSAR: 5_000, maxAutonomousRisk: "MEDIUM",
     capabilities: ["RESERVE_INVENTORY", "DECREMENT_INVENTORY", "CREATE_PURCHASE_REQUEST", "COMPARE_SUPPLIERS", "CREATE_PURCHASE_ORDER", "REORDER_STOCK"],
-    sopIds: ["SOP-PROC-001", "SOP-INV-001", "SOP-OTC-001"],
+    sopIds: ["SOP-PROC-001", "SOP-INV-001", "SOP-OTC-001", "SOP-P2P-001"],
     kpis: [kpi("stockout_rate", "نفاد المخزون", "PERCENT", "LOWER_IS_BETTER", 1, 3, 5), kpi("inventory_accuracy", "دقة المخزون", "PERCENT", "HIGHER_IS_BETTER", 99, 97, 94)],
   },
   {
@@ -78,7 +78,7 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
     id: "hares", name: "حارس", title: "مسؤول المخاطر والحوكمة", department: "الحوكمة",
     reportsTo: "sultan", backupEmployeeId: "majed", authorityLimitSAR: 0, maxAutonomousRisk: "LOW",
     capabilities: ["CHECK_POLICY", "CHECK_AUTHORITY", "VERIFY_EVIDENCE", "BLOCK_UNAUTHORIZED_ACTION", "CREATE_AUDIT_EVENT", "ESCALATE_RISK"],
-    sopIds: ["SOP-GOV-001", "SOP-GOV-002", "SOP-CONTINUITY-001"],
+    sopIds: ["SOP-GOV-001", "SOP-GOV-002", "SOP-CONTINUITY-001", "SOP-IDEA-001"],
     kpis: [kpi("unauthorized_action_count", "إجراءات غير مصرح بها", "COUNT", "LOWER_IS_BETTER", 0, 1, 1), kpi("evidence_completion_rate", "اكتمال أدلة التنفيذ", "PERCENT", "HIGHER_IS_BETTER", 100, 98, 95)],
   },
 ];
@@ -108,4 +108,23 @@ export function resolveActiveEmployee(employeeId: string, unavailableEmployeeIds
     throw new Error(`Employee ${employeeId} and backup ${backup.id} are both unavailable.`);
   }
   return backup;
+}
+
+/**
+ * A backup does not permanently inherit another employee's powers. The runtime
+ * may grant one capability for one work-order step only when the configured
+ * backup relationship is valid. The delegation is recorded on the step and
+ * execution receipt.
+ */
+export function canExecuteCapability(input: {
+  activeEmployeeId: string;
+  capability: string;
+  delegatedFromEmployeeId?: string | null;
+}): boolean {
+  if (!input.delegatedFromEmployeeId) {
+    return employeeHasCapability(input.activeEmployeeId, input.capability);
+  }
+  const principal = getEmployeeProfile(input.delegatedFromEmployeeId);
+  if (!principal || principal.backupEmployeeId !== input.activeEmployeeId) return false;
+  return principal.capabilities.includes(input.capability);
 }
