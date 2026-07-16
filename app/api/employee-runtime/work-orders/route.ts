@@ -6,8 +6,26 @@ import {
   listWorkOrders,
   saveWorkOrder,
 } from "@/lib/employee-runtime/runtime";
+import type { ApprovalTier } from "@/lib/company/governance";
+import type { UserRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+function canApproveTier(
+  role: UserRole,
+  tier: ApprovalTier,
+  feasibilityConfirmed: boolean
+) {
+  if (tier === "T0" || tier === "T1") {
+    return ["ADMIN", "OWNER", "CEO"].includes(role);
+  }
+  if (tier === "T2") {
+    return role === "ADMIN" || role === "OWNER";
+  }
+  return (
+    (role === "ADMIN" || role === "OWNER") && feasibilityConfirmed
+  );
+}
 
 export async function GET(req: NextRequest) {
   const auth = await requireCompanyContext(req, "VIEWER");
@@ -61,11 +79,59 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "APPROVE") {
+      if (current.status !== "WAITING_APPROVAL") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Only a work order waiting for approval can be approved.",
+            requestId: auth.context.requestId,
+          },
+          { status: 409 }
+        );
+      }
+      const feasibilityConfirmed = body.feasibilityConfirmed === true;
+      if (
+        !canApproveTier(
+          auth.context.actor.role,
+          current.approvalTier,
+          feasibilityConfirmed
+        )
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              current.approvalTier === "T3" && !feasibilityConfirmed
+                ? "T3 requires owner approval and a confirmed three-department feasibility study."
+                : `Role ${auth.context.actor.role} cannot approve ${current.approvalTier}.`,
+            requestId: auth.context.requestId,
+          },
+          { status: 403 }
+        );
+      }
+      const priorApprovals = Array.isArray(current.context.approvals)
+        ? current.context.approvals
+        : [];
       const approved = await saveWorkOrder({
         ...current,
         approvalStatus: "APPROVED",
         status: "READY",
         error: null,
+        context: {
+          ...current.context,
+          approvals: [
+            ...priorApprovals,
+            {
+              actorId: auth.context.actor.id,
+              actorName: auth.context.actor.name,
+              actorRole: auth.context.actor.role,
+              tier: current.approvalTier,
+              feasibilityConfirmed,
+              approvedAt: new Date().toISOString(),
+              requestId: auth.context.requestId,
+            },
+          ],
+        },
       });
       const workOrder = await executeWorkOrder(
         approved,
@@ -78,6 +144,7 @@ export async function POST(req: NextRequest) {
         requestId: auth.context.requestId,
       });
     }
+
     if (action === "RETRY" || action === "RESUME") {
       const workOrder = await executeWorkOrder(
         current,
@@ -90,6 +157,7 @@ export async function POST(req: NextRequest) {
         requestId: auth.context.requestId,
       });
     }
+
     if (action === "CANCEL") {
       if (current.status === "DONE") {
         return NextResponse.json(
@@ -114,6 +182,7 @@ export async function POST(req: NextRequest) {
         requestId: auth.context.requestId,
       });
     }
+
     return NextResponse.json(
       {
         ok: false,
