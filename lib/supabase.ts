@@ -187,22 +187,28 @@ export async function probeSupabaseConnection(
 
   const pending = (async (): Promise<SupabaseConnectionReadiness> => {
     try {
-      const client = getSupabaseAdmin();
-      if (!client) {
+      const response = await fetch(
+        `${url.replace(/\/$/, "")}/rest/v1/company_approvals?select=id&limit=1`,
+        {
+          method: "HEAD",
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            Prefer: "count=exact",
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(8_000),
+        }
+      );
+      if (!response.ok) {
+        const status = response.status === 401 || response.status === 403
+          ? "AUTH_REJECTED"
+          : response.status === 404
+            ? "SCHEMA_UNAVAILABLE"
+            : "UNAVAILABLE";
         return {
           ready: false,
-          status: "NOT_CONFIGURED",
-          keySource: environment.keySource,
-          configurationIssue: environment.configurationIssue,
-        };
-      }
-      const { error } = await client
-        .from("company_approvals")
-        .select("id", { count: "exact", head: true });
-      if (error) {
-        return {
-          ready: false,
-          status: connectionFailureStatus(error),
+          status,
           keySource: environment.keySource,
           configurationIssue: environment.configurationIssue,
         };
