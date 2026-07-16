@@ -1,3 +1,105 @@
-# Employee Runtime V1
+# Orvanta Employee Runtime V1
 
-This document is a temporary bootstrap marker for the autonomous employee runtime implementation.
+آخر تحديث: 2026-07-17
+
+## الهدف
+
+تحويل وكلاء Orvanta من أقسام تنتج تقارير إلى موظفين رقميين يعملون بدورة تشغيل موحدة:
+
+```txt
+Trigger → Work Order → Policy Check → Execute → Verify → Receipt → KPI → Exception
+```
+
+الموظف الذاتي لا يملك صلاحية مفتوحة. ينفذ الأعمال الروتينية داخل اختصاصه وحدوده، ويصعّد الاعتماد أو الاستثناء إلى الجهة الصحيحة.
+
+## ما تم تطبيقه
+
+- سجل كفاءات وصلاحيات وKPIs وبديل وظيفي لكل موظف في `lib/employee-runtime/registry.ts`.
+- أوامر عمل مرقمة بالشكل `PRJ-YYYY-XXXXXX/NNN`.
+- حالات تنفيذ قابلة للاستئناف وإعادة المحاولة.
+- فحص صلاحيات ومخاطر وطبقة غياب المالك قبل كل خطوة.
+- إيصال تنفيذ يتضمن hash للمدخلات والمرجع والتحقق والمطابقة.
+- منع تكرار أمر العمل والطلب والفاتورة وحجز المخزون وCRM وKPI.
+- لوحة تشغيل في `/employee-runtime`.
+- دورة `Order-to-Cash` كاملة كبداية عملية.
+
+## دورة البيع
+
+```txt
+طلب مدفوع
+  → سارة: التحقق من الطلب والدفع
+  → سارة: تسجيل البيع
+  → أمين: إنشاء الفاتورة والقيد المحاسبي
+  → خالد: حجز المخزون
+  → فهد: إنشاء أمر التجهيز
+  → سارة: تحديث CRM
+  → عبدالرحمن: احتساب هامش الربح
+  → حارس: تسجيل KPI ودليل الإتمام
+```
+
+إذا انخفض هامش الربح عن الحد المحدد، تتحول المعاملة إلى `ESCALATED` ولا يتم إخفاء الاستثناء.
+
+## واجهات API
+
+```http
+POST /api/employee-runtime/order-to-cash
+GET /api/employee-runtime/work-orders?limit=50
+POST /api/employee-runtime/work-orders
+```
+
+إجراءات التحكم: `APPROVE`, `RETRY`, `RESUME`, `CANCEL`.
+
+مثال البيع:
+
+```json
+{
+  "orderId": "ORDER-1001",
+  "customerName": "أحمد",
+  "customerEmail": "customer@example.com",
+  "productName": "منتج تجريبي",
+  "sku": "SKU-001",
+  "quantity": 1,
+  "amountSAR": 150,
+  "taxSAR": 19.57,
+  "unitCostSAR": 60,
+  "minimumMarginPercent": 20,
+  "paymentConfirmed": true,
+  "paymentReference": "PAY-1001",
+  "channel": "shopify"
+}
+```
+
+## وضع التشغيل
+
+```env
+EMPLOYEE_RUNTIME_MODE=live
+```
+
+- `live`: تنفيذ فعلي في Supabase والدفتر والمخزون وCRM.
+- `simulation`: تنفيذ الدورة وتوليد إيصالات دون أثر تشغيلي.
+- عند غياب Supabase يعود النظام تلقائيًا إلى `simulation` حتى لا يدعي تنفيذًا غير حقيقي.
+
+## قاعدة البيانات
+
+الهجرة موجودة في:
+
+```txt
+database/employee-runtime-v1.sql
+```
+
+قبل تنفيذ بيع فعلي، يجب تسجيل SKU ورصيده. النظام لا ينشئ مخزونًا وهميًا؛ عدم وجود SKU أو عدم كفاية الكمية يؤدي إلى فشل آمن وتصعيد.
+
+## الحوكمة
+
+- القدرة مطلوبة قبل استدعاء الأداة.
+- الالتزام المالي الحقيقي يخضع لـ T0–T3.
+- المخاطر العالية لا تنفذ ذاتيًا.
+- غياب المالك يمر عبر سياسة الاستمرارية الحالية.
+- لا توجد حالة `DONE` دون تحقق وإيصال.
+- جداول Employee Runtime مفعّل عليها RLS، والكتابة تتم من الخادم.
+
+## المرحلة التالية
+
+1. `Purchase-to-Pay`: طلب شراء → موردون → اعتماد → أمر شراء → استلام → فاتورة → سداد.
+2. `Idea-to-Execution`: فكرة → جدوى → اعتماد → مشروع → مهام → KPIs → توسعة/تصحيح/إيقاف.
+3. موصلات Shopify والبوابات البنكية والإعلانات والأنظمة الحكومية، كل موصل بأداة وإيصال وتسوية.
