@@ -99,10 +99,18 @@ function normalizeDigits(value: string) {
 
 export function extractRequestedBudget(request: string) {
   const normalized = normalizeDigits(request).replace(/٬/g, ",");
-  const matches = normalized.match(/\d[\d,.]*/g) || [];
-  const numbers = matches
-    .map((item) => Number(item.replace(/,/g, "")))
-    .filter((number) => Number.isFinite(number));
+  const moneyContext = /ميزاني(?:ة|ه)|تكلف(?:ة|ه)|سقف\s*(?:الصرف|الإنفاق|الانفاق)?|ريال|ر\.?\s?س|دولار|budget|cost|spend|sar|usd/i;
+  const matches = [...normalized.matchAll(/\d[\d,.]*(?:\s*(?:ألف|الف|آلاف|الاف|مليون|k|m))?/gi)];
+  const numbers = matches.flatMap((match) => {
+    const index = match.index || 0;
+    const context = normalized.slice(Math.max(0, index - 28), index + match[0].length + 28);
+    if (!moneyContext.test(context)) return [];
+    const numberText = match[0].match(/\d[\d,.]*/)?.[0] || "";
+    const base = Number(numberText.replace(/,/g, ""));
+    if (!Number.isFinite(base)) return [];
+    const multiplier = /مليون|\bm\b/i.test(match[0]) ? 1_000_000 : /ألف|الف|آلاف|الاف|\bk\b/i.test(match[0]) ? 1_000 : 1;
+    return [base * multiplier];
+  });
 
   if (numbers.length === 0) return 0;
   return Math.max(...numbers);

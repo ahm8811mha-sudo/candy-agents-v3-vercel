@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ActionableMetricGrid, { type ActionableMetric } from "./ActionableMetricGrid";
+import { InitiativeExecutionPanel } from "./InitiativeExecutionPanel";
+import type { InitiativePlan } from "@/lib/company/initiativePlanning";
 
 type OfficeData = {
   operatingBrief?: {
@@ -35,10 +37,10 @@ type OfficeData = {
     strategy?: { focus?: string; investment_thesis?: string };
   };
   dashboard?: {
-    projects?: Array<{ id: string; name: string; status?: string; risk_level?: string; created_at?: string }>;
+    projects?: Array<{ id: string; name: string; request?: string; status?: string; approval_status?: string; risk_level?: string; financial_snapshot?: Record<string, unknown>; created_at?: string }>;
     tasks?: Array<{ id: string; title?: string; content?: string; status: string; owner_role?: string; priority?: string }>;
     approvals?: Array<{ id: string; entity_type: string; status: string; notes?: string }>;
-    actions?: Array<{ id: string; title: string; status: string; approval_status?: string; provider?: string }>;
+    actions?: Array<{ id: string; project_id?: string | null; title: string; status: string; approval_status?: string; provider?: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null }>;
     alerts?: Array<{ id: string; severity: string; title: string; message: string }>;
     kpis?: Array<{ id: string; name: string; target: number; current?: number; unit: string; status: string }>;
   };
@@ -75,6 +77,11 @@ function apiErrorMessage(json: Record<string, unknown>, fallback: string) {
   return typeof json.error === "string" ? json.error : fallback;
 }
 
+function initiativePlanFromProject(project: NonNullable<NonNullable<OfficeData["dashboard"]>["projects"]>[number] | undefined) {
+  const plan = project?.financial_snapshot?.initiativePlan;
+  return plan && typeof plan === "object" ? plan as InitiativePlan : null;
+}
+
 export default function ExecutiveOfficeConsole() {
   const [data, setData] = useState<OfficeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +89,7 @@ export default function ExecutiveOfficeConsole() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [databaseIssue, setDatabaseIssue] = useState<DatabaseIssue | null>(null);
+  const [selectedInitiativeId, setSelectedInitiativeId] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -126,8 +134,15 @@ export default function ExecutiveOfficeConsole() {
       }
       if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تنفيذ أمر مكتب CEO."));
       setMessage(successText(action));
+      if (action === "execute") {
+        setSelectedInitiativeId("");
+        const destination = new URL(window.location.href);
+        destination.searchParams.delete("project");
+        destination.hash = "initiative-delivery";
+        window.history.replaceState(null, "", destination);
+      }
       await load();
-      return true;
+      return json;
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر مكتب CEO.");
       return false;
@@ -205,7 +220,15 @@ export default function ExecutiveOfficeConsole() {
     return () => controller.abort();
   }, [load]);
 
+  useEffect(() => {
+    const requestedProject = new URLSearchParams(window.location.search).get("project");
+    if (requestedProject) setSelectedInitiativeId(requestedProject);
+  }, []);
+
   const brief = data?.operatingBrief;
+  const initiativeProjects = data?.dashboard?.projects?.filter((project) => initiativePlanFromProject(project)) || [];
+  const initiativeProject = initiativeProjects.find((project) => project.id === selectedInitiativeId) || initiativeProjects[0];
+  const initiativePlan = initiativePlanFromProject(initiativeProject);
   const databaseReady = Boolean(data && !databaseIssue);
   const databaseBadge = databaseReady
     ? "Command ready"
@@ -306,21 +329,45 @@ export default function ExecutiveOfficeConsole() {
         <p>{data?.enterprise?.strategy?.investment_thesis}</p>
       </section>
 
+      {initiativeProject && initiativePlan && (
+        <>
+          {initiativeProjects.length > 1 && (
+            <section className="ops-card initiative-picker" aria-labelledby="initiative-picker-title">
+              <div><span className="eyebrow">سجل المبادرات</span><h2 id="initiative-picker-title">افتح خطة أو نتيجة محددة</h2><p>إنشاء طلب جديد لا يخفي مسار الطلبات السابقة أو نتائجها.</p></div>
+              <label>المبادرة المعروضة
+                <select className="input" value={initiativeProject.id} onChange={(event) => {
+                  const projectId = event.target.value;
+                  setSelectedInitiativeId(projectId);
+                  const destination = new URL(window.location.href);
+                  destination.searchParams.set("project", projectId);
+                  destination.hash = "initiative-delivery";
+                  window.history.replaceState(null, "", destination);
+                }}>
+                  {initiativeProjects.map((project) => <option key={project.id} value={project.id}>{project.name} - {project.status || "ACTIVE"}</option>)}
+                </select>
+              </label>
+            </section>
+          )}
+          <InitiativeExecutionPanel plan={initiativePlan} project={initiativeProject} actions={data.dashboard?.actions || []} />
+        </>
+      )}
+
       <section className="ops-workbench">
         <form className="ops-card" onSubmit={submitExecution}>
-          <h2>تشغيل طلب شركة كامل</h2>
+          <h2>اطلب دراسة ثم تنفيذًا كاملًا</h2>
+          <p className="form-helper">يستدعي المكتب وكلاء التسويق والمالية والتشغيل والمشتريات والمخاطر، ويجمع خطة واحدة ثم يبدأ التنفيذ بعد اعتمادك.</p>
           <label>
             أمر تنفيذي
             <textarea
               className="textarea"
               name="request"
-              placeholder="مثال: أطلق تجربة بيع منتج هدايا بميزانية 10,000 ريال مع خطة تسويق وتشغيل"
+              defaultValue="ادرس فكرة عرض منتجات المصانع عبر Amazon والحصول على عمولة من المبيعات، وقارن نماذج التنفيذ ثم جهّز تجربة دون شراء مخزون."
               required
             />
           </label>
           <button className="primary-btn" disabled={Boolean(working)}>
             {working === "execute" ? <Loader2 className="spin" size={18} /> : <BriefcaseBusiness size={18} />}
-            تحويل الأمر إلى مشروع ومهام واعتمادات
+            استدعاء الوكلاء وبناء خطة الاعتماد
           </button>
         </form>
 
@@ -415,7 +462,7 @@ export default function ExecutiveOfficeConsole() {
       </section>
 
       <section className="ops-board">
-        <Panel title="متابعات مكتب CEO">
+        <Panel title="متابعات مكتب CEO" id="ceo-follow-ups">
           {(data?.enterprise?.ceoItems || []).slice(0, 9).map((item) => (
             <ActionRow
               key={item.id}
@@ -486,7 +533,7 @@ export default function ExecutiveOfficeConsole() {
 
 function successText(action: string) {
   if (action === "radar") return "تم تشغيل رادار الفرص وربطه بمكتب CEO.";
-  if (action === "execute") return "تم تحويل الأمر التنفيذي إلى مشروع ومهام واعتمادات.";
+  if (action === "execute") return "اكتملت دراسات الوكلاء وجُمعت الخطة. اعتماد واحد سيبدأ التنفيذ التلقائي ويعيد النتائج هنا.";
   if (action === "create-item") return "تمت إضافة التوجيه لمكتب CEO.";
   if (action === "update-item") return "تم تحديث بند المتابعة.";
   if (action === "calendar-event") return "تمت إضافة الموعد إلى تقويم CEO.";
@@ -517,6 +564,8 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         id: c.id,
         title: c.title,
         subtitle: `${c.item_type || "بند"} · ${c.status}`,
+        href: "/departments/executive#ceo-follow-ups",
+        openLabel: "فتح المتابعات",
         context: { requestedBy: "مكتب الرئيس التنفيذي", relatedTo: c.item_type || "بند متابعة", origin: c.notes },
       })),
     },
@@ -530,6 +579,8 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         id: a.id,
         title: a.entity_type,
         subtitle: a.status,
+        href: "/inbox",
+        openLabel: "فتح الاعتماد الحقيقي",
         context: { requestedBy: "النظام / القسم المعني", relatedTo: a.entity_type, origin: a.notes || "طلب اعتماد بانتظار قرار الرئيس التنفيذي" },
       })),
     },
@@ -543,6 +594,8 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         id: a.id,
         title: a.title,
         subtitle: a.severity,
+        href: "/status",
+        openLabel: "فتح حالة النظام",
         context: { requestedBy: "محرّك التنبيهات", relatedTo: "إدارة المخاطر", origin: a.message },
       })),
     },
@@ -556,6 +609,8 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         id: p.id,
         title: p.name,
         subtitle: p.status || "ACTIVE",
+        href: `/operations?project=${encodeURIComponent(p.id)}#approved-projects`,
+        openLabel: "فتح ملف المشروع",
         context: { requestedBy: "إدارة المشاريع", relatedTo: p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
       })),
     },
@@ -569,15 +624,17 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         id: t.id,
         title: t.title || t.content || "مهمة",
         subtitle: t.status,
+        href: "/operations#approved-projects",
+        openLabel: "فتح مهام التنفيذ",
         context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
       })),
     },
   ];
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return (
-    <section className="ops-card">
+    <section className="ops-card" id={id}>
       <h2>{title}</h2>
       <div className="statement-list">{children}</div>
     </section>

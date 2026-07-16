@@ -47,4 +47,17 @@ describe("unified execution architecture", () => {
     expect(route).toContain("decideCompanyExecutionApprovalCritical");
     expect(governed).toContain('supabase.rpc("orvanta_decide_execution_bundle"');
   });
+
+  it("starts specialist execution after approval and returns it to a project workfile", () => {
+    const decisionRoute = source("app/api/approvals/decisions/route.ts");
+    const actionRoute = source("app/api/company/actions/route.ts");
+    const actionPanel = source("components/ActionQueuePanel.tsx");
+
+    expect(decisionRoute).toContain("executeProjectInternalActions");
+    expect(actionRoute).toContain('.from("projects")');
+    expect(actionRoute).toContain('.from("tasks")');
+    expect(actionRoute).toContain('.eq("tenant_id", auth.context.tenantId)');
+    expect(actionPanel).toContain('id="approved-projects"');
+    expect(actionPanel).toContain("project-agent-results");
+  });
 });

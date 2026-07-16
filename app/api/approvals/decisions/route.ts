@@ -20,8 +20,10 @@ import { canSignOff } from "@/lib/company/access";
 import { approvalTierForDecision } from "@/lib/company/governance";
 import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
+import { executeProjectInternalActions } from "@/lib/company/internalAgentExecutor";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** GET: the actionable decision queue (trades / budget / CEO items). */
 export async function GET(req: NextRequest) {
@@ -73,6 +75,21 @@ export async function POST(req: NextRequest) {
       });
       result = atomic.approval;
       execution = atomic.execution;
+      if (decision === "APPROVED") {
+        const projectId = String(target.metadata?.entityId || atomic.execution.entityId || "");
+        try {
+          const delivery = await executeProjectInternalActions(projectId, decidedBy, user?.tenantId);
+          execution = { ...atomic.execution, delivery };
+        } catch (executionError) {
+          execution = {
+            ...atomic.execution,
+            delivery: {
+              status: "EXECUTION_ATTENTION",
+              error: executionError instanceof Error ? executionError.message : "تعذر تشغيل الوكلاء بعد الاعتماد.",
+            },
+          };
+        }
+      }
     } else {
       result = await decideApprovalCritical(id, decision, decidedBy, note);
       if (!result) {

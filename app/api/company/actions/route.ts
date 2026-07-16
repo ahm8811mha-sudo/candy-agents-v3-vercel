@@ -4,6 +4,7 @@ import { enforceCompanyPolicy } from "@/lib/company-os/policy";
 import { getReconciliationForAction } from "@/lib/company-os/reconciliation";
 import { listCompanyActions, updateCompanyActionStatus, type CompanyActionStatus } from "@/lib/company/actionQueue";
 import { hydrateCompany } from "@/lib/company/hydrate";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,52 @@ export async function GET(req: NextRequest) {
   try {
     await hydrateCompany();
     const limit = Number(req.nextUrl.searchParams.get("limit") || 50);
-    const actions = await listCompanyActions(
+    const recentActions = await listCompanyActions(
       Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50,
       auth.context.tenantId
     );
-    return NextResponse.json({ ok: true, actions, requestId: auth.context.requestId });
+    const supabase = getSupabaseAdmin();
+    let projects: unknown[] = [];
+    let tasks: unknown[] = [];
+    let actions = recentActions;
+
+    if (supabase) {
+      const projectsResult = await supabase
+        .from("projects")
+        .select("id,name,request,status,budget,approved_budget,health_score,risk_level,approval_status,strategic_direction,financial_snapshot,created_at")
+        .eq("tenant_id", auth.context.tenantId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (projectsResult.error) throw projectsResult.error;
+      projects = projectsResult.data || [];
+      const projectIds = (projectsResult.data || []).map((project) => String(project.id));
+
+      if (projectIds.length > 0) {
+        const [tasksResult, linkedActionsResult] = await Promise.all([
+          supabase
+            .from("tasks")
+            .select("id,project_id,title,description,status,priority,progress_percent,owner_role,due_date,created_at")
+            .eq("tenant_id", auth.context.tenantId)
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("business_actions")
+            .select("*")
+            .eq("tenant_id", auth.context.tenantId)
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false })
+            .limit(500),
+        ]);
+        if (tasksResult.error) throw tasksResult.error;
+        if (linkedActionsResult.error) throw linkedActionsResult.error;
+        tasks = tasksResult.data || [];
+        const byId = new Map(recentActions.map((action) => [action.id, action]));
+        for (const action of linkedActionsResult.data || []) byId.set(String(action.id), action);
+        actions = [...byId.values()];
+      }
+    }
+
+    return NextResponse.json({ ok: true, actions, projects, tasks, requestId: auth.context.requestId });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Failed to list company actions", requestId: auth.context.requestId },

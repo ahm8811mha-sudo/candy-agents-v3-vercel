@@ -13,6 +13,7 @@ import { getSupabaseEnvironmentReadiness, probeSupabaseConnection } from "@/lib/
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function unavailableDatabaseResponse() {
   const readiness = getSupabaseEnvironmentReadiness();

@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "../supabase";
 import { publishOutboxBatch } from "./outboxPublisher";
 import { runWorkflowTick } from "./workflowRuntime";
+import { recoverPendingAgentProjects } from "../company/internalAgentExecutor";
 
 const BLOCKING_OR_TERMINAL_STATUSES = new Set([
   "WAITING_APPROVAL",
@@ -114,6 +115,11 @@ export async function runCoreRuntimeSweep(options: {
   }
 
   const outbox = await publishOutboxBatch({ tenantId: options.tenantId, limit: outboxLimit });
+  const agentExecution = await recoverPendingAgentProjects(options.tenantId, 1).catch((error) => ({
+    selected: 0,
+    results: [],
+    error: error instanceof Error ? error.message : "Agent recovery failed",
+  }));
   return {
     workflow: {
       cycles: ticks.length,
@@ -121,5 +127,6 @@ export async function runCoreRuntimeSweep(options: {
       ticks,
     },
     outbox,
+    agentExecution,
   };
 }
