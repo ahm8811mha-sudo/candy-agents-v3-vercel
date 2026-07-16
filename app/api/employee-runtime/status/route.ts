@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { EMPLOYEE_PROFILES } from "@/lib/employee-runtime/registry";
 import { resolveEmployeeRuntimeMode } from "@/lib/employee-runtime/runtime";
+import { EMPLOYEE_SOPS } from "@/lib/employee-runtime/sops";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -41,13 +42,26 @@ export async function GET(req: NextRequest) {
     }
     const mode = resolveEmployeeRuntimeMode();
     const databaseReady = requiredTables.every((table) => checks[table]);
+    const referencedSops = new Set(
+      EMPLOYEE_PROFILES.flatMap((employee) => employee.sopIds)
+    );
+    const availableSops = new Set(EMPLOYEE_SOPS.map((sop) => sop.id));
+    const missingSops = [...referencedSops].filter(
+      (sopId) => !availableSops.has(sopId)
+    );
+
     return NextResponse.json({
       ok: true,
-      ready: databaseReady,
+      ready: databaseReady && missingSops.length === 0,
       mode,
       liveSideEffectsEnabled: mode === "LIVE",
       databaseReady,
       tables: checks,
+      sopRegistry: {
+        total: EMPLOYEE_SOPS.length,
+        referenced: referencedSops.size,
+        missing: missingSops,
+      },
       employees: EMPLOYEE_PROFILES.map((employee) => ({
         id: employee.id,
         name: employee.name,
@@ -56,6 +70,7 @@ export async function GET(req: NextRequest) {
         backupEmployeeId: employee.backupEmployeeId || null,
         capabilityCount: employee.capabilities.length,
         kpiCount: employee.kpis.length,
+        sopCount: employee.sopIds.length,
       })),
       workflows: [
         "ORDER_TO_CASH",
