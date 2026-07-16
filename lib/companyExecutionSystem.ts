@@ -8,8 +8,8 @@ import { effectiveTier } from "./company/governance";
 import { createExecutionBundle } from "./company/executionRepository";
 import { buildInitiativeBlueprint, buildInitiativePlan, initiativePlanAsText, type InitiativeBlueprint, type InitiativePlan } from "./company/initiativePlanning";
 
-type ExecutionProject = { id: string; name: string; status?: string; created_at?: string };
-type ExecutionTask = { id: string; project_id: string; title: string; content: string; status: string; created_at?: string };
+type ExecutionProject = { id: string; project_number?: number | null; project_date?: string | null; name: string; status?: string; created_at?: string };
+type ExecutionTask = { id: string; project_id: string; task_sequence?: number | null; task_number?: string | null; task_date?: string | null; title: string; content: string; status: string; created_at?: string };
 type ExecutionKpi = { id?: string; project_id?: string; name: string; target: number; current?: number; unit: string; status: string };
 type ExecutionApproval = { id: string; entity_type: string; entity_id: string; status: string; notes?: string };
 
@@ -124,9 +124,18 @@ export async function runCompanyExecution(request: string, options: CompanyExecu
 export async function getDashboardData() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return { projects: [], tasks: [], decisions: [], alerts: [], kpis: [], actions: [], approvals: [], memory: [] };
+  const tasksPromise = (async () => {
+    const numbered = await supabase.from("tasks").select("id,project_id,task_sequence,task_number,task_date,title,content,description,status,priority,created_at,due_date,progress_percent,owner_role,kpi_name,kpi_target").order("created_at", { ascending: false }).limit(100);
+    const missingIdentityColumns = numbered.error?.code === "42703"
+      || numbered.error?.code === "PGRST204"
+      || /task_sequence|task_number|task_date/i.test(String(numbered.error?.message || ""));
+    return missingIdentityColumns
+      ? supabase.from("tasks").select("id,project_id,title,content,description,status,priority,created_at,due_date,progress_percent,owner_role,kpi_name,kpi_target").order("created_at", { ascending: false }).limit(100)
+      : numbered;
+  })();
   const [projects, tasks, decisions, alerts, kpis, actions, approvals, memory] = await Promise.all([
     supabase.from("projects").select("*").order("created_at", { ascending: false }).limit(20),
-    supabase.from("tasks").select("id,project_id,title,content,description,status,priority,created_at,due_date,progress_percent,owner_role,kpi_name,kpi_target").order("created_at", { ascending: false }).limit(100),
+    tasksPromise,
     supabase.from("financial_decisions").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_alerts").select("*").order("created_at", { ascending: false }).limit(20),
     supabase.from("business_kpis").select("*").order("created_at", { ascending: false }).limit(20),

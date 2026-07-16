@@ -66,6 +66,9 @@ export async function GET(req: NextRequest) {
         outboxDeadLettered: sweep.outbox.deadLettered,
         agentProjectsSelected: sweep.agentExecution.selected,
         agentProjectsCompleted: sweep.agentExecution.results.length,
+        ownerAbsenceActive: sweep.continuity.active,
+        continuityOverdueTasks: sweep.continuity.overdueTasks,
+        continuityPendingApprovals: sweep.continuity.pendingApprovals,
       },
     });
 

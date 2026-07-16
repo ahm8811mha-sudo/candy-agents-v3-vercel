@@ -15,12 +15,13 @@ import {
   executeGovernedApprovalDecision,
   isCompanyExecutionApproval,
 } from "@/lib/company/governedApprovalExecution";
-import { authenticateRequest } from "@/lib/auth";
+import { authenticateRequest, isAuthEnabled } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { approvalTierForDecision } from "@/lib/company/governance";
 import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { executeProjectInternalActions } from "@/lib/company/internalAgentExecutor";
+import { assertApprovalDecisionAllowedDuringOwnerAbsence } from "@/lib/company/ownerAbsence";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -61,6 +62,15 @@ export async function POST(req: NextRequest) {
     const note = body.note ? String(body.note) : undefined;
     let result: ApprovalItem | null = null;
     let execution: unknown = null;
+
+    if (target) {
+      await assertApprovalDecisionAllowedDuringOwnerAbsence({
+        tenantId: user?.tenantId,
+        approval: target,
+        actorRole: user?.role || (!isAuthEnabled() ? "OWNER" : null),
+        decision,
+      });
+    }
 
     if (target && isCompanyExecutionApproval(target)) {
       // The canonical execution path commits the approval and every dependent
@@ -135,9 +145,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
   } catch (error) {
+    const typed = error as Error & { code?: string; decision?: unknown };
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Approval action failed" },
-      { status: 500 }
+      { ok: false, code: typed.code, policy: typed.decision, error: typed.message || "Approval action failed" },
+      { status: typed.code === "OWNER_ABSENCE_ESCALATION" ? 409 : 500 }
     );
   }
 }

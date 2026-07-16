@@ -2,6 +2,10 @@ import { getSupabaseAdmin } from "../supabase";
 import { publishOutboxBatch } from "./outboxPublisher";
 import { runWorkflowTick } from "./workflowRuntime";
 import { recoverPendingAgentProjects } from "../company/internalAgentExecutor";
+import {
+  getOwnerAbsencePolicy,
+  recordOwnerAbsenceSweep,
+} from "../company/ownerAbsence";
 
 const BLOCKING_OR_TERMINAL_STATUSES = new Set([
   "WAITING_APPROVAL",
@@ -115,11 +119,19 @@ export async function runCoreRuntimeSweep(options: {
   }
 
   const outbox = await publishOutboxBatch({ tenantId: options.tenantId, limit: outboxLimit });
-  const agentExecution = await recoverPendingAgentProjects(options.tenantId, 1).catch((error) => ({
+  const ownerAbsencePolicy = await getOwnerAbsencePolicy(options.tenantId);
+  const agentProjectLimit = ownerAbsencePolicy.effectiveStatus === "ACTIVE" ? 3 : 1;
+  const agentExecution = await recoverPendingAgentProjects(options.tenantId, agentProjectLimit).catch((error) => ({
     selected: 0,
     results: [],
     error: error instanceof Error ? error.message : "Agent recovery failed",
   }));
+  const continuity = await recordOwnerAbsenceSweep({
+    tenantId: options.tenantId,
+    agentProjectsSelected: agentExecution.selected,
+    agentProjectsCompleted: agentExecution.results.length,
+    failedAgentActions: agentExecution.results.reduce((sum, result) => sum + result.failed, 0),
+  });
   return {
     workflow: {
       cycles: ticks.length,
@@ -128,5 +140,6 @@ export async function runCoreRuntimeSweep(options: {
     },
     outbox,
     agentExecution,
+    continuity,
   };
 }

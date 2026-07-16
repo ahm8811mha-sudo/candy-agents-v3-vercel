@@ -7,6 +7,8 @@ import Link from "next/link";
 
 type Project = {
   id: string;
+  project_number?: number | null;
+  project_date?: string | null;
   name: string;
   status?: string;
   created_at?: string;
@@ -14,6 +16,8 @@ type Project = {
 
 type Task = {
   id: string;
+  task_number?: string | null;
+  task_date?: string | null;
   title?: string;
   content?: string;
   description?: string;
@@ -75,6 +79,8 @@ type DashboardData = {
   }>;
   actions: Array<{
     id: string;
+    action_number?: string | null;
+    action_date?: string | null;
     title: string;
     description?: string;
     status: string;
@@ -258,7 +264,11 @@ export default function Dashboard() {
           {lastResult?.project && (
             <div className="apple-result">
               <BriefcaseBusiness size={18} />
-              <span>تم إنشاء مشروع: {lastResult.project.name}</span>
+              <span>
+                تم إنشاء {lastResult.project.project_number ? `المشروع #${lastResult.project.project_number}: ` : "مشروع: "}
+                {lastResult.project.name}
+                {lastResult.project.project_date ? ` · ${formatDate(lastResult.project.project_date)}` : ""}
+              </span>
             </div>
           )}
 
@@ -292,8 +302,8 @@ export default function Dashboard() {
             {data.actions.map((action) => (
               <Item
                 key={action.id}
-                title={action.title}
-                text={action.description || ""}
+                title={`${action.action_number ? `#${action.action_number} · ` : ""}${action.title}`}
+                text={`${action.action_date ? `${formatDate(action.action_date)} · ` : ""}${action.description || ""}`}
                 meta={`${action.status} · ${action.provider || action.execution_mode}`}
               />
             ))}
@@ -302,7 +312,12 @@ export default function Dashboard() {
           <Section title="Projects" count={data.projects.length}>
             {data.projects.length === 0 && <EmptyRow text="لا توجد مشاريع محفوظة بعد." />}
             {data.projects.map((project) => (
-              <Item key={project.id} title={project.name} meta={project.status || "ACTIVE"} />
+              <Item
+                key={project.id}
+                title={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}`}
+                text={formatDate(project.project_date || project.created_at)}
+                meta={project.status || "ACTIVE"}
+              />
             ))}
           </Section>
 
@@ -311,8 +326,8 @@ export default function Dashboard() {
             {data.tasks.map((task) => (
               <Item
                 key={task.id}
-                title={task.title || "مهمة تنفيذية"}
-                text={shortText(task.content || task.description || "")}
+                title={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || "مهمة تنفيذية"}`}
+                text={`${task.task_date ? `${formatDate(task.task_date)} · ` : ""}${shortText(task.content || task.description || "")}`}
                 meta={task.status || "TODO"}
               />
             ))}

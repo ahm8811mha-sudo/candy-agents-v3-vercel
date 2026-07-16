@@ -2,6 +2,10 @@ import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
 import { isMultiTenantEnabled, getTenantId } from "../tenant";
 import { recordAudit } from "./audit";
+import {
+  assertActionAllowedDuringOwnerAbsence,
+  assertCompletionEvidenceDuringOwnerAbsence,
+} from "./ownerAbsence";
 
 export type CompanyActionStatus =
   | "QUEUED"
@@ -17,6 +21,9 @@ export type CompanyAction = {
   id: string;
   tenant_id?: string | null;
   project_id?: string | null;
+  action_sequence?: number | null;
+  action_number?: string | null;
+  action_date?: string | null;
   workflow_instance_id?: string | null;
   action_type: string;
   title: string;
@@ -122,6 +129,11 @@ export async function claimCompanyActionForExecution(id: string, actor = "system
     throw new Error("Action approval is required before external execution.");
   }
 
+  // This is a server-side authority gate, not a UI-only control. During an
+  // active owner-absence window, strategic/material/external work is deferred
+  // before any executor can claim the action or create an external side effect.
+  await assertActionAllowedDuringOwnerAbsence(current, tenant);
+
   const now = new Date().toISOString();
   let update = supabase
     .from("business_actions")
@@ -167,6 +179,13 @@ export async function updateCompanyActionStatus(input: ActionTransitionInput): P
   const allowed = validTransitions[currentStatus] || [];
   if (!allowed.includes(input.status) && input.status !== currentStatus) {
     throw new Error(`Invalid action transition: ${currentStatus} → ${input.status}`);
+  }
+
+  if (input.status === "DONE") {
+    await assertCompletionEvidenceDuringOwnerAbsence(
+      tenant,
+      input.result ?? current.result
+    );
   }
 
   const attempts = input.status === "RUNNING"

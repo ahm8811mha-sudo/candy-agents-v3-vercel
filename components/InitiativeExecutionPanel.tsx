@@ -5,8 +5,9 @@ import { AlertTriangle, Bot, CheckCircle2, Clock3, FileCheck2, PlayCircle, Table
 import type { InitiativePlan } from "@/lib/company/initiativePlanning";
 import type { AgentDeliverable } from "@/lib/company/internalAgentExecutor";
 
-type InitiativeProject = { id: string; name: string; status?: string; approval_status?: string; created_at?: string };
-type InitiativeAction = { id: string; project_id?: string | null; title: string; status: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null };
+type InitiativeProject = { id: string; project_number?: number | null; project_date?: string | null; name: string; status?: string; approval_status?: string; created_at?: string };
+type InitiativeTask = { id: string; project_id?: string | null; task_number?: string | null; task_date?: string | null; title?: string; content?: string; status: string; owner_role?: string };
+type InitiativeAction = { id: string; project_id?: string | null; action_number?: string | null; action_date?: string | null; title: string; status: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -34,9 +35,10 @@ function TableBlock({ title, columns, rows }: { title: string; columns: string[]
   );
 }
 
-export function InitiativeExecutionPanel({ plan, project, actions }: { plan: InitiativePlan; project: InitiativeProject; actions: InitiativeAction[] }) {
+export function InitiativeExecutionPanel({ plan, project, tasks, actions }: { plan: InitiativePlan; project: InitiativeProject; tasks: InitiativeTask[]; actions: InitiativeAction[] }) {
   const phase = phaseCopy(project.status || "PENDING_APPROVAL");
   const projectActions = actions.filter((action) => action.project_id === project.id);
+  const projectTasks = tasks.filter((task) => task.project_id === project.id);
   const completed = projectActions.filter((action) => action.status === "DONE").length;
   const failed = projectActions.filter((action) => action.status === "FAILED").length;
   const timeline = plan.specialistPlans.flatMap((specialist) => specialist.steps.map((step) => ({ ...step, roleLabel: specialist.roleLabel }))).sort((a, b) => a.dueDay - b.dueDay);
@@ -47,13 +49,14 @@ export function InitiativeExecutionPanel({ plan, project, actions }: { plan: Ini
         <div>
           <span className="eyebrow"><PlayCircle size={16} /> مسار القرار ثم التنفيذ والنتائج</span>
           <h2 id="initiative-title">{plan.kind === "AMAZON_COMMERCE" ? "خطة تجربة Amazon للمصانع" : plan.title}</h2>
+          <small className="initiative-project-identity">{project.project_number ? `مشروع #${project.project_number}` : "مشروع قيد الترقيم"}{project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA")}` : ""} · {project.name}</small>
           <p>{plan.finalRecommendation}</p>
         </div>
         <div className={`initiative-phase ${phase.tone}`} role="status"><span /><strong>{phase.label}</strong><small>{completed}/{plan.specialistPlans.length} حزم مكتملة{failed ? ` · ${failed} متعثرة` : ""}</small></div>
       </header>
 
       <dl className="initiative-facts">
-        <div><dt>قرار المكتب</dt><dd>بدء مشروط</dd></div><div><dt>مدة التجربة</dt><dd>{plan.durationDays} يومًا</dd></div><div><dt>سقف التجربة</dt><dd>{plan.plannedBudget.toLocaleString("ar-SA")} ريال</dd></div><div><dt>فرق العمل</dt><dd>{plan.specialistPlans.length} وكلاء</dd></div><div><dt>مصدر التخطيط</dt><dd>{plan.planningMode === "AI_ASSISTED" ? "وكلاء AI" : plan.planningMode === "HYBRID" ? "هجين" : "خطة معيارية"}</dd></div>
+        <div><dt>رقم المشروع</dt><dd>{project.project_number ? `#${project.project_number}` : "يُنشأ عند الحفظ"}</dd></div><div><dt>تاريخ المشروع</dt><dd>{project.project_date ? new Date(project.project_date).toLocaleDateString("ar-SA") : "—"}</dd></div><div><dt>قرار المكتب</dt><dd>بدء مشروط</dd></div><div><dt>مدة التجربة</dt><dd>{plan.durationDays} يومًا</dd></div><div><dt>سقف التجربة</dt><dd>{plan.plannedBudget.toLocaleString("ar-SA")} ريال</dd></div><div><dt>فرق العمل</dt><dd>{plan.specialistPlans.length} وكلاء</dd></div><div><dt>مصدر التخطيط</dt><dd>{plan.planningMode === "AI_ASSISTED" ? "وكلاء AI" : plan.planningMode === "HYBRID" ? "هجين" : "خطة معيارية"}</dd></div>
       </dl>
 
       {project.status === "PENDING_APPROVAL" && <div className="initiative-approval-callout"><div><strong>المطلوب منك قرار واحد فقط</strong><p>بعد الاعتماد يبدأ وكلاء التسويق والمالية والتشغيل والمشتريات والمخاطر تلقائيًا وتعود المخرجات هنا.</p></div><Link className="primary-btn" href="/inbox"><CheckCircle2 size={18} /> فتح الاعتماد</Link></div>}
@@ -87,7 +90,10 @@ export function InitiativeExecutionPanel({ plan, project, actions }: { plan: Ini
       </div>
 
       <div className="initiative-section-heading"><div><span>03</span><h3>خطة العمل الزمنية</h3></div><p>تعمل التخصصات بالتوازي ثم يجمع المكتب النتائج.</p></div>
-      <TableBlock title="المهام والتسليمات" columns={["اليوم", "الوكيل", "المهمة", "المخرج", "المؤشر"]} rows={timeline.map((s) => [`${s.startDay}-${s.dueDay}`, s.roleLabel, s.title, s.deliverable, s.kpi])} />
+      <TableBlock title="المهام والتسليمات" columns={["رقم المهمة", "تاريخها", "اليوم", "الوكيل", "المهمة", "المخرج", "المؤشر"]} rows={timeline.map((s) => {
+        const storedTask = projectTasks.find((task) => task.title === s.title);
+        return [storedTask?.task_number ? `#${storedTask.task_number}` : "—", storedTask?.task_date ? new Date(storedTask.task_date).toLocaleDateString("ar-SA") : "—", `${s.startDay}-${s.dueDay}`, s.roleLabel, s.title, s.deliverable, s.kpi];
+      })} />
 
       {plan.productCandidates.length > 0 && <><div className="initiative-section-heading"><div><span>04</span><h3>جدول المنتجات المرشحة</h3></div><p>فرضيات تجربة وليست قرار شراء.</p></div><TableBlock title="قائمة الاختبار الأولية" columns={["الفئة", "العميل", "السعر", "التوريد", "السبب", "الاختبار", "قاعدة الرفض"]} rows={plan.productCandidates.map((p) => [p.category, p.customer, p.priceHypothesis, p.sourcingModel, p.reasonToTest, p.validationTest, p.rejectionRule])} /></>}
 

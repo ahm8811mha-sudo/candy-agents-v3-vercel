@@ -39,6 +39,8 @@ type Props = {
 type DashboardTask = {
   id: string;
   project_id?: string;
+  task_number?: string | null;
+  task_date?: string | null;
   title?: string;
   content?: string;
   description?: string;
@@ -66,6 +68,8 @@ type DashboardKpi = {
 type DashboardAction = {
   id: string;
   project_id?: string;
+  action_number?: string | null;
+  action_date?: string | null;
   action_type?: string;
   title?: string;
   description?: string;
@@ -94,6 +98,8 @@ type DashboardApproval = {
 
 type DashboardProject = {
   id: string;
+  project_number?: number | null;
+  project_date?: string | null;
   name?: string;
   status?: string;
   risk_level?: string;
@@ -628,9 +634,9 @@ function TaskRow({
     <article className="department-row">
       <div>
         <span className={`mini-pill ${status.toLowerCase()}`}>{statusText(status)}</span>
-        <strong>{task.title || task.content || "مهمة تنفيذية"}</strong>
+        <strong>{task.task_number ? `#${task.task_number} · ` : ""}{task.title || task.content || "مهمة تنفيذية"}</strong>
         <p>{task.description || task.content || task.owner_role || "مهمة مرتبطة بخطة الشركة."}</p>
-        <small>{task.owner_role || "AI Employee"} {task.due_date ? `• ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
+        <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} • ` : ""}{task.owner_role || "AI Employee"} {task.due_date ? `• الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
       </div>
       <div className="row-actions">
         {status !== "IN_PROGRESS" && status !== "DONE" && (
@@ -672,9 +678,9 @@ function ActionRow({ action }: { action: DashboardAction }) {
     <article className="department-row">
       <div>
         <span className={`mini-pill ${action.requires_approval ? "pending" : ""}`}>{statusText(action.status)}</span>
-        <strong>{action.title || action.action_type || "إجراء تجاري"}</strong>
+        <strong>{action.action_number ? `#${action.action_number} · ` : ""}{action.title || action.action_type || "إجراء تجاري"}</strong>
         <p>{action.description || "إجراء جاهز للتحويل إلى تكامل خارجي."}</p>
-        <small>{action.provider || "internal"} • {action.execution_mode || "INTERNAL"}</small>
+        <small>{action.action_date ? `${new Date(action.action_date).toLocaleDateString("ar-SA")} • ` : ""}{action.provider || "internal"} • {action.execution_mode || "INTERNAL"}</small>
       </div>
     </article>
   );

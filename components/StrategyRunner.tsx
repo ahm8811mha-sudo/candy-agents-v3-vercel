@@ -59,6 +59,8 @@ type ExecutionResult = {
   tasks: string;
   project: {
     id: string;
+    project_number?: number | null;
+    project_date?: string | null;
     name: string;
     status?: string;
     created_at?: string;
@@ -66,6 +68,8 @@ type ExecutionResult = {
   task: {
     id: string;
     project_id: string;
+    task_number?: string | null;
+    task_date?: string | null;
     title: string;
     content: string;
     status: string;
@@ -280,8 +284,12 @@ export default function StrategyRunner() {
 
                 <article className="report-card featured">
                   <h3>المشروع الذي تم إنشاؤه</h3>
-                  <pre>{`اسم المشروع: ${result.project.name}
+                  <pre>{`رقم المشروع: ${result.project.project_number ? `#${result.project.project_number}` : "غير محفوظ"}
+تاريخ المشروع: ${result.project.project_date ? new Date(result.project.project_date).toLocaleDateString("ar-SA") : "غير محفوظ"}
+اسم المشروع: ${result.project.name}
 الحالة: ${result.project.status || "ACTIVE"}
+رقم المهمة: ${result.task.task_number ? `#${result.task.task_number}` : "غير محفوظ"}
+تاريخ المهمة: ${result.task.task_date ? new Date(result.task.task_date).toLocaleDateString("ar-SA") : "غير محفوظ"}
 المهمة: ${result.task.title}
 حالة المهمة: ${result.task.status}
 مصدر المالية: ${result.financials.source === "ledger" ? "Ledger" : "Demo"}

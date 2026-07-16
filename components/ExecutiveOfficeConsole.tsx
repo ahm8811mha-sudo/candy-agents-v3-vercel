@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import ActionableMetricGrid, { type ActionableMetric } from "./ActionableMetricGrid";
 import { InitiativeExecutionPanel } from "./InitiativeExecutionPanel";
+import OwnerAbsencePanel from "./OwnerAbsencePanel";
 import type { InitiativePlan } from "@/lib/company/initiativePlanning";
 
 type OfficeData = {
@@ -37,10 +38,10 @@ type OfficeData = {
     strategy?: { focus?: string; investment_thesis?: string };
   };
   dashboard?: {
-    projects?: Array<{ id: string; name: string; request?: string; status?: string; approval_status?: string; risk_level?: string; financial_snapshot?: Record<string, unknown>; created_at?: string }>;
-    tasks?: Array<{ id: string; title?: string; content?: string; status: string; owner_role?: string; priority?: string }>;
+    projects?: Array<{ id: string; project_number?: number | null; project_date?: string | null; name: string; request?: string; status?: string; approval_status?: string; risk_level?: string; financial_snapshot?: Record<string, unknown>; created_at?: string }>;
+    tasks?: Array<{ id: string; project_id?: string | null; task_number?: string | null; task_date?: string | null; title?: string; content?: string; status: string; owner_role?: string; priority?: string }>;
     approvals?: Array<{ id: string; entity_type: string; status: string; notes?: string }>;
-    actions?: Array<{ id: string; project_id?: string | null; title: string; status: string; approval_status?: string; provider?: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null }>;
+    actions?: Array<{ id: string; project_id?: string | null; action_number?: string | null; action_date?: string | null; title: string; status: string; approval_status?: string; provider?: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null }>;
     alerts?: Array<{ id: string; severity: string; title: string; message: string }>;
     kpis?: Array<{ id: string; name: string; target: number; current?: number; unit: string; status: string }>;
   };
@@ -329,6 +330,8 @@ export default function ExecutiveOfficeConsole() {
         <p>{data?.enterprise?.strategy?.investment_thesis}</p>
       </section>
 
+      <OwnerAbsencePanel />
+
       {initiativeProject && initiativePlan && (
         <>
           {initiativeProjects.length > 1 && (
@@ -343,12 +346,12 @@ export default function ExecutiveOfficeConsole() {
                   destination.hash = "initiative-delivery";
                   window.history.replaceState(null, "", destination);
                 }}>
-                  {initiativeProjects.map((project) => <option key={project.id} value={project.id}>{project.name} - {project.status || "ACTIVE"}</option>)}
+                  {initiativeProjects.map((project) => <option key={project.id} value={project.id}>{project.project_number ? `#${project.project_number} · ` : ""}{project.name} - {project.status || "ACTIVE"}</option>)}
                 </select>
               </label>
             </section>
           )}
-          <InitiativeExecutionPanel plan={initiativePlan} project={initiativeProject} actions={data.dashboard?.actions || []} />
+          <InitiativeExecutionPanel plan={initiativePlan} project={initiativeProject} tasks={data.dashboard?.tasks || []} actions={data.dashboard?.actions || []} />
         </>
       )}
 
@@ -476,10 +479,10 @@ export default function ExecutiveOfficeConsole() {
         </Panel>
         <Panel title="المشاريع والمهام">
           {(data?.dashboard?.projects || []).slice(0, 4).map((project) => (
-            <Statement key={project.id} label={project.name} value={project.status || "ACTIVE"} />
+            <Statement key={project.id} label={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}${project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA")}` : ""}`} value={project.status || "ACTIVE"} />
           ))}
           {(data?.dashboard?.tasks || []).slice(0, 6).map((task) => (
-            <Statement key={task.id} label={task.title || task.content || "مهمة"} value={task.status} />
+            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA")}` : ""}`} value={task.status} />
           ))}
         </Panel>
         <Panel title="الاعتمادات والمخاطر">
@@ -607,11 +610,11 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       sourceType: "project",
       items: projects.map((p) => ({
         id: p.id,
-        title: p.name,
-        subtitle: p.status || "ACTIVE",
+        title: `${p.project_number ? `#${p.project_number} · ` : ""}${p.name}`,
+        subtitle: `${p.status || "ACTIVE"}${p.project_date ? ` · ${new Date(p.project_date).toLocaleDateString("ar-SA")}` : ""}`,
         href: `/operations?project=${encodeURIComponent(p.id)}#approved-projects`,
         openLabel: "فتح ملف المشروع",
-        context: { requestedBy: "إدارة المشاريع", relatedTo: p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
+        context: { requestedBy: "إدارة المشاريع", relatedTo: p.project_number ? `المشروع #${p.project_number}` : p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
       })),
     },
     {
@@ -622,11 +625,11 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       sourceType: "task",
       items: lateTasks.map((t) => ({
         id: t.id,
-        title: t.title || t.content || "مهمة",
-        subtitle: t.status,
+        title: `${t.task_number ? `#${t.task_number} · ` : ""}${t.title || t.content || "مهمة"}`,
+        subtitle: `${t.status}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA")}` : ""}`,
         href: "/operations#approved-projects",
         openLabel: "فتح مهام التنفيذ",
-        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
+        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: t.task_number ? `المهمة #${t.task_number}` : "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
       })),
     },
   ];
