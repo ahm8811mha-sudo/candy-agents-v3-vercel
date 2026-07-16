@@ -9,25 +9,40 @@ import {
   updateExecutiveItem,
 } from "@/lib/executiveOffice";
 import { getDeploymentContext } from "@/lib/deployment";
-import { getSupabaseEnvironmentReadiness } from "@/lib/supabase";
+import { getSupabaseEnvironmentReadiness, probeSupabaseConnection } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-function unavailableDatabaseResponse() {
+async function unavailableDatabaseResponse() {
   const readiness = getSupabaseEnvironmentReadiness();
-  if (readiness.configured) return null;
+  const connection = readiness.configured ? await probeSupabaseConnection() : null;
+  if (readiness.configured && connection?.ready) return null;
 
   const deployment = getDeploymentContext();
+  const code = connection?.status === "AUTH_REJECTED"
+    ? "SUPABASE_AUTH_REJECTED"
+    : connection?.status === "SCHEMA_UNAVAILABLE"
+      ? "SUPABASE_SCHEMA_UNAVAILABLE"
+      : connection?.status === "UNAVAILABLE"
+        ? "SUPABASE_UNAVAILABLE"
+        : "SUPABASE_NOT_CONFIGURED";
   const error = deployment.isPreview
     ? "هذه نسخة معاينة معزولة ولا تحتوي على اتصال قاعدة البيانات. افتح النسخة الإنتاجية لعرض بيانات المكتب التنفيذي الفعلية."
-    : "قاعدة البيانات غير مهيأة لهذا النشر. راجع متغيرات Supabase في إعدادات البيئة."
+    : connection?.status === "AUTH_REJECTED"
+      ? "رفض Supabase مفتاح الخادم في هذا النشر. استبدل SUPABASE_SECRET_KEY بمفتاح Secret صالح للمشروع المرتبط ثم أعد النشر."
+      : connection?.status === "SCHEMA_UNAVAILABLE"
+        ? "اتصال Supabase صالح لكن مخطط المكتب التنفيذي غير مكتمل. طبّق سلسلة migrations المعتمدة."
+        : connection?.status === "UNAVAILABLE"
+          ? "تعذر الوصول إلى Supabase مؤقتاً. أعد المحاولة وتحقق من حالة الخدمة إن استمر العطل."
+          : "قاعدة البيانات غير مهيأة لهذا النشر. راجع متغيرات Supabase في إعدادات البيئة.";
 
   return NextResponse.json(
     {
       ok: false,
-      code: "SUPABASE_NOT_CONFIGURED",
+      code,
       configured: false,
+      connectionStatus: connection?.status || "NOT_CONFIGURED",
       error,
       deployment,
       missingEnvironmentVariables: readiness.missingEnvironmentVariables,
@@ -45,7 +60,7 @@ function executiveFailure(error: unknown, fallback: string) {
 }
 
 export async function GET() {
-  const unavailable = unavailableDatabaseResponse();
+  const unavailable = await unavailableDatabaseResponse();
   if (unavailable) return unavailable;
 
   try {
@@ -57,7 +72,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const unavailable = unavailableDatabaseResponse();
+  const unavailable = await unavailableDatabaseResponse();
   if (unavailable) return unavailable;
 
   try {

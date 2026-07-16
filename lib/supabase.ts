@@ -1,8 +1,17 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
+import { createHash } from "node:crypto";
 import { withTenant, isMultiTenantEnabled, getTenantId } from "./tenant";
 
-let adminClient: SupabaseClient | null = null;
+let adminClient: { identity: string; client: SupabaseClient } | null = null;
+let connectionProbeCache: {
+  identity: string;
+  expiresAt: number;
+  result?: SupabaseConnectionReadiness;
+  pending?: Promise<SupabaseConnectionReadiness>;
+} | null = null;
+
+const CONNECTION_PROBE_TTL_MS = 30_000;
 
 function supabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
@@ -12,6 +21,10 @@ function supabaseServerKey() {
   // Supabase's current server-key name is SUPABASE_SECRET_KEY. Keep the
   // legacy service-role alias so existing deployments continue to work.
   return process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+}
+
+function configurationIdentity(url: string, key: string) {
+  return createHash("sha256").update(url).update("\0").update(key).digest("hex");
 }
 
 function projectRefFromUrl(value: string | undefined) {
@@ -48,6 +61,24 @@ export type SupabaseEnvironmentReadiness = {
   configurationIssue: "PROJECT_MISMATCH" | null;
   missingEnvironmentVariables: string[];
 };
+
+export type SupabaseConnectionStatus =
+  | "READY"
+  | "NOT_CONFIGURED"
+  | "PROJECT_MISMATCH"
+  | "AUTH_REJECTED"
+  | "SCHEMA_UNAVAILABLE"
+  | "UNAVAILABLE";
+
+type SupabaseConnectionMetadata = {
+  keySource: SupabaseEnvironmentReadiness["keySource"];
+  configurationIssue: SupabaseEnvironmentReadiness["configurationIssue"];
+};
+
+export type SupabaseConnectionReadiness = SupabaseConnectionMetadata & (
+  | { ready: true; status: "READY" }
+  | { ready: false; status: Exclude<SupabaseConnectionStatus, "READY"> }
+);
 
 /** Safe configuration diagnostics. Never returns a URL or secret value. */
 export function getSupabaseEnvironmentReadiness(): SupabaseEnvironmentReadiness {
@@ -96,12 +127,106 @@ export function getSupabaseAdmin() {
   const url = supabaseUrl();
   const key = supabaseServerKey();
   if (!url || !key || !getSupabaseEnvironmentReadiness().configured) return null;
-  if (!adminClient) {
-    adminClient = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
+  const identity = configurationIdentity(url, key);
+  if (!adminClient || adminClient.identity !== identity) {
+    adminClient = {
+      identity,
+      client: createClient(url, key, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      }),
+    };
   }
-  return adminClient;
+  return adminClient.client;
+}
+
+function connectionFailureStatus(error: unknown): Exclude<SupabaseConnectionStatus, "READY"> {
+  const value = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const code = String(value.code || value.status || "").toUpperCase();
+  const message = String(value.message || error || "").toLowerCase();
+
+  if (
+    code === "401" ||
+    code === "PGRST301" ||
+    /invalid api key|invalid jwt|jwt expired|unauthorized|signature verification|no api key/.test(message)
+  ) {
+    return "AUTH_REJECTED";
+  }
+  if (code === "42P01" || code === "PGRST205" || /relation .* does not exist|table .* not found/.test(message)) {
+    return "SCHEMA_UNAVAILABLE";
+  }
+  return "UNAVAILABLE";
+}
+
+/**
+ * Verifies that the configured server key can actually reach the authoritative
+ * database. Opaque sb_secret keys cannot be matched to a project offline, so a
+ * single read-only request is required. The short cache also acts as a circuit
+ * breaker when a deployment has a stale or revoked key.
+ */
+export async function probeSupabaseConnection(
+  options: { force?: boolean } = {}
+): Promise<SupabaseConnectionReadiness> {
+  const environment = getSupabaseEnvironmentReadiness();
+  if (!environment.configured) {
+    return {
+      ready: false,
+      status: environment.configurationIssue === "PROJECT_MISMATCH" ? "PROJECT_MISMATCH" : "NOT_CONFIGURED",
+      keySource: environment.keySource,
+      configurationIssue: environment.configurationIssue,
+    };
+  }
+
+  const url = supabaseUrl()!;
+  const key = supabaseServerKey()!;
+  const identity = configurationIdentity(url, key);
+  const now = Date.now();
+  if (!options.force && connectionProbeCache?.identity === identity) {
+    if (connectionProbeCache.pending) return connectionProbeCache.pending;
+    if (connectionProbeCache.result && connectionProbeCache.expiresAt > now) return connectionProbeCache.result;
+  }
+
+  const pending = (async (): Promise<SupabaseConnectionReadiness> => {
+    try {
+      const client = getSupabaseAdmin();
+      if (!client) {
+        return {
+          ready: false,
+          status: "NOT_CONFIGURED",
+          keySource: environment.keySource,
+          configurationIssue: environment.configurationIssue,
+        };
+      }
+      const { error } = await client
+        .from("company_approvals")
+        .select("id", { count: "exact", head: true });
+      if (error) {
+        return {
+          ready: false,
+          status: connectionFailureStatus(error),
+          keySource: environment.keySource,
+          configurationIssue: environment.configurationIssue,
+        };
+      }
+      return {
+        ready: true,
+        status: "READY",
+        keySource: environment.keySource,
+        configurationIssue: environment.configurationIssue,
+      };
+    } catch (error) {
+      return {
+        ready: false,
+        status: connectionFailureStatus(error),
+        keySource: environment.keySource,
+        configurationIssue: environment.configurationIssue,
+      };
+    }
+  })();
+
+  connectionProbeCache = { identity, expiresAt: now + CONNECTION_PROBE_TTL_MS, pending };
+  const result = await pending;
+  connectionProbeCache = { identity, expiresAt: Date.now() + CONNECTION_PROBE_TTL_MS, result };
+  return result;
 }
 
 const SENSITIVE_FIELD = /(password|secret|token|authorization|cookie|otp|code_verifier|session)/i;
