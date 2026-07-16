@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrvantaLogo from "./OrvantaLogo";
+import SessionControl from "./SessionControl";
 
 type Dashboard = {
   projects: Array<{ id: string }>;
@@ -147,9 +148,12 @@ export default function OrvantaFacade() {
               <a key={a.href} href={a.href}>{a.label}</a>
             ))}
           </div>
-          <Link href="/inbox" className="fx-enter">
-            دخول النظام <Arrow size={15} />
-          </Link>
+          <div className="fx-nav__actions">
+            <SessionControl />
+            <Link href="/inbox" className="fx-enter">
+              دخول النظام <Arrow size={15} />
+            </Link>
+          </div>
         </div>
       </nav>
 

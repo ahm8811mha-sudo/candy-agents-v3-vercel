@@ -98,6 +98,18 @@
   color: var(--fx-strong);
   background: color-mix(in srgb, var(--fx-surface) 60%, transparent);
 }
+.fx-nav__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fx-nav__actions .mini-pill {
+  min-height: 38px;
+  flex: 0 0 auto;
+  color: var(--fx-strong);
+  background: color-mix(in srgb, var(--fx-surface) 64%, transparent);
+  border-color: color-mix(in srgb, var(--fx-surface) 82%, transparent) !important;
+}
 .fx-enter {
   display: inline-flex;
   align-items: center;
@@ -121,6 +133,28 @@
 
 @media (max-width: 860px) {
   .fx-nav__links { display: none; }
+}
+
+@media (max-width: 520px) {
+  .fx-nav__bar {
+    width: calc(100% - 20px);
+    justify-content: space-between;
+  }
+  .fx-nav__brand {
+    font-size: 0;
+    gap: 0;
+    padding-inline-end: 0;
+  }
+  .fx-nav__actions {
+    gap: 6px;
+  }
+  .fx-nav__actions .mini-pill,
+  .fx-enter {
+    min-height: 38px;
+  }
+  .fx-enter {
+    padding-inline: 12px;
+  }
 }
 
 /* ── Hero: owns the first screen ────────────────────────────── */
