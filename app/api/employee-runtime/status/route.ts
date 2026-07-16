@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { EMPLOYEE_PROFILES } from "@/lib/employee-runtime/registry";
 import { resolveEmployeeRuntimeMode } from "@/lib/employee-runtime/runtime";
-import { EMPLOYEE_SOPS } from "@/lib/employee-runtime/sops";
+import { ALL_EMPLOYEE_SOPS } from "@/lib/employee-runtime/sopRegistry";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const referencedSops = new Set(
       EMPLOYEE_PROFILES.flatMap((employee) => employee.sopIds)
     );
-    const availableSops = new Set(EMPLOYEE_SOPS.map((sop) => sop.id));
+    const availableSops = new Set(ALL_EMPLOYEE_SOPS.map((sop) => sop.id));
     const missingSops = [...referencedSops].filter(
       (sopId) => !availableSops.has(sopId)
     );
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       databaseReady,
       tables: checks,
       sopRegistry: {
-        total: EMPLOYEE_SOPS.length,
+        total: ALL_EMPLOYEE_SOPS.length,
         referenced: referencedSops.size,
         missing: missingSops,
       },
