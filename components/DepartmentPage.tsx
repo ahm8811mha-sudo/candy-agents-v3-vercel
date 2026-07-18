@@ -219,13 +219,15 @@ const emptyData: DashboardData = {
 };
 
 const statusLabel: Record<string, string> = {
-  TODO: "لم تبدأ",
+  TODO: "لم تبدأ — غير منفذة",
   PENDING: "معلق",
   IN_PROGRESS: "قيد التنفيذ",
   DONE: "مكتملة",
   ACTIVE: "نشط",
   QUEUED: "جاهز",
   WAITING_APPROVAL: "ينتظر اعتماد",
+  WAITING_FUNDING: "بانتظار اعتماد مالي 💰",
+  ON_HOLD: "موقوفة",
   APPROVED: "معتمد",
   REJECTED: "مرفوض",
   NOT_REQUIRED: "لا يحتاج اعتماد",
@@ -325,13 +327,13 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
     setApprovalSaving(id);
     setError("");
     try {
-      const res = await fetch("/api/approvals/decision", {
+      const res = await fetch("/api/approvals/decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, approverId: `${icon}-manager` }),
+        body: JSON.stringify({ id, decision: status, decidedBy: `${icon}-manager` }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.message || "تعذر تحديث الموافقة.");
+      if (!res.ok || !json.ok) throw new Error(json.error || json.message || "تعذر تحديث الموافقة.");
       await loadDashboard();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحديث الموافقة.");

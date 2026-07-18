@@ -79,3 +79,58 @@ describe("approvals", () => {
     expect(listApprovals()).toHaveLength(2);
   });
 });
+
+describe("deferral flow", () => {
+  it("defers a pending item with reason, reminder date, and assignee", async () => {
+    const { createApproval, deferApprovalCritical, listApprovals, approvalStats } = await import("../lib/approvals");
+    const item = createApproval({ type: "IDEA", title: "فكرة للتأجيل", detail: "تفاصيل", amount: 5000 });
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+
+    const deferred = await deferApprovalCritical(item.id, {
+      reason: "بانتظار عرض سعر المورد",
+      remindAt: tomorrow,
+      assignedTo: "مدير المشتريات",
+      deferredBy: "المالك",
+    });
+
+    expect(deferred?.status).toBe("DEFERRED");
+    expect(deferred?.metadata?.deferral).toMatchObject({
+      reason: "بانتظار عرض سعر المورد",
+      assignedTo: "مدير المشتريات",
+    });
+    expect(listApprovals("PENDING").some((a) => a.id === item.id)).toBe(false);
+    expect(approvalStats().deferred).toBeGreaterThan(0);
+  });
+
+  it("rejects a past reminder date and an empty reason", async () => {
+    const { createApproval, deferApprovalCritical } = await import("../lib/approvals");
+    const item = createApproval({ type: "GENERAL", title: "عنصر", detail: "-" });
+    await expect(
+      deferApprovalCritical(item.id, { reason: "", remindAt: new Date(Date.now() + 86_400_000).toISOString(), deferredBy: "x" })
+    ).rejects.toThrow("سبب التأجيل");
+    await expect(
+      deferApprovalCritical(item.id, { reason: "سبب", remindAt: new Date(Date.now() - 1000).toISOString(), deferredBy: "x" })
+    ).rejects.toThrow("المستقبل");
+  });
+
+  it("revives deferred items whose reminder date passed", async () => {
+    const { createApproval, deferApprovalCritical, reviveDueDeferrals, listApprovals } = await import("../lib/approvals");
+    const item = createApproval({ type: "IDEA", title: "فكرة تعود", detail: "-" });
+    await deferApprovalCritical(item.id, {
+      reason: "تجهيز الدراسة",
+      remindAt: new Date(Date.now() + 60_000).toISOString(),
+      deferredBy: "المالك",
+    });
+
+    // Not due yet → nothing revives.
+    expect((await reviveDueDeferrals()).some((a) => a.id === item.id)).toBe(false);
+
+    // Force the reminder into the past, then revive.
+    const stored = listApprovals().find((a) => a.id === item.id)!;
+    (stored.metadata!.deferral as { remindAt: string }).remindAt = new Date(Date.now() - 1000).toISOString();
+    const revived = await reviveDueDeferrals();
+    expect(revived.some((a) => a.id === item.id)).toBe(true);
+    expect(listApprovals("PENDING").some((a) => a.id === item.id)).toBe(true);
+    expect(stored.note).toContain("عادت للصندوق");
+  });
+});

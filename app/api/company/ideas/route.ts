@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   submitIdea,
   listIdeas,
+  listApprovedIdeas,
   ideaStats,
   ensureDailyIdea,
   enrichIdea,
   addRecommendation,
   type Verdict,
 } from "@/lib/company/ideas";
+import { executeApprovedIdea } from "@/lib/company/ideaExecution";
+import { authenticateRequest } from "@/lib/auth";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
 
@@ -25,7 +28,13 @@ export async function GET() {
       ...i,
       belowThreshold: i.aggregate ? i.aggregate.confidence < threshold : false,
     }));
-    return NextResponse.json({ ok: true, ideas, stats: ideaStats(), confidenceThreshold: threshold });
+    return NextResponse.json({
+      ok: true,
+      ideas,
+      approvedIdeas: listApprovedIdeas(),
+      stats: ideaStats(),
+      confidenceThreshold: threshold,
+    });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Ideas failed" },
@@ -39,6 +48,23 @@ export async function POST(req: NextRequest) {
   try {
     await hydrateCompany();
     const body = await req.json().catch(() => ({}));
+
+    // Manual conversion: the owner picks any APPROVED idea and converts it.
+    // Guarded twice — only approved ideas convert, and conversion is
+    // idempotent (an already-executed idea returns its existing project).
+    if (body.action === "execute") {
+      const ideaId = String(body.ideaId || "");
+      const idea = listApprovedIdeas().find((item) => item.id === ideaId);
+      if (!idea) {
+        return NextResponse.json(
+          { ok: false, error: "الفكرة غير موجودة ضمن الأفكار المعتمدة — الاعتماد أولاً من مركز القرار." },
+          { status: 400 }
+        );
+      }
+      const user = await authenticateRequest(req);
+      const execution = await executeApprovedIdea({ ideaId }, user?.name || "المالك");
+      return NextResponse.json({ ok: execution.ok, execution, approvedIdeas: listApprovedIdeas() });
+    }
 
     if (body.action === "recommend") {
       const verdict = ["APPROVE", "CONDITIONAL", "REJECT"].includes(body.verdict)

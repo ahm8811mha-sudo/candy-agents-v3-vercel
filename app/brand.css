@@ -1,3 +1,5 @@
+/* Brand identity tokens/classes ONLY (--orvanta-*). App tokens belong to
+ * globals.css; theme scopes to unified-theme.css. */
 :root {
   --orvanta-blue: #0f6fff;
   --orvanta-cyan: #0797b7;

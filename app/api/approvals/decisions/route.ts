@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   listApprovals,
+  getApprovalCritical,
   decideApprovalCritical,
+  deferApprovalCritical,
+  reviveDueDeferrals,
   reopenApprovalCritical,
   approvalStats,
   type ApprovalStatus,
   type ApprovalItem,
 } from "@/lib/approvals";
+import { applyTaskFundingDecision } from "@/lib/companyExecutionSystem";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
 import { recognizeIncome, applySalesChange } from "@/lib/company/sales";
 import { executeApprovedIdea } from "@/lib/company/ideaExecution";
@@ -29,6 +33,8 @@ export const maxDuration = 60;
 /** GET: the actionable decision queue (trades / budget / CEO items). */
 export async function GET(req: NextRequest) {
   await hydrateCompany();
+  // Deferred items whose reminder date passed come back on every queue read.
+  await reviveDueDeferrals();
   const status = req.nextUrl.searchParams.get("status") as ApprovalStatus | null;
   return NextResponse.json({
     ok: true,
@@ -43,14 +49,49 @@ export async function POST(req: NextRequest) {
     await hydrateCompany();
     const body = await req.json().catch(() => ({}));
     const id = String(body.id || "");
-    const decision = body.decision === "REJECTED" ? "REJECTED" : body.decision === "APPROVED" ? "APPROVED" : null;
+    const decision =
+      body.decision === "REJECTED"
+        ? "REJECTED"
+        : body.decision === "APPROVED"
+          ? "APPROVED"
+          : body.decision === "DEFERRED"
+            ? "DEFERRED"
+            : null;
 
     if (!id || !decision) {
-      return NextResponse.json({ ok: false, error: "يلزم معرّف العنصر والقرار (APPROVED/REJECTED)" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "يلزم معرّف العنصر والقرار (APPROVED/REJECTED/DEFERRED)" }, { status: 400 });
+    }
+
+    // Deferral: leaves the queue with a reason + reminder date + an assignee
+    // who prepares the item, then returns automatically when the date passes.
+    if (decision === "DEFERRED") {
+      const deferringUser = await authenticateRequest(req);
+      const deferredBy = deferringUser?.name || String(body.decidedBy || "المالك");
+      const item = await deferApprovalCritical(id, {
+        reason: String(body.note || ""),
+        remindAt: String(body.remindAt || ""),
+        assignedTo: body.assignedTo ? String(body.assignedTo) : undefined,
+        deferredBy,
+      });
+      if (!item) {
+        return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
+      }
+      await recordAuditCritical({
+        id: `aud-approval-${item.id}-deferred-${Date.now()}`,
+        actor: deferredBy,
+        role: deferringUser?.role,
+        action: "DEFER",
+        entityType: (item.type || "APPROVAL").toLowerCase(),
+        entityId: item.id,
+        detail: `تأجيل: ${item.title} · حتى ${String(body.remindAt).slice(0, 10)}${body.assignedTo ? ` · المسؤول: ${body.assignedTo}` : ""}`,
+        metadata: { approvalId: item.id, approvalType: item.type, decision: "DEFERRED" },
+      });
+      return NextResponse.json({ ok: true, item, execution: null, stats: approvalStats() });
     }
 
     // F2 — enforce the authority matrix in the API, not just the UI.
-    const target = listApprovals().find((a) => a.id === id);
+    // Read-through lookup: the item may live on another serverless instance.
+    const target = (await getApprovalCritical(id)) ?? listApprovals().find((a) => a.id === id);
     const tier = approvalTierForDecision(target?.amount, target?.metadata);
     const user = await authenticateRequest(req);
     const access = canSignOff(user?.role ?? null, tier);
@@ -134,6 +175,11 @@ export async function POST(req: NextRequest) {
           else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
           else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
           else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+        }
+        // Funding sign-offs on money-bearing plan steps react to BOTH
+        // outcomes: WAITING_FUNDING → TODO on approval, ON_HOLD on rejection.
+        if (result.type === "BUDGET" && execution === null) {
+          execution = await applyTaskFundingDecision(result.metadata || {}, decision);
         }
       } catch (transitionError) {
         // Do not hide an approved-but-unexecuted item. Restore it to the queue;

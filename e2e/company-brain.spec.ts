@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// Abort render-blocking external font CSS so a stalled proxy can't hang paint.
+test.beforeEach(async ({ page }) => {
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+});
+
 test("the protected Company Brain workspace opens on a trusted owner device", async ({ page }) => {
   await page.goto("/company-brain");
   await expect(page).toHaveURL(/\/login/);

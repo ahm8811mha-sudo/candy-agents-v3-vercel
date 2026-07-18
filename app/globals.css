@@ -1,6 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap");
 @import "./unified-theme.css";
 
+/* AUTHORITATIVE base tokens. unified-theme.css is imported above (so it loads
+ * first and this :root wins shared names); it may only add [data-theme] scopes
+ * and tokens that do not exist here. Brand identity tokens live in brand.css. */
 :root {
   --bg: #0c1118;
   --panel: #141b25;

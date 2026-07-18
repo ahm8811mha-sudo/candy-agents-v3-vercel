@@ -70,6 +70,9 @@ const EXTRA_AGENTS = [
 
 export default function IdeasBoard() {
   const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [approvedIdeas, setApprovedIdeas] = useState<Array<Idea & { executed: boolean; executedProjectId?: string }>>([]);
+  const [convertMsg, setConvertMsg] = useState("");
+  const [converting, setConverting] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -84,6 +87,7 @@ export default function IdeasBoard() {
       const json = await res.json();
       if (json.ok) {
         setIdeas(json.ideas || []);
+        setApprovedIdeas(json.approvedIdeas || []);
         setStats(json.stats || null);
       }
     } catch {
@@ -144,6 +148,26 @@ export default function IdeasBoard() {
     }
   }
 
+  async function convertIdea(ideaId: string) {
+    setConverting(ideaId);
+    setConvertMsg("");
+    try {
+      const res = await fetch("/api/company/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "execute", ideaId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || json.execution?.reason || "تعذر تحويل الفكرة.");
+      setConvertMsg(`✅ ${json.execution.reason || "تم تحويل الفكرة إلى مشروع."}`);
+      await load();
+    } catch (err) {
+      setConvertMsg(`⚠️ ${err instanceof Error ? err.message : "تعذر تحويل الفكرة."}`);
+    } finally {
+      setConverting(null);
+    }
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const todaysTeamIdea = ideas.find((i) => i.source === "TEAM" && i.dayKey === today);
 
@@ -164,6 +188,38 @@ export default function IdeasBoard() {
           </span>
         )}
       </header>
+
+      {/* Approved ideas — pick and convert (no manual id entry) */}
+      {approvedIdeas.length > 0 && (
+        <section className="bento-card bento-full" style={{ gap: 10 }}>
+          <span className="bento-kicker">✅ الأفكار المعتمدة ({approvedIdeas.length}) — اختر منها للتحويل إلى مشروع</span>
+          {convertMsg && <p style={{ color: convertMsg.startsWith("✅") ? "var(--green)" : "var(--amber)", margin: 0 }}>{convertMsg}</p>}
+          <div style={{ display: "grid", gap: 8 }}>
+            {approvedIdeas.map((idea) => (
+              <div key={idea.id} className="statement-row" style={{ alignItems: "center", gap: 10 }}>
+                <span>
+                  <strong>{idea.title}</strong>
+                  <small style={{ color: "var(--muted)", display: "block" }}>
+                    الميزانية {idea.budgetSAR.toLocaleString("ar-SA")} ر.س · {idea.tierLabel || idea.tier}
+                    {idea.executed && idea.executedProjectId ? ` · المشروع: ${idea.executedProjectId}` : ""}
+                  </small>
+                </span>
+                {idea.executed ? (
+                  <span className="mini-pill done">محوّلة إلى مشروع ✓</span>
+                ) : (
+                  <button
+                    className="primary-btn btn-sm"
+                    disabled={converting === idea.id}
+                    onClick={() => convertIdea(idea.id)}
+                  >
+                    {converting === idea.id ? "جارٍ التحويل…" : "تحويل إلى مشروع"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Owner idea intake */}
       <section className="bento-card bento-full" style={{ gap: 12 }}>

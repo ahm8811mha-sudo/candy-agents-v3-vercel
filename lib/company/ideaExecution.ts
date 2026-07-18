@@ -5,7 +5,8 @@ import { getSupabaseAdmin } from "../supabase";
 import { normalizeActionInitialStatus } from "./actionQueue";
 import { recordAudit } from "./audit";
 import { createExecutionBundle } from "./executionRepository";
-import { listIdeas } from "./ideas";
+import { listIdeas, markIdeaExecuted } from "./ideas";
+import { createApprovalCritical } from "../approvals";
 
 export type ApprovedIdeaExecutionResult = {
   ok: boolean;
@@ -107,6 +108,19 @@ export async function executeApprovedIdea(
     };
   }
 
+  // Fast-path idempotency for the UI: an idea converts into exactly ONE
+  // project (the execution bundle's idempotencyKey guards the DB layer too).
+  if (idea.executedProjectId) {
+    return {
+      ok: true,
+      ideaId,
+      mode: "durable",
+      saved: true,
+      counts: { tasks: 0, kpis: 0, actions: 0 },
+      reason: `سبق تحويل هذه الفكرة إلى مشروع (${idea.executedProjectId}) — لا يُنشأ مشروع مكرر.`,
+    };
+  }
+
   const request = `تنفيذ الفكرة المعتمدة: ${idea.title}. الفرضية: ${idea.hypothesis}. الميزانية المعتمدة: ${idea.budgetSAR} ريال. الأفق الزمني: ${idea.horizonDays} يوم.`;
   const financials = await calculateFinancials();
   const baseIntelligence = evaluateBusiness(request, financials);
@@ -164,11 +178,14 @@ export async function executeApprovedIdea(
       },
       nextReviewAt: new Date(Date.now() + Math.max(idea.horizonDays, 14) * 86_400_000).toISOString(),
     },
+    // Money-bearing steps start WAITING_FUNDING: the CFO sees a BUDGET item
+    // in the decision center stating the amount, and the step only becomes
+    // executable after that sign-off (see the funding approvals below).
     tasks: blueprint.tasks.map((task) => ({
       title: task.title,
       description: task.content,
       content: task.content,
-      status: "TODO",
+      status: task.requiresFunding ? "WAITING_FUNDING" : "TODO",
       priority: task.priority,
       ownerRole: task.ownerRole,
       kpiName: task.kpiName,
@@ -236,6 +253,35 @@ export async function executeApprovedIdea(
       metadata: { ideaId: idea.id, approvalId: idea.approvalId },
     },
   });
+
+  const projectId = String((execution.project as Record<string, unknown>).id);
+  markIdeaExecuted(idea.id, projectId);
+
+  // Funding gate: each WAITING_FUNDING step raises a BUDGET item to the CFO
+  // in the unified decision center with the estimated amount.
+  for (let index = 0; index < blueprint.tasks.length; index += 1) {
+    const step = blueprint.tasks[index];
+    if (!step.requiresFunding) continue;
+    const bundleTask = execution.tasks[index] as Record<string, unknown> | undefined;
+    if (!bundleTask?.id) continue;
+    await createApprovalCritical({
+      type: "BUDGET",
+      title: `اعتماد مالي مطلوب: ${step.title}`,
+      detail: `خطوة «${step.title}» في مشروع «${idea.title}» تتطلب مبلغاً تقديرياً ${(
+        step.estimatedCostSAR ?? 0
+      ).toLocaleString("ar-SA")} ر.س قبل التنفيذ — لا تُنفَّذ الخطوة قبل هذا الاعتماد.`,
+      amount: step.estimatedCostSAR,
+      requestedRole: "CFO",
+      dedupeKey: `task-funding-${bundleTask.id}`,
+      metadata: {
+        kind: "TASK_FUNDING",
+        taskId: String(bundleTask.id),
+        projectId,
+        ideaId: idea.id,
+        estimatedCostSAR: step.estimatedCostSAR ?? null,
+      },
+    });
+  }
 
   invalidateCache("dashboard-data");
 

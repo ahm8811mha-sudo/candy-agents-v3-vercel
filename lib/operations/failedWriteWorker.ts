@@ -13,6 +13,22 @@ const REPLAYABLE_TABLES = new Set([
   "agent_memory",
   "crm_leads",
   "crm_contacts",
+  "company_approvals",
+  "ledger_entries",
+  "audit_log",
+  "sales_income",
+  "ai_usage_log",
+]);
+
+// State-bearing rows must never be resurrected over a NEWER version: a failed
+// PENDING approval insert replayed after the decision landed would silently
+// revert a signed decision. These tables replay as insert-if-absent only.
+const INSERT_ONLY_REPLAY_TABLES = new Set([
+  "company_approvals",
+  "ledger_entries",
+  "audit_log",
+  "sales_income",
+  "ai_usage_log",
 ]);
 
 function retryAt(attempt: number) {
@@ -63,6 +79,14 @@ async function replayRow(row: Record<string, unknown>) {
   if (operation !== "UPSERT") throw new Error(`Operation ${operation} requires a domain-specific recovery handler.`);
   if (!payload.id) throw new Error("Replay payload does not contain an idempotent id.");
   if (containsRedaction(payload)) throw new Error("Replay payload contains redacted values and requires manual recovery.");
+
+  if (INSERT_ONLY_REPLAY_TABLES.has(table)) {
+    const { error } = await supabase
+      .from(table)
+      .upsert(payload, { onConflict: "id", ignoreDuplicates: true });
+    if (error) throw error;
+    return;
+  }
 
   const { error } = await supabase.from(table).upsert(payload, { onConflict: "id" });
   if (error) throw error;

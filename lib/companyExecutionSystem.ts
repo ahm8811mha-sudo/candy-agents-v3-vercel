@@ -121,6 +121,47 @@ export async function runCompanyExecution(request: string, options: CompanyExecu
   return { financials, intelligence, cfo, ceo, tasks, project: flow.project, task: flow.task, tasksCreated: flow.tasksCreated, kpis: flow.kpis, actions: blueprint.actions, alerts: intelligence.alerts, approval: flow.approval, initiativePlan, saved: flow.saved, workflowInstanceId: flow.workflowInstanceId, correlationId: flow.correlationId, idempotent: flow.idempotent };
 }
 
+export type TaskFundingDecisionResult = {
+  ok: boolean;
+  taskId: string;
+  reason: string;
+};
+
+/**
+ * Funding sign-off side-effect for money-bearing plan steps
+ * (metadata.kind === "TASK_FUNDING"): approval releases the step to TODO,
+ * rejection puts it ON_HOLD. Returns null for other BUDGET items.
+ */
+export async function applyTaskFundingDecision(
+  metadata: Record<string, unknown> | undefined,
+  decision: "APPROVED" | "REJECTED"
+): Promise<TaskFundingDecisionResult | null> {
+  if (!metadata || metadata.kind !== "TASK_FUNDING") return null;
+  const taskId = String(metadata.taskId || "");
+  if (!taskId) return { ok: false, taskId: "", reason: "لا يوجد taskId في بيانات الاعتماد المالي." };
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, taskId, reason: "تحديث حالة الخطوة يتطلب اتصال Supabase." };
+
+  const nextStatus = decision === "APPROVED" ? "TODO" : "ON_HOLD";
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: nextStatus })
+    .eq("id", taskId)
+    .eq("status", "WAITING_FUNDING");
+  if (error) throw error;
+
+  invalidateCache("dashboard-data");
+  return {
+    ok: true,
+    taskId,
+    reason:
+      decision === "APPROVED"
+        ? "تم الاعتماد المالي — الخطوة أصبحت قابلة للتنفيذ."
+        : "رُفض الاعتماد المالي — الخطوة موقوفة حتى إشعار آخر.",
+  };
+}
+
 export async function getDashboardData() {
   const supabase = getSupabaseAdmin();
   if (!supabase) return { projects: [], tasks: [], decisions: [], alerts: [], kpis: [], actions: [], approvals: [], memory: [] };

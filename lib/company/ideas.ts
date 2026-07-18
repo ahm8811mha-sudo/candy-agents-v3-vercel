@@ -50,6 +50,8 @@ export type Idea = {
   studyMode?: "LLM" | "HEURISTIC";
   approvalId?: string;
   dayKey?: string;
+  /** Set once the approved idea has been converted into a project. */
+  executedProjectId?: string;
   createdAt: string;
 };
 
@@ -86,6 +88,7 @@ function persistIdea(idea: Idea): void {
     study_mode: idea.studyMode ?? null,
     approval_id: idea.approvalId ?? null,
     day_key: idea.dayKey ?? null,
+    executed_project_id: idea.executedProjectId ?? null,
     created_at: idea.createdAt,
   });
 }
@@ -113,6 +116,7 @@ export const hydrateIdeas = hydrateOnce(async () => {
       studyMode: (r.study_mode as Idea["studyMode"]) ?? undefined,
       approvalId: r.approval_id ? String(r.approval_id) : undefined,
       dayKey: r.day_key ? String(r.day_key) : undefined,
+      executedProjectId: r.executed_project_id ? String(r.executed_project_id) : undefined,
       createdAt: String(r.created_at),
     });
   }
@@ -369,6 +373,21 @@ export function syncIdeasWithApprovals(): void {
       persistIdea(idea);
     }
   }
+}
+
+/** Approved ideas with their conversion state — powers the manual picker. */
+export function listApprovedIdeas(): Array<Idea & { executed: boolean }> {
+  return store
+    .filter((idea) => idea.status === "APPROVED")
+    .map((idea) => ({ ...idea, executed: Boolean(idea.executedProjectId) }));
+}
+
+/** Record that an approved idea was converted into a project (idempotency). */
+export function markIdeaExecuted(ideaId: string, projectId: string): void {
+  const idea = store.find((item) => item.id === ideaId);
+  if (!idea) return;
+  idea.executedProjectId = projectId;
+  persistIdea(idea);
 }
 
 export function listIdeas(): Idea[] {
