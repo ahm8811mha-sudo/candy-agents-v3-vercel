@@ -213,13 +213,15 @@ const emptyData: DashboardData = {
 };
 
 const statusLabel: Record<string, string> = {
-  TODO: "لم تبدأ",
+  TODO: "لم تبدأ — غير منفذة",
   PENDING: "معلق",
   IN_PROGRESS: "قيد التنفيذ",
   DONE: "مكتملة",
   ACTIVE: "نشط",
   QUEUED: "جاهز",
   WAITING_APPROVAL: "ينتظر اعتماد",
+  WAITING_FUNDING: "بانتظار اعتماد مالي 💰",
+  ON_HOLD: "موقوفة",
   APPROVED: "معتمد",
   REJECTED: "مرفوض",
   NOT_REQUIRED: "لا يحتاج اعتماد",

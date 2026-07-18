@@ -65,6 +65,11 @@ export type ExecutionStep = {
   kpiName: string;
   kpiTarget: number;
   kpiUnit: string;
+  /** Steps that need money (fees, ad spend, purchases) wait for a CFO/owner
+   * funding sign-off before they become executable. */
+  requiresFunding?: boolean;
+  /** Indicative amount in SAR shown on the funding approval item. */
+  estimatedCostSAR?: number;
 };
 
 export type ExecutionBlueprint = {
@@ -420,6 +425,8 @@ export function buildExecutionBlueprint(request: string, intelligence: BusinessI
       kpiName: "Budget approval",
       kpiTarget: 1,
       kpiUnit: "approval",
+      requiresFunding: true,
+      estimatedCostSAR: firstBudget,
     },
     {
       title: "اختبار عرض وسعر",
@@ -440,6 +447,8 @@ export function buildExecutionBlueprint(request: string, intelligence: BusinessI
       kpiName: "CAC ceiling",
       kpiTarget: Math.max(50, Math.round(firstBudget / 40)),
       kpiUnit: "SAR",
+      requiresFunding: true,
+      estimatedCostSAR: Math.max(500, Math.round(firstBudget * 0.4)),
     },
     {
       title: "تجهيز الموردين والتشغيل",

@@ -13,7 +13,17 @@ import { isMultiTenantEnabled, getTenantId } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
-export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED";
+
+export type DeferralInfo = {
+  reason: string;
+  /** ISO date to bring the item back to the pending queue. */
+  remindAt: string;
+  /** The employee/agent responsible for preparing the item meanwhile. */
+  assignedTo?: string;
+  deferredBy: string;
+  deferredAt: string;
+};
 
 export type ApprovalItem = {
   id: string;
@@ -267,13 +277,83 @@ export async function decideApprovalCritical(
   return item;
 }
 
-export function approvalStats(): { pending: number; approved: number; rejected: number; total: number } {
+export function approvalStats(): { pending: number; approved: number; rejected: number; deferred: number; total: number } {
   return {
     pending: store.filter((a) => a.status === "PENDING").length,
     approved: store.filter((a) => a.status === "APPROVED").length,
     rejected: store.filter((a) => a.status === "REJECTED").length,
+    deferred: store.filter((a) => a.status === "DEFERRED").length,
     total: store.length,
   };
+}
+
+/**
+ * Defer a pending item: it leaves the queue with a reason, a reminder date,
+ * and an assignee responsible for preparing it, then comes back automatically
+ * once the reminder date passes (reviveDueDeferrals).
+ */
+export async function deferApprovalCritical(
+  id: string,
+  input: { reason: string; remindAt: string; assignedTo?: string; deferredBy: string }
+): Promise<ApprovalItem | null> {
+  const reason = input.reason.trim();
+  const remindAt = new Date(input.remindAt);
+  if (!reason) throw new Error("سبب التأجيل مطلوب.");
+  if (Number.isNaN(remindAt.getTime()) || remindAt.getTime() <= Date.now()) {
+    throw new Error("تاريخ التذكير يجب أن يكون تاريخاً صالحاً في المستقبل.");
+  }
+
+  let item = store.find((a) => a.id === id);
+  if (!item && hasSupabaseEnv()) {
+    const remote = await fetchApprovalById(id);
+    if (remote) item = adoptIntoStore(remote);
+  }
+  if (!item) return null;
+  if (item.status !== "PENDING") return item;
+
+  const deferral: DeferralInfo = {
+    reason,
+    remindAt: remindAt.toISOString(),
+    assignedTo: input.assignedTo?.trim() || undefined,
+    deferredBy: input.deferredBy,
+    deferredAt: new Date().toISOString(),
+  };
+  const deferred: ApprovalItem = {
+    ...item,
+    status: "DEFERRED",
+    note: reason,
+    metadata: { ...item.metadata, deferral },
+  };
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(deferred));
+  Object.assign(item, deferred);
+  emitWebhook("approval.deferred", {
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    remindAt: deferral.remindAt,
+    assignedTo: deferral.assignedTo ?? null,
+  });
+  return item;
+}
+
+/** Bring deferred items whose reminder date passed back to the pending queue. */
+export async function reviveDueDeferrals(): Promise<ApprovalItem[]> {
+  const now = Date.now();
+  const revived: ApprovalItem[] = [];
+  for (const item of store) {
+    if (item.status !== "DEFERRED") continue;
+    const deferral = item.metadata?.deferral as DeferralInfo | undefined;
+    const due = deferral?.remindAt ? Date.parse(deferral.remindAt) : NaN;
+    if (Number.isNaN(due) || due > now) continue;
+
+    item.status = "PENDING";
+    item.note = `عادت للصندوق بعد التأجيل — السبب السابق: ${deferral?.reason ?? "غير مذكور"}`;
+    item.metadata = { ...item.metadata, deferral: { ...deferral, revivedAt: new Date().toISOString() } };
+    persist("company_approvals", toRow(item));
+    emitWebhook("approval.revived", { id: item.id, type: item.type, title: item.title });
+    revived.push(item);
+  }
+  return revived;
 }
 
 /** Test helper — clears the store. */

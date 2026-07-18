@@ -11,6 +11,7 @@ import {
   CircleDollarSign,
   Building2,
   Filter,
+  Clock,
 } from "lucide-react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 
@@ -27,6 +28,10 @@ type InboxItem = {
   createdAt: string;
   ageLabel?: string;
   stale?: boolean;
+  metadata?: {
+    deferral?: { reason?: string; remindAt?: string; assignedTo?: string };
+    [key: string]: unknown;
+  };
 };
 
 const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
@@ -37,9 +42,19 @@ const statusMeta: Record<string, { label: string; pill: string }> = {
   PENDING: { label: "بانتظار قرارك", pill: "medium" },
   APPROVED: { label: "معتمد", pill: "done" },
   REJECTED: { label: "مرفوض", pill: "high" },
+  DEFERRED: { label: "مؤجلة", pill: "medium" },
   NOTED: { label: "بها ملاحظة", pill: "medium" },
   FORWARDED: { label: "مُحالة", pill: "medium" },
 };
+
+const ASSIGNEES = [
+  "سلطان — الرئيس التنفيذي",
+  "المدير المالي",
+  "مدير التسويق",
+  "مدير العمليات",
+  "مدير المشتريات",
+  "مدير المبيعات",
+];
 
 type FilterKey = "ALL" | "SYSTEM" | "COMPANY";
 
@@ -52,6 +67,12 @@ export default function InboxCenter() {
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [forwardFor, setForwardFor] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+  const [deferFor, setDeferFor] = useState<string | null>(null);
+  const [minDeferDate, setMinDeferDate] = useState("");
+  const [deferReason, setDeferReason] = useState("");
+  const [deferDate, setDeferDate] = useState("");
+  const [deferAssignee, setDeferAssignee] = useState("");
+  const [deferError, setDeferError] = useState("");
   const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
@@ -97,6 +118,43 @@ export default function InboxCenter() {
     }
   }
 
+  async function deferSystem(item: InboxItem) {
+    if (!deferReason.trim() || !deferDate) {
+      setDeferError("سبب التأجيل وتاريخ التذكير مطلوبان.");
+      return;
+    }
+    setBusy(item.id);
+    setDeferError("");
+    try {
+      const res = await fetch("/api/approvals/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          decision: "DEFERRED",
+          note: deferReason.trim(),
+          remindAt: new Date(`${deferDate}T09:00:00`).toISOString(),
+          assignedTo: deferAssignee || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setDeferError(json.error || "تعذر تأجيل العنصر.");
+        return;
+      }
+      setDeferFor(null);
+      setDeferReason("");
+      setDeferDate("");
+      setDeferAssignee("");
+      setExecMsg({ text: `تم التأجيل حتى ${deferDate}${deferAssignee ? ` — يتولى التجهيز: ${deferAssignee}` : ""}.`, ok: true });
+      await load();
+    } catch {
+      setDeferError("تعذر تأجيل العنصر.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function reviewCompany(
     item: InboxItem,
     action: "APPROVED" | "REJECTED" | "NOTED" | "FORWARDED",
@@ -125,7 +183,8 @@ export default function InboxCenter() {
 
   const visible = items.filter((i) => filter === "ALL" || i.channel === filter);
   const visiblePending = visible.filter((i) => i.status === "PENDING");
-  const visibleDecided = visible.filter((i) => i.status !== "PENDING");
+  const visibleDeferred = visible.filter((i) => i.status === "DEFERRED");
+  const visibleDecided = visible.filter((i) => i.status !== "PENDING" && i.status !== "DEFERRED");
 
   return (
     <main className="page-wrap">
@@ -204,6 +263,17 @@ export default function InboxCenter() {
                   <button className="secondary-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => decideSystem(item, "REJECTED")}>
                     <X size={14} /> رفض
                   </button>
+                  <button
+                    className="secondary-btn btn-sm"
+                    disabled={busy === item.id}
+                    onClick={() => {
+                      setDeferFor(deferFor === item.id ? null : item.id);
+                      setDeferError("");
+                      setMinDeferDate(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
+                    }}
+                  >
+                    <Clock size={14} /> تأجيل
+                  </button>
                 </>
               ) : (
                 <>
@@ -222,6 +292,40 @@ export default function InboxCenter() {
                 </>
               )}
             </div>
+
+            {deferFor === item.id && (
+              <div style={{ display: "grid", gap: 8, padding: "10px 0" }}>
+                <input
+                  className="input"
+                  placeholder="سبب التأجيل (إلزامي)"
+                  value={deferReason}
+                  onChange={(e) => setDeferReason(e.target.value)}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <label style={{ display: "grid", gap: 4, flex: 1, minWidth: 150 }}>
+                    <small style={{ color: "var(--muted)" }}>تاريخ التذكير بالفكرة</small>
+                    <input
+                      className="input"
+                      type="date"
+                      min={minDeferDate}
+                      value={deferDate}
+                      onChange={(e) => setDeferDate(e.target.value)}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 4, flex: 1, minWidth: 170 }}>
+                    <small style={{ color: "var(--muted)" }}>الموظف المسؤول عن التجهيز</small>
+                    <select className="input" value={deferAssignee} onChange={(e) => setDeferAssignee(e.target.value)}>
+                      <option value="">— بدون تعيين —</option>
+                      {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {deferError && <small style={{ color: "var(--red)" }}>{deferError}</small>}
+                <button className="primary-btn btn-sm" disabled={busy === item.id} onClick={() => deferSystem(item)}>
+                  {busy === item.id ? <Loader2 className="spin" size={14} /> : <Clock size={14} />} تأكيد التأجيل
+                </button>
+              </div>
+            )}
 
             {noteFor === item.id && (
               <div className="memory-search-bar">
@@ -249,6 +353,31 @@ export default function InboxCenter() {
           </article>
         ))}
       </div>
+
+      {visibleDeferred.length > 0 && (
+        <section style={{ display: "grid", gap: 8 }}>
+          <strong style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+            <Clock size={14} style={{ verticalAlign: "-2px" }} /> المؤجلة ({visibleDeferred.length}) — تعود تلقائياً في موعد التذكير
+          </strong>
+          {visibleDeferred.map((item) => (
+            <div key={`${item.channel}-${item.id}`} className="statement-row">
+              <span>
+                {item.title}
+                {item.metadata?.deferral?.remindAt && (
+                  <> · ⏰ {String(item.metadata.deferral.remindAt).slice(0, 10)}</>
+                )}
+                {item.metadata?.deferral?.assignedTo && (
+                  <> · يجهّزها: {item.metadata.deferral.assignedTo}</>
+                )}
+                {item.metadata?.deferral?.reason && (
+                  <small style={{ color: "var(--muted)", display: "block" }}>السبب: {item.metadata.deferral.reason}</small>
+                )}
+              </span>
+              <span className="mini-pill medium">مؤجلة</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       {visibleDecided.length > 0 && (
         <section style={{ display: "grid", gap: 8 }}>

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
+import { reviveDueDeferrals } from "@/lib/approvals";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
@@ -24,6 +25,10 @@ export async function GET(req: NextRequest) {
     run: async (context, heartbeat) => {
       await hydrateCompany();
       await heartbeat({ phase: "hydrated" });
+
+      // Deferred decisions whose reminder date passed rejoin the owner queue.
+      const revived = await reviveDueDeferrals();
+      if (revived.length) await heartbeat({ phase: "deferrals-revived", count: revived.length });
 
       const idea = ensureDailyIdea();
       await enrichIdea(idea.id);

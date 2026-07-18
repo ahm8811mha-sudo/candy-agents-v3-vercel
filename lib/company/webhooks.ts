@@ -14,6 +14,8 @@ export type WebhookEvent =
   | "idea.submitted"
   | "approval.created"
   | "approval.decided"
+  | "approval.deferred"
+  | "approval.revived"
   | "income.recognized";
 
 function webhookUrl(): string | undefined {

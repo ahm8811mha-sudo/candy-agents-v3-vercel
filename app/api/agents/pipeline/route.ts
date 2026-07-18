@@ -31,6 +31,11 @@ export async function POST(req: Request) {
       ok: true,
       runId: `company-${Date.now()}`,
       finalResult,
+      // Honest contract: these are PLANS, not performed work. Nothing counts
+      // as executed until it completes in the action queue, and money-bearing
+      // steps wait for a funding sign-off in the decision center.
+      executionStatus: "PLAN_ONLY",
+      executionNote: "هذه خطة عمل مقترحة — التنفيذ الفعلي يظهر في قائمة التنفيذ، والخطوات المالية تنتظر اعتماد مركز القرار.",
       employees: [
         { name: "الإدارة المالية", role: "المحاسبة والميزانية", output: result.accounting },
         { name: "إدارة التسويق", role: "السوق والنمو", output: result.marketing },

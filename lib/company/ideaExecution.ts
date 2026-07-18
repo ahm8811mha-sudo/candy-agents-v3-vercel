@@ -4,7 +4,8 @@ import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
 import { normalizeActionInitialStatus } from "./actionQueue";
 import { recordAudit } from "./audit";
-import { listIdeas } from "./ideas";
+import { listIdeas, markIdeaExecuted } from "./ideas";
+import { createApprovalCritical } from "../approvals";
 
 export type ApprovedIdeaExecutionResult = {
   ok: boolean;
@@ -108,6 +109,19 @@ export async function executeApprovedIdea(
     };
   }
 
+  // Idempotency: an idea converts into exactly ONE project. Re-running the
+  // conversion (manual button, repeated approval) returns the existing link.
+  if (idea.executedProjectId) {
+    return {
+      ok: true,
+      ideaId,
+      mode: "durable",
+      saved: true,
+      counts: { tasks: 0, kpis: 0, actions: 0 },
+      reason: `سبق تحويل هذه الفكرة إلى مشروع (${idea.executedProjectId}) — لا يُنشأ مشروع مكرر.`,
+    };
+  }
+
   const request = `تنفيذ الفكرة المعتمدة: ${idea.title}. الفرضية: ${idea.hypothesis}. الميزانية المعتمدة: ${idea.budgetSAR} ريال. الأفق الزمني: ${idea.horizonDays} يوم.`;
   const financials = await calculateFinancials();
   const baseIntelligence = evaluateBusiness(request, financials);
@@ -168,13 +182,16 @@ export async function executeApprovedIdea(
   if (projectError) throw projectError;
   const projectId = String(project.id);
 
+  // Money-bearing steps start WAITING_FUNDING: the CFO/owner sees a BUDGET
+  // item in the decision center stating the required amount, and the step
+  // only becomes executable after that sign-off.
   const taskRows = blueprint.tasks.map((task) => ({
     id: newId("idea-task"),
     project_id: projectId,
     title: task.title,
     description: task.content,
     content: task.content,
-    status: "TODO",
+    status: task.requiresFunding ? "WAITING_FUNDING" : "TODO",
     priority: task.priority,
     progress_percent: 0,
     owner_role: task.ownerRole,
@@ -184,6 +201,28 @@ export async function executeApprovedIdea(
   }));
   const { error: taskError } = await supabase.from("tasks").insert(taskRows);
   if (taskError) throw taskError;
+
+  for (let index = 0; index < blueprint.tasks.length; index += 1) {
+    const step = blueprint.tasks[index];
+    if (!step.requiresFunding) continue;
+    await createApprovalCritical({
+      type: "BUDGET",
+      title: `اعتماد مالي مطلوب: ${step.title}`,
+      detail: `خطوة «${step.title}» في مشروع «${idea.title}» تتطلب مبلغاً تقديرياً ${(
+        step.estimatedCostSAR ?? 0
+      ).toLocaleString("ar-SA")} ر.س قبل التنفيذ — لا تُنفَّذ الخطوة قبل هذا الاعتماد.`,
+      amount: step.estimatedCostSAR,
+      requestedRole: "CFO",
+      dedupeKey: `task-funding-${taskRows[index].id}`,
+      metadata: {
+        kind: "TASK_FUNDING",
+        taskId: taskRows[index].id,
+        projectId,
+        ideaId: idea.id,
+        estimatedCostSAR: step.estimatedCostSAR ?? null,
+      },
+    });
+  }
 
   const kpiRows = blueprint.kpis.map((kpi) => ({
     project_id: projectId,
@@ -243,6 +282,8 @@ export async function executeApprovedIdea(
     },
   });
   if (memoryError) throw memoryError;
+
+  markIdeaExecuted(idea.id, projectId);
 
   recordAudit({
     actor,
