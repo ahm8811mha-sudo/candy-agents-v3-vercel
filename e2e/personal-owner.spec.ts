@@ -2,6 +2,13 @@ import { expect, test } from "@playwright/test";
 
 const ownerCode = process.env.ORVANTA_OWNER_ACCESS_KEY || "";
 
+// External font CSS is render-blocking; when the sandbox/CI proxy stalls the
+// request instead of resetting it, first paint hangs and visibility asserts
+// time out. Abort those requests so browser tests are deterministic.
+test.beforeEach(async ({ page }) => {
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+});
+
 test("only the top-level health endpoint is public", async ({ request }) => {
   const publicHealth = await request.get("/api/health");
   expect(publicHealth.status()).toBe(200);
@@ -21,7 +28,7 @@ test("anonymous visitors are redirected and the trusted owner device unlocks", a
 
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: /شركة كاملة تعمل بالذكاء الاصطناعي، من القرار إلى التنفيذ/ })
+    page.getByRole("heading", { name: /شركة كاملة يديرها الذكاء الاصطناعي/ })
   ).toBeVisible();
 
   await page.goto("/status");

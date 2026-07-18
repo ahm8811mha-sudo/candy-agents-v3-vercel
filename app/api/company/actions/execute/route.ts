@@ -112,7 +112,9 @@ export async function POST(req: NextRequest) {
     }
 
     const typed = error as Error & { code?: string; decision?: unknown };
-    const conflict = /already being executed|cannot be executed|approval is required/i.test(typed.message);
+    const conflict = /already being executed|cannot be executed|approval is required/i.test(typed.message)
+      || typed.code === "OWNER_ABSENCE_ESCALATION"
+      || typed.code === "COMPLETION_EVIDENCE_REQUIRED";
     return NextResponse.json(
       { ok: false, code: typed.code, policy: typed.decision, error: typed.message || "External action execution failed", requestId: auth.context.requestId },
       { status: typed.code === "POLICY_DENIED" ? 403 : conflict ? 409 : 500 }

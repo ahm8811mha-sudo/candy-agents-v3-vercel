@@ -5,6 +5,7 @@ export type GoogleWorkspaceCapability = "gmail" | "sheets" | "drive";
 
 export type GoogleWorkspaceStatus = {
   enabled: boolean;
+  disabledByFlag: boolean;
   credentialsConfigured: boolean;
   capabilities: Record<GoogleWorkspaceCapability, boolean>;
   missingEnvironmentVariables: string[];
@@ -68,17 +69,26 @@ const DEFAULT_SHEET_NAME = "Orvanta Action Queue";
 const DEFAULT_SHEET_TAB = "Actions";
 
 function enabledByEnvironment() {
-  return process.env.GOOGLE_INTEGRATIONS_ENABLED === "true";
+  const featureFlag = process.env.GOOGLE_INTEGRATIONS_ENABLED?.trim().toLowerCase();
+  if (featureFlag === "false") return false;
+  if (featureFlag === "true") return true;
+
+  // A complete OAuth connection is an unambiguous opt-in. This avoids leaving
+  // a successfully linked account blocked only because the legacy flag was
+  // omitted. Setting the flag explicitly to false remains a hard kill switch.
+  return REQUIRED_ENV.every((name) => Boolean(process.env[name]?.trim()));
 }
 
 export function getGoogleWorkspaceStatus(): GoogleWorkspaceStatus {
   const missingEnvironmentVariables = REQUIRED_ENV.filter((name) => !process.env[name]);
+  const disabledByFlag = process.env.GOOGLE_INTEGRATIONS_ENABLED?.trim().toLowerCase() === "false";
   const enabled = enabledByEnvironment();
   const credentialsConfigured = missingEnvironmentVariables.length === 0;
   const ready = enabled && credentialsConfigured;
 
   return {
     enabled,
+    disabledByFlag,
     credentialsConfigured,
     capabilities: {
       gmail: ready,
@@ -87,7 +97,9 @@ export function getGoogleWorkspaceStatus(): GoogleWorkspaceStatus {
     },
     missingEnvironmentVariables: enabled
       ? missingEnvironmentVariables
-      : ["GOOGLE_INTEGRATIONS_ENABLED", ...missingEnvironmentVariables],
+      : disabledByFlag
+        ? ["GOOGLE_INTEGRATIONS_ENABLED"]
+        : missingEnvironmentVariables,
     defaults: {
       gmailSenderConfigured: Boolean(process.env.GOOGLE_GMAIL_SENDER),
       reviewEmailConfigured: Boolean(process.env.GOOGLE_DEFAULT_REVIEW_EMAIL),

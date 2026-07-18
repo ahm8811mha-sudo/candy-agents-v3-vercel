@@ -8,7 +8,7 @@
 --
 --  بعد التشغيل، أضف في Vercel → Settings → Environment Variables:
 --    NEXT_PUBLIC_SUPABASE_URL   = https://<project-ref>.supabase.co
---    SUPABASE_SERVICE_ROLE_KEY  = <service_role key من Project Settings → API>
+--    SUPABASE_SECRET_KEY        = <secret key من Project Settings → API Keys>
 --    AUTH_ENABLED               = true
 --    API_SECRET_KEY             = <strong secret>
 --

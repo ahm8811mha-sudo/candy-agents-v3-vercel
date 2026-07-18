@@ -4,6 +4,7 @@ import {
   listApprovals,
   decideApproval,
   approvalStats,
+  reopenApprovalCritical,
   _clearApprovals,
 } from "../lib/approvals";
 
@@ -23,6 +24,13 @@ describe("approvals", () => {
     createApproval({ type: "TRADE", title: "a", detail: "d", dedupeKey: "k1" });
     createApproval({ type: "TRADE", title: "a", detail: "d", dedupeKey: "k1" });
     expect(listApprovals("PENDING")).toHaveLength(1);
+  });
+
+  it("uses the same durable id after a serverless cold start", () => {
+    const first = createApproval({ type: "TRADE", title: "a", detail: "d", dedupeKey: "stable-key" });
+    _clearApprovals();
+    const second = createApproval({ type: "TRADE", title: "a", detail: "d", dedupeKey: "stable-key" });
+    expect(second.id).toBe(first.id);
   });
 
   it("approves an item and updates stats", () => {
@@ -48,6 +56,14 @@ describe("approvals", () => {
     decideApproval(item.id, "APPROVED");
     const second = decideApproval(item.id, "REJECTED");
     expect(second?.status).toBe("APPROVED"); // unchanged
+  });
+
+  it("returns a failed governed transition to the pending queue", async () => {
+    const item = createApproval({ type: "GENERAL", title: "حملة", detail: "d" });
+    decideApproval(item.id, "APPROVED", "المالك");
+    const reopened = await reopenApprovalCritical(item.id);
+    expect(reopened?.status).toBe("PENDING");
+    expect(reopened?.decidedAt).toBeUndefined();
   });
 
   it("returns null for an unknown id", () => {

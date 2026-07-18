@@ -1,12 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { KeyRound, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
 import OrvantaLogo from "@/components/OrvantaLogo";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [destination, setDestination] = useState("/");
   const [missingSetup, setMissingSetup] = useState(false);
@@ -33,8 +31,10 @@ export default function LoginPage() {
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json.ok) throw new Error(json.error || "تعذر فتح النسخة الخاصة.");
-      router.replace(destination);
-      router.refresh();
+      // Authentication crosses an HttpOnly cookie boundary. A hard navigation
+      // guarantees every browser engine sends the committed cookie on the next
+      // request instead of reusing a cached client-router redirect.
+      window.location.replace(destination);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذر فتح النسخة الخاصة.");
     } finally {

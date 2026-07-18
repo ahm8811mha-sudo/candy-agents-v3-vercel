@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import "./brand.css";
+import "./facade.css";
+import "./orvanta-exact-logo.css";
 import "./orvanta-logo-final.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
@@ -58,8 +60,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#12314f",
-  colorScheme: "light",
+  themeColor: "#061418",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

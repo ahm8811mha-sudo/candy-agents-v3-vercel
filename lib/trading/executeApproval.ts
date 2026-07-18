@@ -11,6 +11,7 @@ import { isAlpacaConfigured, submitBracketOrder, alpacaMode } from "./brokers/al
 import { submitSaudiOrder, saudiBrokerName } from "./brokers/saudiBroker";
 
 export type TradeApprovalMeta = {
+  approvalId?: string;
   symbol?: string;
   assetClass?: string;
   allocation?: number;
@@ -86,8 +87,9 @@ export async function executeApprovedTrade(meta: TradeApprovalMeta): Promise<Exe
           side: "buy" as const,
           takeProfit: round2(entry * (1 + Math.max(0.01, expectedReturn))),
           stopLoss: round2(entry * (1 - Math.max(0.01, expectedReturn * 0.5))),
+          clientOrderId: meta.approvalId ? `orvanta-${meta.approvalId}` : undefined,
         }
-      : { symbol, qty, side: "buy" as const };
+      : { symbol, qty, side: "buy" as const, clientOrderId: meta.approvalId ? `orvanta-${meta.approvalId}` : undefined };
 
   try {
     const res = await submitBracketOrder(order);

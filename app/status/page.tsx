@@ -15,6 +15,13 @@ type Health = {
   productionReady?: boolean;
   readiness?: { checks: Array<{ id: string; label: string; severity: "PASS" | "WARN" | "FAIL"; detail: string }> };
   checks?: Record<string, unknown>;
+  deployment?: {
+    platform: "vercel" | "local";
+    environment: string;
+    isPreview: boolean;
+    productionUrl?: string | null;
+    detailedMonitoring: boolean;
+  };
 };
 
 type SupabaseHealth = {
@@ -32,7 +39,7 @@ const SERVICES: Array<{ key: string; name: string; desc: string }> = [
   { key: "workflowRuntime", name: "محرك التنفيذ الدائم", desc: "المسارات والخطوات والمحاولات وإعادة التشغيل" },
   { key: "outboxPublisher", name: "Outbox والتسليم الخارجي", desc: "نشر الأحداث دون فقدان أو تكرار" },
   { key: "reconciliation", name: "الإثبات والتسوية", desc: "لا يكتمل التنفيذ الخارجي دون Receipt" },
-  { key: "vercelMonitoring", name: "مراقبة النشر (Vercel)", desc: "حالة النشر والبناء" },
+  { key: "vercelMonitoring", name: "النشر على Vercel", desc: "تشغيل النسخة الحالية وحالة الربط التفصيلي لسجل النشر" },
 ];
 
 export default function StatusPage() {
@@ -63,9 +70,13 @@ export default function StatusPage() {
   }, [load]);
 
   const checks = (health?.checks || {}) as Record<string, unknown>;
-  const configuredCount = SERVICES.filter((service) => Boolean(checks[service.key])).length;
   const dbOk = db?.configured && db?.ok;
-  const allCore = Boolean(dbOk && checks.accessGate && checks.tenantIsolation && checks.workflowRuntime && checks.outboxPublisher);
+  const serviceReady = (key: string) => key === "supabase"
+    ? Boolean(checks.supabase && (db === null || dbOk))
+    : Boolean(checks[key]);
+  const configuredCount = SERVICES.filter((service) => serviceReady(service.key)).length;
+  const allCore = Boolean(serviceReady("supabase") && checks.accessGate && checks.tenantIsolation && checks.workflowRuntime && checks.outboxPublisher);
+  const checking = loading && !health;
 
   return (
     <main className="page-wrap">
@@ -82,9 +93,21 @@ export default function StatusPage() {
         </button>
       </header>
 
+      {health?.deployment?.isPreview && (
+        <div className="status-banner warn" role="status">
+          <span className="status-dot warn" />
+          <span>
+            هذه نسخة معاينة معزولة؛ قد لا ترث أسرار Supabase من بيئة الإنتاج.
+            {health.deployment.productionUrl && (
+              <> <a href={health.deployment.productionUrl}>افتح النسخة الإنتاجية</a> لقراءة الحالة التشغيلية الفعلية.</>
+            )}
+          </span>
+        </div>
+      )}
+
       <div className={`status-banner ${allCore ? "ok" : "warn"}`}>
         <span className={`status-dot ${allCore ? "ok" : "warn"}`} />
-        {loading && !health
+        {checking
           ? "جاري الفحص…"
           : allCore
             ? "الأنظمة الجوهرية تعمل والحماية والديمومة ومحرك التنفيذ مفعلة."
@@ -93,7 +116,7 @@ export default function StatusPage() {
 
       <section className="bento-card bento-full" style={{ padding: 0 }}>
         {SERVICES.map((service) => {
-          const enabled = Boolean(checks[service.key]);
+          const enabled = serviceReady(service.key);
           return (
             <div key={service.key} className="status-row">
               <span className={`status-dot ${enabled ? "ok" : "off"}`} />
@@ -102,7 +125,15 @@ export default function StatusPage() {
                 <div className="status-row__desc">{service.desc}</div>
               </span>
               <span className="mini-pill" style={{ color: enabled ? "var(--green)" : "var(--muted)" }}>
-                {enabled ? "مفعّل" : "غير جاهز"}
+                {checking
+                  ? "جارٍ الفحص"
+                  : enabled && service.key === "vercelMonitoring" && !health?.deployment?.detailedMonitoring
+                    ? "النشر يعمل"
+                    : enabled
+                      ? "مفعّل"
+                      : health?.deployment?.isPreview
+                        ? "غير مهيأ للمعاينة"
+                        : "غير جاهز"}
               </span>
             </div>
           );

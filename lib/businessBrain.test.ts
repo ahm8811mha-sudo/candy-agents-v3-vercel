@@ -6,6 +6,14 @@ describe("businessBrain", () => {
     expect(extractRequestedBudget("ميزانية ٥٠,٠٠٠ ريال")).toBe(50000);
   });
 
+  it("does not mistake timelines or counts for a budget", () => {
+    expect(extractRequestedBudget("شغّل تجربة لمدة 14 يومًا مع 5 وكلاء")).toBe(0);
+  });
+
+  it("supports a written thousands multiplier in financial context", () => {
+    expect(extractRequestedBudget("سقف الصرف ١٠ آلاف ريال")).toBe(10000);
+  });
+
   it("attaches confidence, assumptions, and evidence to recommendations", () => {
     const intelligence = evaluateBusiness("إطلاق حملة بميزانية 12000 ريال", {
       income: 50000,

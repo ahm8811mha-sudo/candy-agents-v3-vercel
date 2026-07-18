@@ -23,6 +23,8 @@ jobs:
       ORVANTA_COOKIE_SECURE: "false"
       ORVANTA_TENANT_ID: "golden-star"
       AUTH_ENABLED: "false"
+      PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +45,17 @@ jobs:
 
       - name: Run desktop Chromium and iPhone WebKit journeys
         run: npm run test:e2e
+
+      - name: Record passing browser evidence
+        if: github.event_name == 'push'
+        run: >-
+          npm run readiness:evidence --
+          --key browser-e2e
+          --environment production
+          --status PASS
+          --expires-hours 336
+          --details '{"browsers":["chromium","webkit-iphone"],"source":"main-branch-e2e"}'
+          --optional
 
       - name: Upload Playwright report
         if: always()

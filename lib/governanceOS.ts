@@ -4,7 +4,8 @@
  * Historically this module was a PARALLEL decision center: its own role list,
  * its own `approval_policies` thresholds (auto-approve ≤ 1,500 SAR), its own
  * `decision_audit_log` table, and pending items written to the legacy
- * `approvals` table — none of which the unified decision center could see.
+ * `approvals` table. The inbox aggregated that legacy table for display, but
+ * those rows did not share the canonical durability and execution semantics.
  *
  * It is now a facade over the single authoritative stack:
  *   - authority matrix: lib/company/governance.ts (T0–T3)
@@ -20,10 +21,10 @@
 
 import { getDashboardData } from "./companyExecutionSystem";
 import { getSupabaseAdmin } from "./supabase";
-import { requiredTier, AUTHORITY_MATRIX, type TierRule } from "./company/governance";
+import { effectiveTier, AUTHORITY_MATRIX, type TierRule } from "./company/governance";
 import { COMPANY_AGENTS } from "./company/agents";
 import { createApprovalCritical, listApprovals, hydrateApprovals, type ApprovalItem } from "./approvals";
-import { recordAudit, listAudit, hydrateAudit, type AuditEntry } from "./company/audit";
+import { recordAuditCritical, listAudit, hydrateAudit, type AuditEntry } from "./company/audit";
 
 type GovernedAction = {
   title: string;
@@ -102,7 +103,7 @@ export async function seedGovernanceOS() {
 
 /** Records into the unified append-only audit trail (audit_log). */
 export async function logDecision(input: AuditInput): Promise<AuditEntry> {
-  return recordAudit({
+  return recordAuditCritical({
     actor: input.actorRole || "SYSTEM",
     action: `${input.decisionType}: ${input.action}`,
     entityType: input.entityType || "governance",
@@ -112,6 +113,14 @@ export async function logDecision(input: AuditInput): Promise<AuditEntry> {
       (input.amount ? ` · المبلغ ${number(input.amount).toLocaleString("ar-SA")} ر.س` : "") +
       (input.riskLevel ? ` · المخاطرة ${input.riskLevel}` : "") +
       (input.approvalStatus ? ` · الحالة ${input.approvalStatus}` : ""),
+    metadata: {
+      ...input.metadata,
+      decisionType: input.decisionType,
+      amount: number(input.amount),
+      riskLevel: input.riskLevel || "LOW",
+      approvalStatus: input.approvalStatus || "NOT_REQUIRED",
+      immutableNote: input.immutableNote || null,
+    },
   });
 }
 
@@ -124,14 +133,18 @@ export async function logDecision(input: AuditInput): Promise<AuditEntry> {
 export async function evaluateGovernedAction(action: GovernedAction) {
   const amount = number(action.amount);
   const riskLevel = String(action.riskLevel || "LOW").toUpperCase();
-  const tier = requiredTier(amount);
-  const highRisk = riskLevel === "HIGH";
-  const requiresApproval = highRisk || tier.tier !== "T0";
+  const highRisk = riskLevel === "HIGH" || riskLevel === "CRITICAL";
+  const tier = effectiveTier(amount, riskLevel);
+  const requiresApproval = tier.tier !== "T0";
   const approvalStatus = requiresApproval ? "PENDING" : "APPROVED";
   const policy = {
     ...policyFromTier(tier),
-    ...(highRisk ? { rule_name: `${tier.label} · تصعيد مخاطرة عالية`, auto_approve: false } : {}),
+    ...(highRisk ? { rule_name: `${tier.label} · تصعيد مخاطرة ${riskLevel}`, auto_approve: false } : {}),
   };
+
+  if (requiresApproval && (!action.entityType || !action.entityId)) {
+    throw new Error("الإجراء الذي يتطلب اعتماداً يجب أن يكون مرتبطاً بنوع ومعرّف كيان ثابتين.");
+  }
 
   const audit = await logDecision({
     decisionType: requiresApproval ? "APPROVAL_REQUIRED" : "AUTO_APPROVED",
@@ -143,6 +156,7 @@ export async function evaluateGovernedAction(action: GovernedAction) {
     riskLevel,
     approvalStatus,
     immutableNote: `Governance rule: ${policy.rule_name}. Required role: ${policy.required_role}.`,
+    metadata: { ...action.metadata, governanceTier: tier.tier },
   });
 
   let approval: ApprovalItem | null = null;
@@ -155,7 +169,7 @@ export async function evaluateGovernedAction(action: GovernedAction) {
         (highRisk ? " · مخاطرة عالية (تصعيد إلزامي)" : "") +
         (action.entityType ? ` · النوع ${action.entityType}` : ""),
       amount: amount > 0 ? amount : undefined,
-      requestedRole: action.actorRole || "SYSTEM",
+      requestedRole: tier.approver,
       dedupeKey: action.entityId ? `gov-${action.entityType || "action"}-${action.entityId}` : undefined,
       metadata: {
         ...action.metadata,
@@ -164,6 +178,8 @@ export async function evaluateGovernedAction(action: GovernedAction) {
         entityId: action.entityId ?? null,
         riskLevel,
         tier: tier.tier,
+        governanceTier: tier.tier,
+        requiredRole: tier.approver,
       },
     });
   }

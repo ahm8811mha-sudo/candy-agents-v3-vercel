@@ -12,8 +12,10 @@ import {
   Building2,
   Filter,
   Clock,
+  ExternalLink,
 } from "lucide-react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
+import Link from "next/link";
 
 type InboxItem = {
   id: string;
@@ -73,18 +75,17 @@ export default function InboxCenter() {
   const [deferDate, setDeferDate] = useState("");
   const [deferAssignee, setDeferAssignee] = useState("");
   const [deferError, setDeferError] = useState("");
-  const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean; href?: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/inbox", { cache: "no-store" });
       const json = await res.json();
-      if (json.ok) {
-        setItems(json.items || []);
-        setPending(json.pending || 0);
-      }
-    } catch {
-      // silent
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل الاعتمادات.");
+      setItems(json.items || []);
+      setPending(json.pending || 0);
+    } catch (error) {
+      setExecMsg({ text: error instanceof Error ? error.message : "تعذر تحميل الاعتمادات.", ok: false });
     } finally {
       setLoading(false);
     }
@@ -107,12 +108,26 @@ export default function InboxCenter() {
         body: JSON.stringify({ id: item.id, decision }),
       });
       const json = await res.json();
-      if (json.ok) {
-        if (json.execution) setExecMsg({ text: json.execution.reason, ok: json.execution.executed });
-        await load();
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تسجيل قرار الاعتماد.");
+      if (decision === "APPROVED") {
+        const delivery = json.execution?.delivery;
+        const projectId = delivery?.projectId || json.execution?.entityId;
+        const completed = Number(delivery?.completed || 0);
+        const total = Number(delivery?.total || 0);
+        const attention = delivery?.status === "EXECUTION_ATTENTION";
+        setExecMsg({
+          text: attention
+            ? `تم الاعتماد، لكن المشروع يحتاج متابعة تنفيذية (${completed}/${total} نتائج مكتملة).`
+            : `تم الاعتماد وتشغيل الوكلاء. عادت ${completed} من ${total} نتائج إلى ملف المشروع.`,
+          ok: !attention,
+          href: projectId ? `/operations?project=${encodeURIComponent(projectId)}#approved-projects` : undefined,
+        });
+      } else {
+        setExecMsg({ text: "تم رفض الطلب وتسجيل القرار.", ok: true });
       }
-    } catch {
-      // silent
+      await load();
+    } catch (error) {
+      setExecMsg({ text: error instanceof Error ? error.message : "تعذر تسجيل قرار الاعتماد.", ok: false });
     } finally {
       setBusy(null);
     }
@@ -168,14 +183,14 @@ export default function InboxCenter() {
         body: JSON.stringify({ sourceType: "company-approval", sourceId: item.id, title: item.title, action, ...extra }),
       });
       const json = await res.json();
-      if (json.ok) {
-        setNoteFor(null);
-        setForwardFor(null);
-        setNoteText("");
-        await load();
-      }
-    } catch {
-      // silent
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تسجيل القرار الإداري.");
+      setNoteFor(null);
+      setForwardFor(null);
+      setNoteText("");
+      setExecMsg({ text: "تم تسجيل القرار الإداري بنجاح.", ok: true });
+      await load();
+    } catch (error) {
+      setExecMsg({ text: error instanceof Error ? error.message : "تعذر تسجيل القرار الإداري.", ok: false });
     } finally {
       setBusy(null);
     }
@@ -219,9 +234,10 @@ export default function InboxCenter() {
       </div>
 
       {execMsg && (
-        <p className={`notice ${execMsg.ok ? "done" : ""}`} style={{ color: execMsg.ok ? "var(--green)" : "var(--amber)" }}>
-          {execMsg.ok ? "✅ " : "ℹ️ "}{execMsg.text}
-        </p>
+        <div className={`notice inbox-execution-result ${execMsg.ok ? "done" : "warning"}`}>
+          <span>{execMsg.ok ? "✅ " : "⚠️ "}{execMsg.text}</span>
+          {execMsg.href && <Link className="secondary-btn btn-sm" href={execMsg.href}>فتح ملف المشروع <ExternalLink size={14} /></Link>}
+        </div>
       )}
 
       {loading && (

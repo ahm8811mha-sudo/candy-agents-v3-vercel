@@ -6,6 +6,7 @@ import { createCompanyEvent } from "@/lib/company-os/events";
 import { appendCompanyEvent } from "@/lib/company-os/outboxPublisher";
 import { advanceWorkflowUntilBlocked } from "@/lib/company-os/runtimeRunner";
 import type { ExecutiveRole, RiskLevel } from "@/lib/company-os/types";
+import { assertApprovalDecisionAllowedDuringOwnerAbsence } from "@/lib/company/ownerAbsence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,6 +57,24 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    await assertApprovalDecisionAllowedDuringOwnerAbsence({
+      tenantId: auth.context.tenantId,
+      actorRole: auth.context.actor.role,
+      decision: vote as "APPROVED" | "REJECTED",
+      approval: {
+        id: decisionId,
+        type: "DECISION_PACKET",
+        amount: Number(decision.financial_impact_sar || 0),
+        requestedRole: executiveRole,
+        metadata: {
+          decisionType: decision.decision_type || decision.title || "DECISION_PACKET",
+          riskLevel: decision.risk_level || "LOW",
+          strategic: decision.strategic === true,
+          regulatoryAction: decision.risk_level === "CRITICAL",
+        },
+      },
+    });
 
     const { data: priorVotes, error: votesError } = await supabase
       .from("decision_approvals")
@@ -189,7 +208,7 @@ export async function POST(req: NextRequest) {
     const typed = error as Error & { code?: string; decision?: unknown };
     return NextResponse.json(
       { ok: false, code: typed.code, policy: typed.decision, error: typed.message || "Decision vote failed", requestId: auth.context.requestId },
-      { status: typed.code === "POLICY_DENIED" ? 403 : 500 }
+      { status: typed.code === "POLICY_DENIED" ? 403 : typed.code === "OWNER_ABSENCE_ESCALATION" ? 409 : 500 }
     );
   }
 }

@@ -4,6 +4,7 @@ import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
 import { normalizeActionInitialStatus } from "./actionQueue";
 import { recordAudit } from "./audit";
+import { createExecutionBundle } from "./executionRepository";
 import { listIdeas, markIdeaExecuted } from "./ideas";
 import { createApprovalCritical } from "../approvals";
 
@@ -25,8 +26,6 @@ export type ApprovedIdeaExecutionResult = {
   };
   reason?: string;
 };
-
-const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 function metadataValue(metadata: Record<string, unknown> | undefined, key: string): string {
   const value = metadata?.[key];
@@ -109,8 +108,8 @@ export async function executeApprovedIdea(
     };
   }
 
-  // Idempotency: an idea converts into exactly ONE project. Re-running the
-  // conversion (manual button, repeated approval) returns the existing link.
+  // Fast-path idempotency for the UI: an idea converts into exactly ONE
+  // project (the execution bundle's idempotencyKey guards the DB layer too).
   if (idea.executedProjectId) {
     return {
       ok: true,
@@ -149,19 +148,22 @@ export async function executeApprovedIdea(
     };
   }
 
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .insert({
+  const execution = await createExecutionBundle({
+    source: "approved-idea",
+    idempotencyKey: `idea:${idea.id}`,
+    actorId: actor,
+    actorRole: "OWNER",
+    project: {
       name: idea.title.slice(0, 120),
       request,
       status: "ACTIVE",
       budget: idea.budgetSAR,
-      approved_budget: idea.budgetSAR,
-      health_score: intelligence.healthScore,
-      risk_level: intelligence.riskLevel,
-      approval_status: "APPROVED",
-      strategic_direction: intelligence.actionToday,
-      financial_snapshot: {
+      approvedBudget: idea.budgetSAR,
+      healthScore: intelligence.healthScore,
+      riskLevel: intelligence.riskLevel,
+      approvalStatus: "APPROVED",
+      strategicDirection: intelligence.actionToday,
+      financialSnapshot: {
         source: "approved_idea",
         ideaId: idea.id,
         approvalId: idea.approvalId,
@@ -174,37 +176,94 @@ export async function executeApprovedIdea(
         assumptions: intelligence.assumptions,
         evidence: intelligence.evidence,
       },
-      next_review_at: new Date(Date.now() + Math.max(idea.horizonDays, 14) * 86_400_000).toISOString(),
-    })
-    .select("id,name,status,created_at")
-    .single();
+      nextReviewAt: new Date(Date.now() + Math.max(idea.horizonDays, 14) * 86_400_000).toISOString(),
+    },
+    // Money-bearing steps start WAITING_FUNDING: the CFO sees a BUDGET item
+    // in the decision center stating the amount, and the step only becomes
+    // executable after that sign-off (see the funding approvals below).
+    tasks: blueprint.tasks.map((task) => ({
+      title: task.title,
+      description: task.content,
+      content: task.content,
+      status: task.requiresFunding ? "WAITING_FUNDING" : "TODO",
+      priority: task.priority,
+      ownerRole: task.ownerRole,
+      kpiName: task.kpiName,
+      kpiTarget: task.kpiTarget,
+      dueDate: new Date(Date.now() + task.dueDays * 86_400_000).toISOString(),
+    })),
+    kpis: blueprint.kpis.map((kpi) => ({
+      name: kpi.name,
+      target: kpi.target,
+      current: 0,
+      unit: kpi.unit,
+      status: kpi.status,
+      dueDate: new Date(Date.now() + kpi.dueDays * 86_400_000).toISOString(),
+    })),
+    actions: blueprint.actions.map((action) => ({
+      actionType: action.actionType,
+      title: action.title,
+      description: action.description,
+      status: normalizeActionInitialStatus({
+        requiresApproval: false,
+        executionMode: action.executionMode,
+        approvalStatus: "APPROVED",
+      }),
+      executionMode: action.executionMode,
+      provider: action.provider || "internal",
+      requiresApproval: false,
+      approvalStatus: "APPROVED",
+      payload: {
+        source: "approved_idea",
+        ideaId: idea.id,
+        approvalId: idea.approvalId,
+        priority: action.priority,
+        originalRequiresApproval: action.requiresApproval,
+        confidence: action.confidence,
+        assumptions: action.assumptions,
+        evidence: action.evidence,
+        blockedBy: action.blockedBy || [],
+      },
+    })),
+    alerts: intelligence.alerts.map((alert) => ({
+      severity: alert.severity,
+      title: alert.title,
+      message: alert.message,
+      source: alert.source,
+      metadata: alert.metadata || {},
+    })),
+    memory: {
+      eventType: "APPROVED_IDEA_EXECUTION",
+      title: idea.title,
+      summary: `تم تحويل الفكرة المعتمدة إلى مشروع تنفيذي. الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA")} ريال. المهام: ${blueprint.tasks.length}. المؤشرات: ${blueprint.kpis.length}.`,
+      decisionQuality: intelligence.riskLevel === "LOW" ? "PROMISING" : "WATCH",
+      metadata: {
+        ideaId: idea.id,
+        approvalId: idea.approvalId,
+        aggregate: idea.aggregate,
+        confidence: intelligence.confidence,
+        assumptions: intelligence.assumptions,
+        evidence: intelligence.evidence,
+      },
+    },
+    audit: {
+      action: "EXECUTE_APPROVED_IDEA",
+      detail: `تم تحويل الفكرة المعتمدة «${idea.title}» إلى مشروع ومهام وKPIs وأفعال تنفيذية في معاملة واحدة.`,
+      tier: idea.tier,
+      metadata: { ideaId: idea.id, approvalId: idea.approvalId },
+    },
+  });
 
-  if (projectError) throw projectError;
-  const projectId = String(project.id);
+  const projectId = String((execution.project as Record<string, unknown>).id);
+  markIdeaExecuted(idea.id, projectId);
 
-  // Money-bearing steps start WAITING_FUNDING: the CFO/owner sees a BUDGET
-  // item in the decision center stating the required amount, and the step
-  // only becomes executable after that sign-off.
-  const taskRows = blueprint.tasks.map((task) => ({
-    id: newId("idea-task"),
-    project_id: projectId,
-    title: task.title,
-    description: task.content,
-    content: task.content,
-    status: task.requiresFunding ? "WAITING_FUNDING" : "TODO",
-    priority: task.priority,
-    progress_percent: 0,
-    owner_role: task.ownerRole,
-    kpi_name: task.kpiName,
-    kpi_target: task.kpiTarget,
-    due_date: new Date(Date.now() + task.dueDays * 86_400_000).toISOString(),
-  }));
-  const { error: taskError } = await supabase.from("tasks").insert(taskRows);
-  if (taskError) throw taskError;
-
+  // Funding gate: each WAITING_FUNDING step raises a BUDGET item to the CFO
+  // in the unified decision center with the estimated amount.
   for (let index = 0; index < blueprint.tasks.length; index += 1) {
     const step = blueprint.tasks[index];
     if (!step.requiresFunding) continue;
+    const bundleTask = execution.tasks[index] as Record<string, unknown> | undefined;
+    if (!bundleTask?.id) continue;
     await createApprovalCritical({
       type: "BUDGET",
       title: `اعتماد مالي مطلوب: ${step.title}`,
@@ -213,86 +272,16 @@ export async function executeApprovedIdea(
       ).toLocaleString("ar-SA")} ر.س قبل التنفيذ — لا تُنفَّذ الخطوة قبل هذا الاعتماد.`,
       amount: step.estimatedCostSAR,
       requestedRole: "CFO",
-      dedupeKey: `task-funding-${taskRows[index].id}`,
+      dedupeKey: `task-funding-${bundleTask.id}`,
       metadata: {
         kind: "TASK_FUNDING",
-        taskId: taskRows[index].id,
+        taskId: String(bundleTask.id),
         projectId,
         ideaId: idea.id,
         estimatedCostSAR: step.estimatedCostSAR ?? null,
       },
     });
   }
-
-  const kpiRows = blueprint.kpis.map((kpi) => ({
-    project_id: projectId,
-    name: kpi.name,
-    target: kpi.target,
-    current: 0,
-    unit: kpi.unit,
-    status: kpi.status,
-    due_date: new Date(Date.now() + kpi.dueDays * 86_400_000).toISOString(),
-  }));
-  const { error: kpiError } = await supabase.from("business_kpis").insert(kpiRows);
-  if (kpiError) throw kpiError;
-
-  const actionRows = blueprint.actions.map((action) => ({
-    project_id: projectId,
-    action_type: action.actionType,
-    title: action.title,
-    description: action.description,
-    status: normalizeActionInitialStatus({
-      requiresApproval: false,
-      executionMode: action.executionMode,
-      approvalStatus: "APPROVED",
-    }),
-    execution_mode: action.executionMode,
-    provider: action.provider || "internal",
-    requires_approval: false,
-    approval_status: "APPROVED",
-    payload: {
-      source: "approved_idea",
-      ideaId: idea.id,
-      approvalId: idea.approvalId,
-      priority: action.priority,
-      originalRequiresApproval: action.requiresApproval,
-      confidence: action.confidence,
-      assumptions: action.assumptions,
-      evidence: action.evidence,
-      blockedBy: action.blockedBy || [],
-    },
-    attempts: 0,
-  }));
-  const { error: actionError } = await supabase.from("business_actions").insert(actionRows);
-  if (actionError) throw actionError;
-
-  const { error: memoryError } = await supabase.from("business_memory").insert({
-    event_type: "APPROVED_IDEA_EXECUTION",
-    title: idea.title,
-    summary: `تم تحويل الفكرة المعتمدة إلى مشروع تنفيذي. الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA")} ريال. المهام: ${taskRows.length}. المؤشرات: ${kpiRows.length}.`,
-    decision_quality: intelligence.riskLevel === "LOW" ? "PROMISING" : "WATCH",
-    metadata: {
-      ideaId: idea.id,
-      approvalId: idea.approvalId,
-      projectId,
-      aggregate: idea.aggregate,
-      confidence: intelligence.confidence,
-      assumptions: intelligence.assumptions,
-      evidence: intelligence.evidence,
-    },
-  });
-  if (memoryError) throw memoryError;
-
-  markIdeaExecuted(idea.id, projectId);
-
-  recordAudit({
-    actor,
-    action: "EXECUTE_APPROVED_IDEA",
-    entityType: "project",
-    entityId: projectId,
-    detail: `تم تحويل الفكرة المعتمدة «${idea.title}» إلى مشروع ومهام وKPIs وأفعال تنفيذية.`,
-    tier: idea.tier,
-  });
 
   invalidateCache("dashboard-data");
 
@@ -301,7 +290,7 @@ export async function executeApprovedIdea(
     ideaId,
     mode: "durable",
     saved: true,
-    project: project as ApprovedIdeaExecutionResult["project"],
-    counts: { tasks: taskRows.length, kpis: kpiRows.length, actions: actionRows.length },
+    project: execution.project as ApprovedIdeaExecutionResult["project"],
+    counts: { tasks: execution.tasks.length, kpis: execution.kpis.length, actions: blueprint.actions.length },
   };
 }

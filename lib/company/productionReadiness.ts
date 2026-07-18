@@ -1,4 +1,4 @@
-import { hasSupabaseEnv } from "../supabase";
+import { getSupabaseEnvironmentReadiness, hasSupabaseEnv } from "../supabase";
 import { isAuthEnabled, isPersonalOwnerMode } from "../auth";
 import { isOwnerAccessConfigured, hasDedicatedCookieSecret } from "../security/personalAccess";
 import { getGoogleWorkspaceStatus } from "../integrations/googleWorkspace";
@@ -43,7 +43,8 @@ function enabled(name: string) {
 export function getProductionReadiness(): ProductionReadiness {
   const mode = process.env.NODE_ENV === "production" ? "production" : process.env.NODE_ENV === "test" ? "test" : "development";
   const personalMode = isPersonalOwnerMode();
-  const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const supabaseEnvironment = getSupabaseEnvironmentReadiness();
+  const hasServerSecret = supabaseEnvironment.hasServerKey;
   const hasPublicAnonServerWriteFallback = Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const personalAccessCodeConfigured = Boolean(process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY);
   const googleWorkspace = getGoogleWorkspaceStatus();
@@ -92,7 +93,7 @@ export function getProductionReadiness(): ProductionReadiness {
       hasDedicatedCookieSecret(),
       hasDedicatedCookieSecret()
         ? "ORVANTA_OWNER_COOKIE_SECRET is set: session signing is independent of the database key."
-        : "Owner cookies are signed with SUPABASE_SERVICE_ROLE_KEY as a fallback. Set a dedicated ORVANTA_OWNER_COOKIE_SECRET so session security is not coupled to (and rotated with) the database key."
+        : "Owner cookies use the Supabase server secret as a fallback. Set a dedicated ORVANTA_OWNER_COOKIE_SECRET so session security is not coupled to (and rotated with) the database key."
     ),
     check(
       "basic-auth-disabled",
@@ -105,10 +106,12 @@ export function getProductionReadiness(): ProductionReadiness {
     check(
       "supabase-service-role",
       "Durable server persistence",
-      hasSupabaseEnv() && hasServiceRole,
-      hasServiceRole
-        ? "SUPABASE_SERVICE_ROLE_KEY is configured for server-only writes."
-        : "SUPABASE_SERVICE_ROLE_KEY is missing. Projects, approvals, audit, actions, workflow state, and ledger cannot be durable."
+      hasSupabaseEnv() && hasServerSecret,
+      supabaseEnvironment.configurationIssue === "PROJECT_MISMATCH"
+        ? "The Supabase URL and server key belong to different projects. Replace the Vercel server key with a key from the configured project; writes remain blocked until they match."
+        : hasServerSecret
+        ? `${supabaseEnvironment.keySource} is configured for server-only writes.`
+        : "SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY) is missing. Projects, approvals, audit, actions, workflow state, and ledger cannot be durable."
     ),
     check(
       "core-schema-ready",
@@ -117,6 +120,12 @@ export function getProductionReadiness(): ProductionReadiness {
       enabled("ORVANTA_CORE_SCHEMA_READY")
         ? "Core completion migration is confirmed as applied."
         : "Apply the ordered Supabase migrations in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
+    ),
+    check(
+      "execution-transaction",
+      "Atomic execution bundle",
+      false,
+      "No current rollback-safe execution transaction evidence is stored yet."
     ),
     check(
       "migration-baseline",

@@ -99,7 +99,7 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<server-only service role key>
+SUPABASE_SECRET_KEY=<server-only secret key>
 
 AUTH_ENABLED=true
 API_SECRET_KEY=<strong internal api secret>
@@ -123,12 +123,13 @@ GOOGLE_DRIVE_FOLDER_ID=
 
 Important security rule:
 
-- Server writes require `SUPABASE_SERVICE_ROLE_KEY`.
+- Server writes require `SUPABASE_SECRET_KEY`; the legacy `SUPABASE_SERVICE_ROLE_KEY` name remains supported during migration.
 - Do not use `SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` for governance, approvals, ledger, audit, or execution writes.
 - Keep `AUTH_ENABLED=true` in production.
 - `/api/health` exposes production readiness checks. Production should not be considered ready unless `productionReady=true`.
 - Google OAuth secrets and refresh tokens must remain server-only and must never use a `NEXT_PUBLIC_*` name.
-- Keep `GOOGLE_INTEGRATIONS_ENABLED=false` until OAuth is configured and tested.
+- Keep `GOOGLE_INTEGRATIONS_ENABLED=false` until OAuth is configured and tested, then set it to `true`.
+- For existing linked deployments where the flag is absent, complete OAuth credentials activate the connector automatically; an explicit `false` always remains a hard kill switch.
 
 Without Supabase, the app still runs in memory/demo mode. That is acceptable for development only. Production needs Supabase persistence.
 
@@ -154,6 +155,23 @@ Full configuration, scopes, safety behavior, and acceptance tests:
 ```txt
 docs/GOOGLE_WORKSPACE_INTEGRATION.md
 ```
+
+## Alpaca Trading Center
+
+The trading center defaults to Alpaca Paper. Add the two server-only Paper
+credentials in Vercel, leave `ALPACA_LIVE=false`, and redeploy:
+
+```env
+ALPACA_API_KEY=...
+ALPACA_API_SECRET=...
+ALPACA_LIVE=false
+ALPACA_SCALP_SYMBOL=SPY
+ALPACA_DATA_FEED=iex
+```
+
+Real-money routing remains locked unless all three independent live gates are
+explicitly enabled. See `docs/ALPACA_TRADING_SETUP_AR.md` for the safe setup and
+verification checklist.
 
 ## Database
 
@@ -217,7 +235,7 @@ POST /api/company
 Execution API:
 
 ```txt
-POST /api/company-execution
+POST /api/owner-execution
 { "request": "اعتماد مشروع متجر إلكتروني بميزانية 50,000 ريال وتحويله إلى مشروع ومهام" }
 ```
 

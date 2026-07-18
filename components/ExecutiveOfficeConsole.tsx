@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowRight,
@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ActionableMetricGrid, { type ActionableMetric } from "./ActionableMetricGrid";
+import { InitiativeExecutionPanel } from "./InitiativeExecutionPanel";
+import OwnerAbsencePanel from "./OwnerAbsencePanel";
+import type { InitiativePlan } from "@/lib/company/initiativePlanning";
 
 type OfficeData = {
   operatingBrief?: {
@@ -35,10 +38,10 @@ type OfficeData = {
     strategy?: { focus?: string; investment_thesis?: string };
   };
   dashboard?: {
-    projects?: Array<{ id: string; name: string; status?: string; risk_level?: string; created_at?: string }>;
-    tasks?: Array<{ id: string; title?: string; content?: string; status: string; owner_role?: string; priority?: string }>;
+    projects?: Array<{ id: string; project_number?: number | null; project_date?: string | null; name: string; request?: string; status?: string; approval_status?: string; risk_level?: string; financial_snapshot?: Record<string, unknown>; created_at?: string }>;
+    tasks?: Array<{ id: string; project_id?: string | null; task_number?: string | null; task_date?: string | null; title?: string; content?: string; status: string; owner_role?: string; priority?: string }>;
     approvals?: Array<{ id: string; entity_type: string; status: string; notes?: string }>;
-    actions?: Array<{ id: string; title: string; status: string; approval_status?: string; provider?: string }>;
+    actions?: Array<{ id: string; project_id?: string | null; action_number?: string | null; action_date?: string | null; title: string; status: string; approval_status?: string; provider?: string; error?: string | null; payload?: Record<string, unknown> | null; result?: Record<string, unknown> | null }>;
     alerts?: Array<{ id: string; severity: string; title: string; message: string }>;
     kpis?: Array<{ id: string; name: string; target: number; current?: number; unit: string; status: string }>;
   };
@@ -48,29 +51,72 @@ type OfficeData = {
   auditLog?: Array<{ id: string; decision_type: string; action: string; approval_status: string; created_at: string }>;
 };
 
+type DatabaseIssue = {
+  code: string;
+  isPreview: boolean;
+  productionUrl: string | null;
+  missingEnvironmentVariables: string[];
+  message: string;
+};
+
+function databaseIssueFromResponse(json: Record<string, unknown>): DatabaseIssue | null {
+  const code = String(json.code || "");
+  if (!["SUPABASE_NOT_CONFIGURED", "SUPABASE_AUTH_REJECTED", "SUPABASE_SCHEMA_UNAVAILABLE", "SUPABASE_UNAVAILABLE"].includes(code)) return null;
+  const deployment = (json.deployment || {}) as Record<string, unknown>;
+  return {
+    code,
+    isPreview: deployment.isPreview === true,
+    productionUrl: typeof deployment.productionUrl === "string" ? deployment.productionUrl : null,
+    missingEnvironmentVariables: Array.isArray(json.missingEnvironmentVariables)
+      ? json.missingEnvironmentVariables.filter((item): item is string => typeof item === "string")
+      : [],
+    message: typeof json.error === "string" ? json.error : "قاعدة البيانات غير مهيأة لهذا النشر.",
+  };
+}
+
+function apiErrorMessage(json: Record<string, unknown>, fallback: string) {
+  return typeof json.error === "string" ? json.error : fallback;
+}
+
+function initiativePlanFromProject(project: NonNullable<NonNullable<OfficeData["dashboard"]>["projects"]>[number] | undefined) {
+  const plan = project?.financial_snapshot?.initiativePlan;
+  return plan && typeof plan === "object" ? plan as InitiativePlan : null;
+}
+
 export default function ExecutiveOfficeConsole() {
   const [data, setData] = useState<OfficeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [databaseIssue, setDatabaseIssue] = useState<DatabaseIssue | null>(null);
+  const [selectedInitiativeId, setSelectedInitiativeId] = useState("");
 
-  async function load() {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/executive-office", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل مكتب المدير التنفيذي.");
-      setData(json);
+      const res = await fetch("/api/executive-office", { cache: "no-store", signal });
+      const json = (await res.json()) as Record<string, unknown>;
+      const issue = databaseIssueFromResponse(json);
+      if (issue) {
+        setData(null);
+        setDatabaseIssue(issue);
+        return;
+      }
+      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تحميل مكتب المدير التنفيذي."));
+      setData(json as unknown as OfficeData);
+      setDatabaseIssue(null);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "تعذر تحميل مكتب المدير التنفيذي.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }
+  }, []);
 
   async function run(action: string, payload: Record<string, unknown> = {}) {
+    if (databaseIssue) return false;
     setWorking(action);
     setMessage("");
     setError("");
@@ -80,12 +126,27 @@ export default function ExecutiveOfficeConsole() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...payload }),
       });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ أمر مكتب CEO.");
+      const json = (await res.json()) as Record<string, unknown>;
+      const issue = databaseIssueFromResponse(json);
+      if (issue) {
+        setData(null);
+        setDatabaseIssue(issue);
+        return false;
+      }
+      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تنفيذ أمر مكتب CEO."));
       setMessage(successText(action));
+      if (action === "execute") {
+        setSelectedInitiativeId("");
+        const destination = new URL(window.location.href);
+        destination.searchParams.delete("project");
+        destination.hash = "initiative-delivery";
+        window.history.replaceState(null, "", destination);
+      }
       await load();
+      return json;
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر مكتب CEO.");
+      return false;
     } finally {
       setWorking("");
     }
@@ -93,8 +154,9 @@ export default function ExecutiveOfficeConsole() {
 
   function submitDirective(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("create-item", {
+    void run("create-item", {
       data: {
         title: String(form.get("title") || ""),
         notes: String(form.get("notes") || ""),
@@ -103,19 +165,25 @@ export default function ExecutiveOfficeConsole() {
         ownerRole: "CEO Office",
         dueDays: Number(form.get("dueDays") || 1),
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitExecution(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("execute", { request: String(form.get("request") || "") }).then(() => event.currentTarget.reset());
+    void run("execute", { request: String(form.get("request") || "") }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitCalendar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("calendar-event", {
+    void run("calendar-event", {
       data: {
         title: String(form.get("title") || ""),
         eventType: String(form.get("eventType") || "FOLLOW_UP"),
@@ -123,13 +191,16 @@ export default function ExecutiveOfficeConsole() {
         durationMinutes: Number(form.get("durationMinutes") || 30),
         notes: String(form.get("notes") || ""),
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   function submitMinutes(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const form = new FormData(event.currentTarget);
-    run("meeting-minutes", {
+    void run("meeting-minutes", {
       data: {
         title: String(form.get("title") || ""),
         attendees: String(form.get("attendees") || "CEO Office,CFO,Marketing Director")
@@ -139,14 +210,36 @@ export default function ExecutiveOfficeConsole() {
         decisions: String(form.get("decisions") || ""),
         actionItems: [{ title: String(form.get("actionItem") || "Follow up decision"), owner: "Chief of Staff" }],
       },
-    }).then(() => event.currentTarget.reset());
+    }).then((succeeded) => {
+      if (succeeded) formElement.reset();
+    });
   }
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  useEffect(() => {
+    const requestedProject = new URLSearchParams(window.location.search).get("project");
+    if (requestedProject) setSelectedInitiativeId(requestedProject);
   }, []);
 
   const brief = data?.operatingBrief;
+  const initiativeProjects = data?.dashboard?.projects?.filter((project) => initiativePlanFromProject(project)) || [];
+  const initiativeProject = initiativeProjects.find((project) => project.id === selectedInitiativeId) || initiativeProjects[0];
+  const initiativePlan = initiativePlanFromProject(initiativeProject);
+  const databaseReady = Boolean(data && !databaseIssue);
+  const databaseBadge = databaseReady
+    ? "Command ready"
+    : loading
+      ? "جارٍ التحقق"
+      : databaseIssue?.isPreview
+        ? "Preview isolated"
+        : databaseIssue?.code === "SUPABASE_AUTH_REJECTED"
+          ? "Database key rejected"
+          : "Database required";
 
   return (
     <main className="company-app ops-console">
@@ -164,41 +257,70 @@ export default function ExecutiveOfficeConsole() {
           </p>
           <div className="department-hero-actions">
             <span>
-              <Target size={16} /> صحة الشركة {brief?.healthScore || 0}/100
+              <Target size={16} /> صحة الشركة {brief ? `${brief.healthScore}/100` : "—"}
             </span>
             <span>
-              <ShieldAlert size={16} /> المخاطر {brief?.riskLevel || "LOW"}
+              <ShieldAlert size={16} /> المخاطر {brief?.riskLevel || "—"}
             </span>
           </div>
         </div>
         <div className="department-badge">
           <strong>CEO Office</strong>
-          <small>Command ready</small>
+          <small className={databaseReady ? "" : "is-warning"}>
+            {databaseBadge}
+          </small>
         </div>
       </section>
 
       <section className="enterprise-actions">
-        <button className="secondary-btn" onClick={load} disabled={loading}>
+        <button className="secondary-btn" onClick={() => void load()} disabled={loading}>
           {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
           تحديث المكتب
         </button>
-        <button className="primary-btn" onClick={() => run("radar")} disabled={Boolean(working)}>
+        <button className="primary-btn" onClick={() => void run("radar")} disabled={Boolean(working) || !databaseReady}>
           {working === "radar" ? <Loader2 className="spin" size={18} /> : <Radar size={18} />}
           تشغيل رادار الفرص
         </button>
-        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "MORNING" })} disabled={Boolean(working)}>
+        <button className="secondary-btn" onClick={() => void run("daily-brief", { briefType: "MORNING" })} disabled={Boolean(working) || !databaseReady}>
           {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <ClipboardList size={18} />}
           ملخص صباحي
         </button>
-        <button className="secondary-btn" onClick={() => run("daily-brief", { briefType: "END_OF_DAY" })} disabled={Boolean(working)}>
+        <button className="secondary-btn" onClick={() => void run("daily-brief", { briefType: "END_OF_DAY" })} disabled={Boolean(working) || !databaseReady}>
           {working === "daily-brief" ? <Loader2 className="spin" size={18} /> : <CalendarCheck size={18} />}
           ملخص نهاية اليوم
         </button>
+        {databaseIssue && (
+          <div className="status-banner warn executive-database-status" role="status">
+            <span className="status-dot warn" />
+            <div>
+              <strong>
+                {databaseIssue.isPreview
+                  ? "نسخة المعاينة معزولة عن بيانات الإنتاج"
+                  : databaseIssue.code === "SUPABASE_AUTH_REJECTED"
+                    ? "مفتاح قاعدة البيانات مرفوض"
+                    : "اتصال قاعدة البيانات مطلوب"}
+              </strong>
+              <p>{databaseIssue.message}</p>
+              <div className="executive-database-status__actions">
+                {databaseIssue.isPreview && databaseIssue.productionUrl ? (
+                  <a className="secondary-btn btn-sm" href={databaseIssue.productionUrl}>فتح النسخة الإنتاجية</a>
+                ) : (
+                  <Link className="secondary-btn btn-sm" href="/status">فتح حالة النظام</Link>
+                )}
+              </div>
+              {databaseIssue.missingEnvironmentVariables.length > 0 && (
+                <small>المتغيرات المطلوبة في بيئة النشر: {databaseIssue.missingEnvironmentVariables.join("، ")}</small>
+              )}
+            </div>
+          </div>
+        )}
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
 
-      <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
+      {data && (
+        <>
+          <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
 
       <section className="ops-card executive-brief">
         <span className="eyebrow">
@@ -208,21 +330,47 @@ export default function ExecutiveOfficeConsole() {
         <p>{data?.enterprise?.strategy?.investment_thesis}</p>
       </section>
 
+      <OwnerAbsencePanel />
+
+      {initiativeProject && initiativePlan && (
+        <>
+          {initiativeProjects.length > 1 && (
+            <section className="ops-card initiative-picker" aria-labelledby="initiative-picker-title">
+              <div><span className="eyebrow">سجل المبادرات</span><h2 id="initiative-picker-title">افتح خطة أو نتيجة محددة</h2><p>إنشاء طلب جديد لا يخفي مسار الطلبات السابقة أو نتائجها.</p></div>
+              <label>المبادرة المعروضة
+                <select className="input" value={initiativeProject.id} onChange={(event) => {
+                  const projectId = event.target.value;
+                  setSelectedInitiativeId(projectId);
+                  const destination = new URL(window.location.href);
+                  destination.searchParams.set("project", projectId);
+                  destination.hash = "initiative-delivery";
+                  window.history.replaceState(null, "", destination);
+                }}>
+                  {initiativeProjects.map((project) => <option key={project.id} value={project.id}>{project.project_number ? `#${project.project_number} · ` : ""}{project.name} - {project.status || "ACTIVE"}</option>)}
+                </select>
+              </label>
+            </section>
+          )}
+          <InitiativeExecutionPanel plan={initiativePlan} project={initiativeProject} tasks={data.dashboard?.tasks || []} actions={data.dashboard?.actions || []} />
+        </>
+      )}
+
       <section className="ops-workbench">
         <form className="ops-card" onSubmit={submitExecution}>
-          <h2>تشغيل طلب شركة كامل</h2>
+          <h2>اطلب دراسة ثم تنفيذًا كاملًا</h2>
+          <p className="form-helper">يستدعي المكتب وكلاء التسويق والمالية والتشغيل والمشتريات والمخاطر، ويجمع خطة واحدة ثم يبدأ التنفيذ بعد اعتمادك.</p>
           <label>
             أمر تنفيذي
             <textarea
               className="textarea"
               name="request"
-              placeholder="مثال: أطلق تجربة بيع منتج هدايا بميزانية 10,000 ريال مع خطة تسويق وتشغيل"
+              defaultValue="ادرس فكرة عرض منتجات المصانع عبر Amazon والحصول على عمولة من المبيعات، وقارن نماذج التنفيذ ثم جهّز تجربة دون شراء مخزون."
               required
             />
           </label>
           <button className="primary-btn" disabled={Boolean(working)}>
             {working === "execute" ? <Loader2 className="spin" size={18} /> : <BriefcaseBusiness size={18} />}
-            تحويل الأمر إلى مشروع ومهام واعتمادات
+            استدعاء الوكلاء وبناء خطة الاعتماد
           </button>
         </form>
 
@@ -317,7 +465,7 @@ export default function ExecutiveOfficeConsole() {
       </section>
 
       <section className="ops-board">
-        <Panel title="متابعات مكتب CEO">
+        <Panel title="متابعات مكتب CEO" id="ceo-follow-ups">
           {(data?.enterprise?.ceoItems || []).slice(0, 9).map((item) => (
             <ActionRow
               key={item.id}
@@ -331,10 +479,10 @@ export default function ExecutiveOfficeConsole() {
         </Panel>
         <Panel title="المشاريع والمهام">
           {(data?.dashboard?.projects || []).slice(0, 4).map((project) => (
-            <Statement key={project.id} label={project.name} value={project.status || "ACTIVE"} />
+            <Statement key={project.id} label={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}${project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA")}` : ""}`} value={project.status || "ACTIVE"} />
           ))}
           {(data?.dashboard?.tasks || []).slice(0, 6).map((task) => (
-            <Statement key={task.id} label={task.title || task.content || "مهمة"} value={task.status} />
+            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA")}` : ""}`} value={task.status} />
           ))}
         </Panel>
         <Panel title="الاعتمادات والمخاطر">
@@ -380,13 +528,15 @@ export default function ExecutiveOfficeConsole() {
           ))}
         </Panel>
       </section>
+        </>
+      )}
     </main>
   );
 }
 
 function successText(action: string) {
   if (action === "radar") return "تم تشغيل رادار الفرص وربطه بمكتب CEO.";
-  if (action === "execute") return "تم تحويل الأمر التنفيذي إلى مشروع ومهام واعتمادات.";
+  if (action === "execute") return "اكتملت دراسات الوكلاء وجُمعت الخطة. اعتماد واحد سيبدأ التنفيذ التلقائي ويعيد النتائج هنا.";
   if (action === "create-item") return "تمت إضافة التوجيه لمكتب CEO.";
   if (action === "update-item") return "تم تحديث بند المتابعة.";
   if (action === "calendar-event") return "تمت إضافة الموعد إلى تقويم CEO.";
@@ -411,12 +561,14 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "ceo-items",
       icon: CalendarCheck,
       label: "بنود متابعة CEO",
-      value: brief?.pendingItems || ceoItems.length,
+      value: brief?.pendingItems ?? ceoItems.length,
       sourceType: "ceo-item",
       items: ceoItems.map((c) => ({
         id: c.id,
         title: c.title,
         subtitle: `${c.item_type || "بند"} · ${c.status}`,
+        href: "/departments/executive#ceo-follow-ups",
+        openLabel: "فتح المتابعات",
         context: { requestedBy: "مكتب الرئيس التنفيذي", relatedTo: c.item_type || "بند متابعة", origin: c.notes },
       })),
     },
@@ -424,12 +576,14 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "approvals",
       icon: CheckCircle2,
       label: "اعتمادات تنتظر قرار",
-      value: brief?.waitingApprovals || approvals.length,
+      value: brief?.waitingApprovals ?? approvals.length,
       sourceType: "approval",
       items: approvals.map((a) => ({
         id: a.id,
         title: a.entity_type,
         subtitle: a.status,
+        href: "/inbox",
+        openLabel: "فتح الاعتماد الحقيقي",
         context: { requestedBy: "النظام / القسم المعني", relatedTo: a.entity_type, origin: a.notes || "طلب اعتماد بانتظار قرار الرئيس التنفيذي" },
       })),
     },
@@ -437,12 +591,14 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "risks",
       icon: ShieldAlert,
       label: "مخاطر مرتفعة",
-      value: brief?.highRisks || highRisks.length,
+      value: brief?.highRisks ?? highRisks.length,
       sourceType: "alert",
       items: highRisks.map((a) => ({
         id: a.id,
         title: a.title,
         subtitle: a.severity,
+        href: "/status",
+        openLabel: "فتح حالة النظام",
         context: { requestedBy: "محرّك التنبيهات", relatedTo: "إدارة المخاطر", origin: a.message },
       })),
     },
@@ -450,34 +606,38 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       key: "projects",
       icon: BriefcaseBusiness,
       label: "مشاريع نشطة",
-      value: brief?.activeProjects || projects.length,
+      value: brief?.activeProjects ?? projects.length,
       sourceType: "project",
       items: projects.map((p) => ({
         id: p.id,
-        title: p.name,
-        subtitle: p.status || "ACTIVE",
-        context: { requestedBy: "إدارة المشاريع", relatedTo: p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
+        title: `${p.project_number ? `#${p.project_number} · ` : ""}${p.name}`,
+        subtitle: `${p.status || "ACTIVE"}${p.project_date ? ` · ${new Date(p.project_date).toLocaleDateString("ar-SA")}` : ""}`,
+        href: `/operations?project=${encodeURIComponent(p.id)}#approved-projects`,
+        openLabel: "فتح ملف المشروع",
+        context: { requestedBy: "إدارة المشاريع", relatedTo: p.project_number ? `المشروع #${p.project_number}` : p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
       })),
     },
     {
       key: "late-tasks",
       icon: ClipboardList,
       label: "مهام متأخرة",
-      value: brief?.lateTasks || lateTasks.length,
+      value: brief?.lateTasks ?? lateTasks.length,
       sourceType: "task",
       items: lateTasks.map((t) => ({
         id: t.id,
-        title: t.title || t.content || "مهمة",
-        subtitle: t.status,
-        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
+        title: `${t.task_number ? `#${t.task_number} · ` : ""}${t.title || t.content || "مهمة"}`,
+        subtitle: `${t.status}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA")}` : ""}`,
+        href: "/operations#approved-projects",
+        openLabel: "فتح مهام التنفيذ",
+        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: t.task_number ? `المهمة #${t.task_number}` : "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
       })),
     },
   ];
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, children, id }: { title: string; children: ReactNode; id?: string }) {
   return (
-    <section className="ops-card">
+    <section className="ops-card" id={id}>
       <h2>{title}</h2>
       <div className="statement-list">{children}</div>
     </section>

@@ -8,8 +8,9 @@
  * per process (see hydrateApprovals), so decisions survive serverless restarts.
  */
 
+import { createHash } from "node:crypto";
 import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
-import { isMultiTenantEnabled, getTenantId } from "./tenant";
+import { getTenantId, isMultiTenantEnabled } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
@@ -38,6 +39,7 @@ export type ApprovalItem = {
   decidedBy?: string;
   note?: string;
   metadata?: Record<string, unknown>;
+  dedupeKey?: string;
 };
 
 const store: ApprovalItem[] = [];
@@ -60,6 +62,7 @@ function toRow(a: ApprovalItem): Record<string, unknown> {
     decided_by: a.decidedBy ?? null,
     note: a.note ?? null,
     metadata: a.metadata ?? null,
+    dedupe_key: a.dedupeKey ?? null,
   };
 }
 
@@ -77,7 +80,17 @@ function fromRow(r: Record<string, unknown>): ApprovalItem {
     decidedBy: r.decided_by ? String(r.decided_by) : undefined,
     note: r.note ? String(r.note) : undefined,
     metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
+    dedupeKey: r.dedupe_key ? String(r.dedupe_key) : undefined,
   };
+}
+
+/** Cache a row that was already committed by a larger database transaction. */
+export function rememberDurableApprovalRow(row: Record<string, unknown>): ApprovalItem {
+  const item = fromRow(row);
+  const index = store.findIndex((approval) => approval.id === item.id);
+  if (index >= 0) store[index] = item;
+  else store.unshift(item);
+  return item;
 }
 
 /** Hydrate the store from Supabase once per process (before reads). */
@@ -107,7 +120,7 @@ export type CreateApprovalInput = {
 function findExistingApproval(input: CreateApprovalInput): ApprovalItem | null {
   if (input.dedupeKey) {
     const existing = store.find(
-      (a) => a.status === "PENDING" && a.metadata?.dedupeKey === input.dedupeKey
+      (a) => a.status === "PENDING" && (a.dedupeKey === input.dedupeKey || a.metadata?.dedupeKey === input.dedupeKey)
     );
     if (existing) return existing;
   }
@@ -120,8 +133,11 @@ function findExistingApproval(input: CreateApprovalInput): ApprovalItem | null {
 }
 
 function buildApproval(input: CreateApprovalInput): ApprovalItem {
+  const deterministicId = input.dedupeKey
+    ? `apr-dedupe-${createHash("sha256").update(input.dedupeKey).digest("hex").slice(0, 40)}`
+    : undefined;
   return {
-    id: input.id || genId(),
+    id: input.id || deterministicId || genId(),
     type: input.type,
     title: input.title,
     detail: input.detail,
@@ -130,7 +146,29 @@ function buildApproval(input: CreateApprovalInput): ApprovalItem {
     status: "PENDING",
     createdAt: new Date().toISOString(),
     metadata: { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) },
+    dedupeKey: input.dedupeKey,
   };
+}
+
+async function findDurableApproval(id: string, dedupeKey?: string): Promise<ApprovalItem | null> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  if (dedupeKey) {
+    let dedupeQuery = supabase
+      .from("company_approvals")
+      .select("*")
+      .eq("dedupe_key", dedupeKey)
+      .eq("status", "PENDING");
+    if (isMultiTenantEnabled()) dedupeQuery = dedupeQuery.eq("tenant_id", getTenantId());
+    const { data: deduped, error: dedupeError } = await dedupeQuery.maybeSingle();
+    if (dedupeError) throw dedupeError;
+    if (deduped) return fromRow(deduped as Record<string, unknown>);
+  }
+  let query = supabase.from("company_approvals").select("*").eq("id", id);
+  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data as Record<string, unknown>) : null;
 }
 
 export function createApproval(input: CreateApprovalInput): ApprovalItem {
@@ -145,55 +183,6 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
 }
 
 /**
- * hydrateOnce freezes each serverless instance on its first snapshot, so an
- * item created on instance A is invisible to a pre-hydrated instance B. These
- * helpers read through to the database when the local store misses, keeping
- * decisions and dedupe correct across instances.
- */
-async function fetchApprovalById(id: string): Promise<ApprovalItem | null> {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-  let query = supabase.from("company_approvals").select("*").eq("id", id).limit(1);
-  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
-  const { data, error } = await query;
-  if (error || !data?.[0]) return null;
-  return fromRow(data[0] as Record<string, unknown>);
-}
-
-async function fetchPendingApprovalByDedupeKey(dedupeKey: string): Promise<ApprovalItem | null> {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-  let query = supabase
-    .from("company_approvals")
-    .select("*")
-    .eq("status", "PENDING")
-    .eq("metadata->>dedupeKey", dedupeKey)
-    .order("created_at", { ascending: true })
-    .limit(1);
-  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
-  const { data, error } = await query;
-  if (error || !data?.[0]) return null;
-  return fromRow(data[0] as Record<string, unknown>);
-}
-
-/** Adopt a database row into the local store (no duplicates). */
-function adoptIntoStore(item: ApprovalItem): ApprovalItem {
-  const local = store.find((a) => a.id === item.id);
-  if (local) return local;
-  store.unshift(item);
-  return item;
-}
-
-/** Find an approval locally, falling back to the database across instances. */
-export async function getApprovalCritical(id: string): Promise<ApprovalItem | null> {
-  const local = store.find((a) => a.id === id);
-  if (local) return local;
-  if (!hasSupabaseEnv()) return null;
-  const remote = await fetchApprovalById(id);
-  return remote ? adoptIntoStore(remote) : null;
-}
-
-/**
  * Awaited variant for API flows: the durable row is committed before the item
  * is accepted into the store, so success is never reported ahead of persistence.
  * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
@@ -202,20 +191,15 @@ export async function createApprovalCritical(input: CreateApprovalInput): Promis
   const existing = findExistingApproval(input);
   if (existing) return existing;
 
-  // Cross-instance dedupe: another instance may already hold this item.
-  if (hasSupabaseEnv()) {
-    if (input.dedupeKey) {
-      const remote = await fetchPendingApprovalByDedupeKey(input.dedupeKey);
-      if (remote) return adoptIntoStore(remote);
-    }
-    if (input.id) {
-      const remote = await fetchApprovalById(input.id);
-      if (remote) return adoptIntoStore(remote);
-    }
-  }
-
   const item = buildApproval(input);
-  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(item));
+  if (hasSupabaseEnv()) {
+    const durable = await findDurableApproval(item.id, item.dedupeKey);
+    if (durable) {
+      if (!store.some((approval) => approval.id === durable.id)) store.unshift(durable);
+      return durable;
+    }
+    await persistCritical("company_approvals", toRow(item));
+  }
   store.unshift(item);
   emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
   return item;
@@ -257,9 +241,12 @@ export async function decideApprovalCritical(
 ): Promise<ApprovalItem | null> {
   let item = store.find((a) => a.id === id);
   if (!item && hasSupabaseEnv()) {
-    // Created on another instance after this one hydrated — read through.
-    const remote = await fetchApprovalById(id);
-    if (remote) item = adoptIntoStore(remote);
+    // Created on another serverless instance after this one hydrated.
+    const durable = await findDurableApproval(id);
+    if (durable) {
+      if (!store.some((approval) => approval.id === durable.id)) store.unshift(durable);
+      item = durable;
+    }
   }
   if (!item) return null;
   if (item.status !== "PENDING") return item;
@@ -277,6 +264,25 @@ export async function decideApprovalCritical(
   return item;
 }
 
+/**
+ * Restores a failed governed transition to the visible queue so it can be
+ * retried instead of disappearing as an approved-but-unexecuted item.
+ */
+export async function reopenApprovalCritical(id: string): Promise<ApprovalItem | null> {
+  const item = store.find((approval) => approval.id === id);
+  if (!item) return null;
+  const reopened: ApprovalItem = {
+    ...item,
+    status: "PENDING",
+    decidedAt: undefined,
+    decidedBy: undefined,
+    note: undefined,
+  };
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(reopened));
+  Object.assign(item, reopened);
+  return item;
+}
+
 export function approvalStats(): { pending: number; approved: number; rejected: number; deferred: number; total: number } {
   return {
     pending: store.filter((a) => a.status === "PENDING").length,
@@ -285,6 +291,16 @@ export function approvalStats(): { pending: number; approved: number; rejected: 
     deferred: store.filter((a) => a.status === "DEFERRED").length,
     total: store.length,
   };
+}
+
+/** Find an approval locally, falling back to the database across instances. */
+export async function getApprovalCritical(id: string): Promise<ApprovalItem | null> {
+  const local = store.find((a) => a.id === id);
+  if (local) return local;
+  if (!hasSupabaseEnv()) return null;
+  const durable = await findDurableApproval(id);
+  if (durable && !store.some((approval) => approval.id === durable.id)) store.unshift(durable);
+  return durable;
 }
 
 /**
@@ -303,11 +319,7 @@ export async function deferApprovalCritical(
     throw new Error("تاريخ التذكير يجب أن يكون تاريخاً صالحاً في المستقبل.");
   }
 
-  let item = store.find((a) => a.id === id);
-  if (!item && hasSupabaseEnv()) {
-    const remote = await fetchApprovalById(id);
-    if (remote) item = adoptIntoStore(remote);
-  }
+  const item = await getApprovalCritical(id);
   if (!item) return null;
   if (item.status !== "PENDING") return item;
 

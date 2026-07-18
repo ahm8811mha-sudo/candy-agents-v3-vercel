@@ -4,8 +4,16 @@ import { enforceCompanyPolicy } from "@/lib/company-os/policy";
 import { getReconciliationForAction } from "@/lib/company-os/reconciliation";
 import { listCompanyActions, updateCompanyActionStatus, type CompanyActionStatus } from "@/lib/company/actionQueue";
 import { hydrateCompany } from "@/lib/company/hydrate";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+
+function operatingIdentityMigrationMissing(error: { code?: string; message?: string } | null) {
+  const message = String(error?.message || "");
+  return error?.code === "42703"
+    || error?.code === "PGRST204"
+    || /project_number|project_date|task_number|task_date|owner_guidance/i.test(message);
+}
 
 export async function GET(req: NextRequest) {
   const auth = await requireCompanyContext(req, "VIEWER");
@@ -13,11 +21,68 @@ export async function GET(req: NextRequest) {
   try {
     await hydrateCompany();
     const limit = Number(req.nextUrl.searchParams.get("limit") || 50);
-    const actions = await listCompanyActions(
+    const recentActions = await listCompanyActions(
       Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50,
       auth.context.tenantId
     );
-    return NextResponse.json({ ok: true, actions, requestId: auth.context.requestId });
+    const supabase = getSupabaseAdmin();
+    let projects: unknown[] = [];
+    let tasks: unknown[] = [];
+    let actions = recentActions;
+
+    if (supabase) {
+      const numberedProjectsResult = await supabase
+        .from("projects")
+        .select("id,project_number,project_date,name,request,status,budget,approved_budget,health_score,risk_level,approval_status,strategic_direction,owner_guidance,financial_snapshot,created_at")
+        .eq("tenant_id", auth.context.tenantId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      const projectsResult = operatingIdentityMigrationMissing(numberedProjectsResult.error)
+        ? await supabase
+            .from("projects")
+            .select("id,name,request,status,budget,approved_budget,health_score,risk_level,approval_status,strategic_direction,financial_snapshot,created_at")
+            .eq("tenant_id", auth.context.tenantId)
+            .order("created_at", { ascending: false })
+            .limit(50)
+        : numberedProjectsResult;
+      if (projectsResult.error) throw projectsResult.error;
+      projects = projectsResult.data || [];
+      const projectIds = (projectsResult.data || []).map((project) => String(project.id));
+
+      if (projectIds.length > 0) {
+        const [numberedTasksResult, linkedActionsResult] = await Promise.all([
+          supabase
+            .from("tasks")
+            .select("id,project_id,task_sequence,task_number,task_date,title,description,status,priority,progress_percent,owner_role,due_date,created_at")
+            .eq("tenant_id", auth.context.tenantId)
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("business_actions")
+            .select("*")
+            .eq("tenant_id", auth.context.tenantId)
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false })
+            .limit(500),
+        ]);
+        const tasksResult = operatingIdentityMigrationMissing(numberedTasksResult.error)
+          ? await supabase
+              .from("tasks")
+              .select("id,project_id,title,description,status,priority,progress_percent,owner_role,due_date,created_at")
+              .eq("tenant_id", auth.context.tenantId)
+              .in("project_id", projectIds)
+              .order("created_at", { ascending: true })
+          : numberedTasksResult;
+        if (tasksResult.error) throw tasksResult.error;
+        if (linkedActionsResult.error) throw linkedActionsResult.error;
+        tasks = tasksResult.data || [];
+        const byId = new Map(recentActions.map((action) => [action.id, action]));
+        for (const action of linkedActionsResult.data || []) byId.set(String(action.id), action);
+        actions = [...byId.values()];
+      }
+    }
+
+    return NextResponse.json({ ok: true, actions, projects, tasks, requestId: auth.context.requestId });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Failed to list company actions", requestId: auth.context.requestId },
@@ -88,9 +153,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, action, policy, requestId: auth.context.requestId });
   } catch (error) {
     const typed = error as Error & { code?: string; decision?: unknown };
+    const conflict = typed.code === "OWNER_ABSENCE_ESCALATION"
+      || typed.code === "COMPLETION_EVIDENCE_REQUIRED";
     return NextResponse.json(
       { ok: false, code: typed.code, policy: typed.decision, error: typed.message || "Failed to update company action", requestId: auth.context.requestId },
-      { status: typed.code === "POLICY_DENIED" ? 403 : 500 }
+      { status: typed.code === "POLICY_DENIED" ? 403 : conflict ? 409 : 500 }
     );
   }
 }

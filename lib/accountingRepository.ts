@@ -1,6 +1,8 @@
 import { after } from "next/server";
+import { createHash, randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "./supabase";
-import { getTenantId, isMultiTenantEnabled, withTenant } from "./tenant";
+import { getTenantId, isMultiTenantEnabled } from "./tenant";
+import { rememberDurableAuditRow } from "./company/audit";
 
 export type AccountingEntryLineInput = {
   accountCode: string;
@@ -25,6 +27,24 @@ export type AccountingTransaction = {
   description: string;
   created_at: string;
   reference?: string;
+};
+
+export type AccountingInvoiceInput = {
+  invoiceType: "SALES" | "PURCHASE";
+  contactName: string;
+  subtotal: number;
+  tax?: number;
+  taxRate?: number;
+  costCenterId?: string;
+  notes?: string;
+  idempotencyKey?: string;
+};
+
+export type AccountingBankInput = {
+  description: string;
+  amount: number;
+  bankName?: string;
+  idempotencyKey?: string;
 };
 
 const DEFAULT_ACCOUNTS = [
@@ -62,6 +82,14 @@ function safeIdentifier(value: string, maxLength: number) {
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, maxLength);
+}
+
+function createDeterministicUuid(value: string) {
+  const chars = createHash("sha256").update(value).digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ["8", "9", "a", "b"][Number.parseInt(chars[16], 16) % 4];
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function entryNumber(tenantId: string, reference?: string) {
@@ -118,65 +146,82 @@ export async function postAccountingEntry(input: AccountingEntryInput) {
     })),
   });
 
-  if (!rpcError) return rpcData;
+  if (rpcError) throw new Error(`Atomic journal posting failed: ${rpcError.message}`);
+  return rpcData;
+}
 
-  // Compatibility fallback until the operational hardening migration is applied.
-  let existingQuery = supabase
-    .from("accounting_journal_entries")
-    .select("*")
-    .eq("entry_number", numberValue)
-    .limit(1);
-  if (isMultiTenantEnabled()) existingQuery = existingQuery.eq("tenant_id", tenantId);
-  const existing = await existingQuery;
-  if (existing.error) throw existing.error;
-  if (existing.data?.[0]) return existing.data[0];
+/** Atomically creates the contact, invoice, balanced journal, and audit row. */
+export async function createAccountingInvoiceAtomic(input: AccountingInvoiceInput) {
+  const subtotal = round2(number(input.subtotal));
+  const tax = round2(number(input.tax));
+  const total = round2(subtotal + tax);
+  const contactName = input.contactName?.trim();
+  if (!contactName) throw new Error("Contact name is required.");
+  if (!["SALES", "PURCHASE"].includes(input.invoiceType)) throw new Error("Invalid invoice type.");
+  if (subtotal < 0 || tax < 0 || total <= 0) throw new Error("Invoice total must be greater than zero.");
 
-  const { data: accounts, error: accountsError } = await supabase
-    .from("accounting_accounts")
-    .select("id, code");
-  if (accountsError) throw accountsError;
-  const accountByCode = new Map((accounts || []).map((account: any) => [String(account.code), account.id]));
-
-  const entryPayload = withTenant(
-    {
-      entry_number: numberValue,
-      entry_date: entryDate,
-      memo: input.memo.trim(),
-      source: input.source || "system",
-      status: "POSTED",
-      cost_center_id: input.costCenterId || null,
+  await ensureAccounts();
+  const supabase = requireSupabase();
+  const tenantId = getTenantId();
+  const invoiceId = randomUUID();
+  const token = safeIdentifier(input.idempotencyKey || invoiceId, 72) || invoiceId;
+  const prefix = input.invoiceType === "SALES" ? "TAX-S" : "TAX-P";
+  const taxInvoiceNumber = `${prefix}-${token}`;
+  const journalEntryNumber = entryNumber(tenantId, `INVOICE-${token}`);
+  const { data, error } = await supabase.rpc("orvanta_create_accounting_invoice", {
+    p_tenant_id: tenantId,
+    p_invoice: {
+      id: invoiceId,
+      contactId: randomUUID(),
+      invoiceType: input.invoiceType,
+      contactName,
+      subtotal,
+      tax,
+      taxRate: number(input.taxRate) || (subtotal > 0 ? tax / subtotal : 0),
+      taxInvoiceNumber,
+      entryNumber: journalEntryNumber,
+      costCenterId: input.costCenterId || null,
+      notes: input.notes?.trim() || null,
     },
-    tenantId
-  );
-  const { data: entry, error: entryError } = await supabase
-    .from("accounting_journal_entries")
-    .insert(entryPayload)
-    .select()
-    .single();
-  if (entryError) throw entryError;
-
-  const linePayload = input.lines.map((line) => {
-    const accountId = accountByCode.get(line.accountCode);
-    if (!accountId) throw new Error(`Accounting account ${line.accountCode} is missing.`);
-    return withTenant(
-      {
-        entry_id: entry.id,
-        account_id: accountId,
-        memo: line.memo?.trim() || input.memo.trim(),
-        debit: round2(number(line.debit)),
-        credit: round2(number(line.credit)),
-      },
-      tenantId
-    );
   });
-
-  const { error: lineError } = await supabase.from("accounting_journal_lines").insert(linePayload);
-  if (lineError) {
-    await supabase.from("accounting_journal_entries").delete().eq("id", entry.id);
-    throw lineError;
+  if (error) throw new Error(`Atomic invoice posting failed: ${error.message}`);
+  if (!data || typeof data !== "object") throw new Error("Atomic invoice posting returned an invalid response.");
+  const result = data as Record<string, unknown>;
+  if (result.audit && typeof result.audit === "object") {
+    rememberDurableAuditRow(result.audit as Record<string, unknown>);
   }
+  return result;
+}
 
-  return entry;
+/** Atomically records a bank transaction and updates its account balance. */
+export async function addAccountingBankTransactionAtomic(input: AccountingBankInput) {
+  const description = input.description?.trim();
+  const amount = round2(number(input.amount));
+  if (!description) throw new Error("Bank transaction description is required.");
+  if (amount === 0) throw new Error("Bank transaction amount cannot be zero.");
+
+  const supabase = requireSupabase();
+  const tenantId = getTenantId();
+  const transactionId = input.idempotencyKey
+    ? createDeterministicUuid(`${tenantId}:bank:${input.idempotencyKey}`)
+    : randomUUID();
+  const { data, error } = await supabase.rpc("orvanta_add_bank_transaction", {
+    p_tenant_id: tenantId,
+    p_transaction: {
+      bankAccountId: randomUUID(),
+      transactionId,
+      bankName: input.bankName?.trim() || "Main operating bank",
+      description,
+      amount,
+    },
+  });
+  if (error) throw new Error(`Atomic bank transaction failed: ${error.message}`);
+  if (!data || typeof data !== "object") throw new Error("Atomic bank transaction returned an invalid response.");
+  const result = data as Record<string, unknown>;
+  if (result.audit && typeof result.audit === "object") {
+    rememberDurableAuditRow(result.audit as Record<string, unknown>);
+  }
+  return result;
 }
 
 export async function listAccountingTransactions(limit = 500): Promise<AccountingTransaction[]> {

@@ -1,9 +1,12 @@
 import { calculateFinancials } from "./accountingSystem";
-import { postAccountingEntry } from "./accountingRepository";
 import { seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { evaluateGovernedAction, logDecision } from "./governanceOS";
 import { getSupabaseAdmin } from "./supabase";
-import { getTenantId } from "./tenant";
+import {
+  addAccountingBankTransactionAtomic,
+  createAccountingInvoiceAtomic,
+  postAccountingEntry,
+} from "./accountingRepository";
 
 type Account = {
   id: string;
@@ -41,6 +44,7 @@ type InvoiceInput = {
   taxRate?: number;
   costCenterId?: string;
   notes?: string;
+  idempotencyKey?: string;
 };
 
 type JournalInput = {
@@ -50,12 +54,14 @@ type JournalInput = {
   amount: number;
   costCenterId?: string;
   source?: string;
+  reference?: string;
 };
 
 type BankInput = {
   description: string;
   amount: number;
   bankName?: string;
+  idempotencyKey?: string;
 };
 
 type CostCenterInput = {
@@ -64,12 +70,6 @@ type CostCenterInput = {
   ownerRole: string;
   monthlyBudget: number;
 };
-
-const currencyFormatter = new Intl.NumberFormat("ar-SA", {
-  style: "currency",
-  currency: "SAR",
-  maximumFractionDigits: 0,
-});
 
 function number(value: unknown) {
   const parsed = Number(value);
@@ -243,178 +243,30 @@ function buildAgingReport(invoices: any[]) {
   return { receivables: sales, payables: purchases };
 }
 
-export type JournalLineInput = {
-  accountCode: string;
-  debit?: number;
-  credit?: number;
-  memo?: string;
-};
-
-/**
- * Multi-line posting through the SAME atomic RPC path as the rest of the
- * system (orvanta_post_journal_entry): balance validation, advisory-lock
- * idempotency, and no half-posted entries. This module previously inserted
- * the entry and its lines in two separate statements with status POSTED —
- * a failure between them left an orphaned posted header.
- */
-export async function postJournalLines(input: {
-  memo: string;
-  lines: JournalLineInput[];
-  costCenterId?: string;
-  source?: string;
-  reference?: string;
-}) {
-  return postAccountingEntry({
-    memo: input.memo,
-    source: input.source || "manual",
-    reference: input.reference,
-    costCenterId: input.costCenterId,
-    lines: input.lines.map((line) => ({
-      accountCode: line.accountCode,
-      debit: number(line.debit),
-      credit: number(line.credit),
-      memo: line.memo,
-    })),
-  });
-}
-
 export async function postJournalEntry(input: JournalInput) {
   const amount = number(input.amount);
   if (amount <= 0) throw new Error("Amount must be greater than zero.");
   if (!input.memo?.trim()) throw new Error("Memo is required.");
-  return postJournalLines({
+  return postAccountingEntry({
     memo: input.memo.trim(),
+    source: input.source || "professional-accounting",
+    reference: input.reference,
     costCenterId: input.costCenterId,
-    source: input.source || "manual",
     lines: [
-      { accountCode: input.debitCode, debit: amount },
-      { accountCode: input.creditCode, credit: amount },
+      { accountCode: input.debitCode, debit: amount, credit: 0 },
+      { accountCode: input.creditCode, debit: 0, credit: amount },
     ],
   });
 }
 
 export async function createAccountingInvoice(input: InvoiceInput) {
-  const subtotal = number(input.subtotal);
-  const tax = number(input.tax);
-  const taxRate = number(input.taxRate) || (subtotal > 0 ? tax / subtotal : 0);
-  const total = subtotal + tax;
-  if (!input.contactName?.trim()) throw new Error("Contact name is required.");
-  if (total <= 0) throw new Error("Invoice total must be greater than zero.");
-
-  const supabase = requireSupabase();
-  const contactType = input.invoiceType === "SALES" ? "CUSTOMER" : "VENDOR";
-  const { data: contact, error: contactError } = await supabase
-    .from("accounting_contacts")
-    .insert({ type: contactType, name: input.contactName.trim() })
-    .select()
-    .single();
-  if (contactError) throw contactError;
-
-  const { data: invoice, error: invoiceError } = await supabase
-    .from("accounting_invoices")
-    .insert({
-      contact_id: contact.id,
-      invoice_type: input.invoiceType,
-      status: "ISSUED",
-      subtotal,
-      tax,
-      tax_rate: taxRate,
-      tax_invoice_number: nowCode(input.invoiceType === "SALES" ? "TAX-S" : "TAX-P"),
-      total,
-      paid: 0,
-      cost_center_id: input.costCenterId || null,
-      notes: input.notes?.trim() || null,
-    })
-    .select()
-    .single();
-  if (invoiceError) throw invoiceError;
-
-  // VAT must never sit inside revenue or expense: output VAT on sales is a
-  // liability (2100 Tax payable), and input VAT on purchases debits the same
-  // control account so the net position is what gets remitted to ZATCA.
-  if (input.invoiceType === "SALES") {
-    await postJournalLines({
-      memo: `Sales invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      costCenterId: input.costCenterId,
-      source: "invoice",
-      reference: `INV-${invoice.id}`,
-      lines: [
-        { accountCode: "1100", debit: total, memo: "Accounts receivable (gross)" },
-        { accountCode: "4000", credit: subtotal, memo: "Revenue (net of VAT)" },
-        ...(tax > 0 ? [{ accountCode: "2100", credit: tax, memo: "Output VAT payable" }] : []),
-      ],
-    });
-  } else {
-    await postJournalLines({
-      memo: `Purchase invoice ${currencyFormatter.format(total)} - ${input.contactName}`,
-      costCenterId: input.costCenterId,
-      source: "invoice",
-      reference: `INV-${invoice.id}`,
-      lines: [
-        { accountCode: "5200", debit: subtotal, memo: "Expense (net of VAT)" },
-        ...(tax > 0 ? [{ accountCode: "2100", debit: tax, memo: "Recoverable input VAT" }] : []),
-        { accountCode: "2000", credit: total, memo: "Accounts payable (gross)" },
-      ],
-    });
-  }
-
-  await logDecision({
-    decisionType: "TAX_INVOICE_ISSUED",
-    entityType: "accounting_invoices",
-    entityId: invoice.id,
-    actorRole: "CFO",
-    action: `${input.invoiceType} invoice issued and posted`,
-    amount: total,
-    riskLevel: "LOW",
-    approvalStatus: "POSTED",
-    metadata: { contact_id: contact.id, tax, taxRate, costCenterId: input.costCenterId },
-  });
-
-  return invoice;
+  const result = await createAccountingInvoiceAtomic(input);
+  return result.invoice;
 }
 
 export async function addBankTransaction(input: BankInput) {
-  const amount = number(input.amount);
-  if (!input.description?.trim()) throw new Error("Bank transaction description is required.");
-  if (amount === 0) throw new Error("Bank transaction amount cannot be zero.");
-
-  const supabase = requireSupabase();
-  const bankName = input.bankName?.trim() || "Main operating bank";
-  let bankAccountId = "";
-
-  const existing = await supabase.from("accounting_bank_accounts").select("*").eq("name", bankName).limit(1);
-  if (existing.error) throw existing.error;
-
-  if (existing.data?.[0]?.id) {
-    bankAccountId = existing.data[0].id;
-  } else {
-    const { data: account, error } = await supabase
-      .from("accounting_bank_accounts")
-      .insert({ name: bankName, provider: "manual", currency: "SAR", balance: 0 })
-      .select()
-      .single();
-    if (error) throw error;
-    bankAccountId = account.id;
-  }
-
-  const { data: transaction, error: transactionError } = await supabase
-    .from("accounting_bank_transactions")
-    .insert({
-      bank_account_id: bankAccountId,
-      description: input.description.trim(),
-      amount,
-      status: "UNMATCHED",
-    })
-    .select()
-    .single();
-  if (transactionError) throw transactionError;
-
-  await supabase
-    .from("accounting_bank_accounts")
-    .update({ balance: number(existing.data?.[0]?.balance) + amount })
-    .eq("id", bankAccountId);
-
-  return transaction;
+  const result = await addAccountingBankTransactionAtomic(input);
+  return result.transaction;
 }
 
 export async function createCostCenter(input: CostCenterInput) {
@@ -443,15 +295,16 @@ export async function createCostCenter(input: CostCenterInput) {
 export async function closeAccountingPeriod(period?: string) {
   const consoleData = await getAccountingConsole();
   const selectedPeriod = period || new Date().toISOString().slice(0, 7);
+  const closeId = `close-${selectedPeriod}`;
   const income = consoleData.statements.incomeStatement;
   const governance = await evaluateGovernedAction({
     title: `Close accounting period ${selectedPeriod}`,
     entityType: "accounting_period_closes",
-    entityId: selectedPeriod,
+    entityId: closeId,
     amount: Math.abs(income.netIncome),
     riskLevel: income.netIncome < 0 ? "HIGH" : "LOW",
     actorRole: "CFO",
-    metadata: { period: selectedPeriod },
+    metadata: { actionKind: "ACCOUNTING_PERIOD_CLOSE", period: selectedPeriod },
   });
 
   const supabase = requireSupabase();
@@ -459,7 +312,7 @@ export async function closeAccountingPeriod(period?: string) {
     .from("accounting_period_closes")
     .upsert(
       {
-        id: `close-${selectedPeriod}`,
+        id: closeId,
         period: selectedPeriod,
         status: governance.allowedToExecute ? "CLOSED" : "PENDING_APPROVAL",
         revenue: income.revenue,
@@ -478,30 +331,6 @@ export async function closeAccountingPeriod(period?: string) {
     .select()
     .single();
   if (error) throw error;
-
-  // The summary row above is reporting only. What actually blocks posting is
-  // accounting_periods.status, which orvanta_assert_accounting_period_open
-  // checks inside the database — so an executed close must flip it too.
-  if (governance.allowedToExecute) {
-    const [year, month] = selectedPeriod.split("-").map(Number);
-    const startsOn = `${selectedPeriod}-01`;
-    const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-    const { error: periodError } = await supabase.from("accounting_periods").upsert(
-      {
-        tenant_id: getTenantId(),
-        period_name: selectedPeriod,
-        starts_on: startsOn,
-        ends_on: endsOn,
-        status: "CLOSED",
-        closed_at: new Date().toISOString(),
-        closed_by: "CFO",
-        closing_note: `Period close executed with net income ${income.netIncome}.`,
-      },
-      { onConflict: "tenant_id,period_name" }
-    );
-    if (periodError) throw periodError;
-  }
-
   return { close: data, governance };
 }
 

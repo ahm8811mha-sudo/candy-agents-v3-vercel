@@ -12,15 +12,22 @@ import {
   X,
   Activity,
   Brain,
+  Bot,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
 import SessionControl from "./SessionControl";
 
-type NavLink = { href: string; label: string; icon: typeof Inbox; badge?: number };
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof Inbox;
+  badge?: number;
+};
 
 const PAGE_TITLES: Array<[string, string]> = [
+  ["/employee-runtime", "الموظفون الذاتيون"],
   ["/company-brain", "العقل المؤسسي"],
   ["/control-room", "مركز قيادة الشركة"],
   ["/inbox", "القرارات"],
@@ -49,7 +56,7 @@ const PAGE_TITLES: Array<[string, string]> = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const authPage = pathname.startsWith("/login");
+  const authPage = pathname.startsWith("/login") || pathname === "/";
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(0);
 
@@ -77,7 +84,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     let alive = true;
     async function load() {
       try {
-        const response = await fetch("/api/company/feed", { cache: "no-store" });
+        const response = await fetch("/api/company/feed", {
+          cache: "no-store",
+        });
         if (response.status === 401) return;
         const json = await response.json();
         if (alive && json.ok) setPending(json.pending || 0);
@@ -96,29 +105,68 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const links: NavLink[] = [
     { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
     { href: "/inbox", label: "القرارات", icon: Inbox, badge: pending },
+    { href: "/employee-runtime", label: "الموظفون الذاتيون", icon: Bot },
     { href: "/operations", label: "التنفيذ", icon: Send },
     { href: "/departments", label: "الأقسام", icon: Building2 },
     { href: "/status", label: "النظام", icon: Activity },
   ];
 
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/" || pathname.startsWith("/company-brain");
-    if (href === "/departments") return pathname.startsWith("/departments") || ["/sales", "/company", "/office"].some((route) => pathname.startsWith(route));
-    if (href === "/operations") return ["/operations", "/control-room", "/ideas", "/correspondence-center", "/recovery-center"].some((route) => pathname.startsWith(route));
+    if (href === "/") {
+      return pathname === "/" || pathname.startsWith("/company-brain");
+    }
+    if (href === "/departments") {
+      return (
+        pathname.startsWith("/departments") ||
+        ["/sales", "/company", "/office"].some((route) =>
+          pathname.startsWith(route)
+        )
+      );
+    }
+    if (href === "/operations") {
+      return [
+        "/operations",
+        "/control-room",
+        "/ideas",
+        "/correspondence-center",
+        "/recovery-center",
+      ].some((route) => pathname.startsWith(route));
+    }
     return pathname.startsWith(href);
   };
-  const pageTitle = PAGE_TITLES.find(([path]) => (path === "/" ? pathname === "/" : pathname.startsWith(path)))?.[1] || "Orvanta";
+
+  const pageTitle =
+    PAGE_TITLES.find(([path]) =>
+      path === "/" ? pathname === "/" : pathname.startsWith(path)
+    )?.[1] || "Orvanta";
 
   if (authPage) return <>{children}</>;
 
   return (
     <div className="shell-root">
-      <a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a>
-      <div className={`shell-backdrop ${open ? "open" : ""}`} onClick={() => setOpen(false)} />
+      <a className="skip-link" href="#main-content">
+        تجاوز إلى المحتوى
+      </a>
+      <div
+        className={`shell-backdrop ${open ? "open" : ""}`}
+        onClick={() => setOpen(false)}
+      />
 
-      <aside className={`shell-sidebar ${open ? "open" : ""}`} aria-label="التنقل الرئيسي">
-        <Link className="shell-sidebar__brand" href="/" onClick={() => setOpen(false)} aria-label="Orvanta — الصفحة الرئيسية">
-          <OrvantaLogo size={154} subtitle="AI Company Operating System" priority />
+      <aside
+        className={`shell-sidebar ${open ? "open" : ""}`}
+        aria-label="التنقل الرئيسي"
+      >
+        <Link
+          className="shell-sidebar__brand"
+          href="/"
+          onClick={() => setOpen(false)}
+          aria-label="Orvanta — الصفحة الرئيسية"
+        >
+          <OrvantaLogo size={44} showWordmark={false} priority />
+          <span className="shell-sidebar__brand-text">
+            <b>أورفانتا</b>
+            <small>AI Business OS</small>
+          </span>
         </Link>
 
         <div className="shell-group">التنقل الرئيسي</div>
@@ -135,7 +183,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Icon size={16} aria-hidden="true" />
               {link.label}
-              {link.badge ? <span className="shell-link__badge" aria-label={`${link.badge} عناصر بانتظار القرار`}>{link.badge}</span> : null}
+              {link.badge ? (
+                <span
+                  className="shell-link__badge"
+                  aria-label={`${link.badge} عناصر بانتظار القرار`}
+                >
+                  {link.badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}
@@ -144,10 +199,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           href="/company-brain"
           className="notice"
           onClick={() => setOpen(false)}
-          style={{ margin: "22px 12px 0", fontSize: ".78rem", lineHeight: 1.7, display: "grid", gap: 6, textDecoration: "none" }}
+          style={{
+            margin: "22px 12px 0",
+            fontSize: ".78rem",
+            lineHeight: 1.7,
+            display: "grid",
+            gap: 6,
+            textDecoration: "none",
+          }}
         >
-          <strong style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><Brain size={14} /> العقل المؤسسي</strong>
-          <span style={{ color: "var(--muted)" }}>التوأم الرقمي، التوقعات، المحاكاة، التخطيط والسرد التنفيذي في مساحة واحدة.</span>
+          <strong
+            style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
+          >
+            <Brain size={14} /> العقل المؤسسي
+          </strong>
+          <span style={{ color: "var(--muted)" }}>
+            التوأم الرقمي، التوقعات، المحاكاة، التخطيط والسرد التنفيذي في
+            مساحة واحدة.
+          </span>
         </Link>
       </aside>
 
@@ -162,11 +231,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               {open ? <X size={18} /> : <Menu size={18} />}
             </button>
-            <Link href="/" className="shell-topbar__brand" aria-label="Orvanta — الصفحة الرئيسية">
+            <Link
+              href="/"
+              className="shell-topbar__brand"
+              aria-label="Orvanta — الصفحة الرئيسية"
+            >
               <OrvantaLogo size={30} showWordmark={false} />
               <span className="shell-topbar__brand-name">Orvanta</span>
             </Link>
-            <span className="shell-topbar__title" title={pageTitle}>{pageTitle}</span>
+            <span className="shell-topbar__title" title={pageTitle}>
+              {pageTitle}
+            </span>
           </div>
           <div className="shell-topbar__actions">
             <CommandPalette />
@@ -179,7 +254,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div id="main-content" className="shell-content" tabIndex={-1}>{children}</div>
+        <div id="main-content" className="shell-content" tabIndex={-1}>
+          {children}
+        </div>
       </div>
     </div>
   );

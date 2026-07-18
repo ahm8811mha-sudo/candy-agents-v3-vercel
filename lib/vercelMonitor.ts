@@ -50,6 +50,15 @@ export function isVercelConfigured(): boolean {
   return Boolean(token() && projectId());
 }
 
+/**
+ * Vercel injects VERCEL=1 into every deployment, including previews.  The API
+ * token is only needed for deployment-history monitoring; it is not required
+ * to prove that the currently running build is deployed on Vercel.
+ */
+export function isVercelRuntime(): boolean {
+  return process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+}
+
 function mapState(raw: string | undefined): DeploymentState {
   const upper = (raw || "").toUpperCase();
   const valid: DeploymentState[] = ["READY", "BUILDING", "ERROR", "QUEUED", "CANCELED", "INITIALIZING"];

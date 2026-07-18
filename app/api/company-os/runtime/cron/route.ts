@@ -51,8 +51,9 @@ export async function GET(req: NextRequest) {
         })
     );
 
-    const processedCount = sweep.workflow.totalProcessed + sweep.outbox.processed;
-    const failedCount = sweep.outbox.retried + sweep.outbox.deadLettered;
+    const processedCount = sweep.workflow.totalProcessed + sweep.outbox.processed + sweep.agentExecution.results.length;
+    const failedCount = sweep.outbox.retried + sweep.outbox.deadLettered
+      + sweep.agentExecution.results.reduce((sum, result) => sum + result.failed, 0);
     await succeedCronRun(run, {
       processedCount,
       failedCount,
@@ -63,6 +64,11 @@ export async function GET(req: NextRequest) {
         outboxPublished: sweep.outbox.published,
         outboxRetried: sweep.outbox.retried,
         outboxDeadLettered: sweep.outbox.deadLettered,
+        agentProjectsSelected: sweep.agentExecution.selected,
+        agentProjectsCompleted: sweep.agentExecution.results.length,
+        ownerAbsenceActive: sweep.continuity.active,
+        continuityOverdueTasks: sweep.continuity.overdueTasks,
+        continuityPendingApprovals: sweep.continuity.pendingApprovals,
       },
     });
 

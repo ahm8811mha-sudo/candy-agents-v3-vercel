@@ -1,3 +1,7 @@
+drop table if exists company_continuity_events cascade;
+drop table if exists owner_absence_policies cascade;
+drop table if exists project_work_item_counters cascade;
+drop table if exists project_number_counters cascade;
 drop table if exists external_sync_logs cascade;
 drop table if exists bank_reconciliation_rules cascade;
 drop table if exists accounting_payments cascade;
@@ -67,4 +71,6 @@ drop table if exists projects cascade;
 drop table if exists employees cascade;
 drop table if exists departments cascade;
 
--- After running this file, run schema.sql then policies.sql then seed.sql.
+-- After running this file, run schema.sql, policies.sql, seed.sql, then all
+-- Supabase migrations in chronological order so numbering and continuity
+-- controls are restored as well.

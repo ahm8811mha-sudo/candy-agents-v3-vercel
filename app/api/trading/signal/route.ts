@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { evaluateScalp, DEFAULT_SCALP_CONFIG } from "@/lib/trading/scalpingStrategy";
 import { getMarketState } from "@/lib/trading/marketHours";
 import { DEFAULT_SESSION_LIMITS } from "@/lib/trading/sessionGuard";
-import { isAlpacaConfigured, alpacaMode } from "@/lib/trading/brokers/alpaca";
+import { getAlpacaReadiness, getMarketClock, getStockBars } from "@/lib/trading/brokers/alpaca";
 import type { Candle } from "@/lib/trading/indicators";
 
 export const dynamic = "force-dynamic";
@@ -25,19 +25,62 @@ function sampleCandles(seedPrice = 100): Candle[] {
 }
 
 export async function GET() {
-  const candles = sampleCandles();
-  const result = evaluateScalp(candles);
-  const market = getMarketState();
+  const broker = getAlpacaReadiness();
+  try {
+    if (broker.configured) {
+      const [bars, clock] = await Promise.all([
+        getStockBars({ symbol: broker.symbol, limit: 100 }),
+        getMarketClock(),
+      ]);
+      const now = Date.parse(clock.timestamp);
+      const close = Date.parse(clock.nextClose);
+      const minutesToClose = clock.isOpen && Number.isFinite(now) && Number.isFinite(close)
+        ? Math.max(0, Math.ceil((close - now) / 60_000))
+        : 0;
+      return NextResponse.json({
+        ok: true,
+        demo: false,
+        source: "alpaca",
+        symbol: bars.symbol,
+        asOf: bars.asOf,
+        signal: evaluateScalp(bars.candles),
+        market: {
+          isOpen: clock.isOpen,
+          minutesToClose,
+          shouldFlatten: clock.isOpen && minutesToClose <= 15,
+          nextOpen: clock.nextOpen,
+          nextClose: clock.nextClose,
+          source: "alpaca",
+        },
+        config: DEFAULT_SCALP_CONFIG,
+        sessionLimits: DEFAULT_SESSION_LIMITS,
+        broker,
+      });
+    }
 
-  return NextResponse.json({
-    ok: true,
-    demo: true,
-    signal: result,
-    market,
-    config: DEFAULT_SCALP_CONFIG,
-    sessionLimits: DEFAULT_SESSION_LIMITS,
-    broker: { alpacaConfigured: isAlpacaConfigured(), mode: alpacaMode() },
-  });
+    const candles = sampleCandles();
+    return NextResponse.json({
+      ok: true,
+      demo: true,
+      source: "demo",
+      symbol: broker.symbol,
+      asOf: null,
+      signal: evaluateScalp(candles),
+      market: { ...getMarketState(), source: "local" },
+      config: DEFAULT_SCALP_CONFIG,
+      sessionLimits: DEFAULT_SESSION_LIMITS,
+      broker,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      ok: false,
+      demo: false,
+      source: "alpaca",
+      symbol: broker.symbol,
+      broker,
+      error: error instanceof Error ? error.message : "تعذّر قراءة بيانات السوق من Alpaca.",
+    }, { status: 502 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -52,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
     const config = { ...DEFAULT_SCALP_CONFIG, ...(body.config || {}) };
     const result = evaluateScalp(candles, config);
-    return NextResponse.json({ ok: true, signal: result, market: getMarketState() });
+    return NextResponse.json({ ok: true, source: "custom", demo: false, signal: result, market: getMarketState() });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Signal evaluation failed" },
