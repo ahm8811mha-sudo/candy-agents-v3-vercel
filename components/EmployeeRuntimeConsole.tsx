@@ -36,6 +36,13 @@ type WorkOrder = {
 
 type Workflow = "sale" | "purchase" | "idea";
 
+type ApprovedIdea = {
+  id: string;
+  title: string;
+  budgetSAR?: number;
+  executed?: boolean;
+};
+
 const labels: Record<string, string> = {
   RECEIVED: "مستلم",
   PLANNED: "مخطط",
@@ -65,6 +72,7 @@ function number(form: FormData, key: string) {
 export default function EmployeeRuntimeConsole() {
   const [workflow, setWorkflow] = useState<Workflow>("sale");
   const [orders, setOrders] = useState<WorkOrder[]>([]);
+  const [approvedIdeas, setApprovedIdeas] = useState<ApprovedIdea[]>([]);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,18 +82,21 @@ export default function EmployeeRuntimeConsole() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersResponse, statusResponse] = await Promise.all([
+      const [ordersResponse, statusResponse, ideasResponse] = await Promise.all([
         fetch("/api/employee-runtime/work-orders?limit=100", { cache: "no-store" }),
         fetch("/api/employee-runtime/status", { cache: "no-store" }),
+        fetch("/api/company/ideas", { cache: "no-store" }),
       ]);
-      const [ordersData, statusData] = await Promise.all([
+      const [ordersData, statusData, ideasData] = await Promise.all([
         ordersResponse.json(),
         statusResponse.json(),
+        ideasResponse.json().catch(() => null),
       ]);
       if (!ordersData.ok) throw new Error(ordersData.error || "تعذر تحميل أوامر العمل.");
       if (!statusData.ok) throw new Error(statusData.error || "تعذر فحص جاهزية المحرك.");
       setOrders(ordersData.workOrders || []);
       setRuntime(statusData);
+      if (ideasData?.ok) setApprovedIdeas((ideasData.approvedIdeas || []) as ApprovedIdea[]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "تعذر تحميل المحرك.");
     } finally {
@@ -292,17 +303,28 @@ export default function EmployeeRuntimeConsole() {
         {workflow === "idea" && (
           <form onSubmit={submitIdea} style={{ display: "grid", gap: 10 }}>
             <strong>الفكرة إلى التنفيذ</strong>
-            <p className="page-sub">يُقبل فقط معرف فكرة معتمدة فعليًا في مركز القرار؛ العنوان والميزانية وحالة الاعتماد تُقرأ من السجل الرسمي.</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}>
-              <input className={fields} name="ideaId" required placeholder="معرف الفكرة المعتمدة" />
-              <select className={fields} name="riskLevel" defaultValue="MEDIUM">
-                <option value="LOW">مخاطر منخفضة</option>
-                <option value="MEDIUM">مخاطر متوسطة</option>
-                <option value="HIGH">مخاطر مرتفعة</option>
-                <option value="CRITICAL">مخاطر حرجة</option>
-              </select>
-            </div>
-            <button className="primary-btn" disabled={busy}>
+            <p className="page-sub">اختر فكرة من الأفكار المعتمدة فعلياً في مركز القرار؛ العنوان والميزانية وحالة الاعتماد تُقرأ من السجل الرسمي.</p>
+            {approvedIdeas.filter((idea) => !idea.executed).length === 0 ? (
+              <p className="page-sub">لا توجد أفكار معتمدة متاحة للتحويل بعد — اعتمد فكرة من مركز القرار أولاً، ثم ستظهر هنا تلقائياً.</p>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}>
+                <select className={fields} name="ideaId" required defaultValue="">
+                  <option value="" disabled>اختر الفكرة المعتمدة</option>
+                  {approvedIdeas.filter((idea) => !idea.executed).map((idea) => (
+                    <option key={idea.id} value={idea.id}>
+                      {idea.title}{Number(idea.budgetSAR || 0) > 0 ? ` — ${Number(idea.budgetSAR).toLocaleString("ar-SA-u-nu-latn")} ر.س` : ""}
+                    </option>
+                  ))}
+                </select>
+                <select className={fields} name="riskLevel" defaultValue="MEDIUM">
+                  <option value="LOW">مخاطر منخفضة</option>
+                  <option value="MEDIUM">مخاطر متوسطة</option>
+                  <option value="HIGH">مخاطر مرتفعة</option>
+                  <option value="CRITICAL">مخاطر حرجة</option>
+                </select>
+              </div>
+            )}
+            <button className="primary-btn" disabled={busy || approvedIdeas.filter((idea) => !idea.executed).length === 0}>
               {busy ? <Loader2 className="spin" size={15} /> : <Play size={15} />} تحويل الفكرة إلى مشروع
             </button>
           </form>

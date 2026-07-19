@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../supabase";
 import { normalizeActionInitialStatus } from "./actionQueue";
 import { recordAudit } from "./audit";
 import { createExecutionBundle } from "./executionRepository";
+import { classifyExecutionKind } from "./executionHonesty";
 import { listIdeas, markIdeaExecuted } from "./ideas";
 import { createApprovalCritical } from "../approvals";
 
@@ -191,6 +192,16 @@ export async function executeApprovedIdea(
       kpiName: task.kpiName,
       kpiTarget: task.kpiTarget,
       dueDate: new Date(Date.now() + task.dueDays * 86_400_000).toISOString(),
+      metadata: {
+        executionKind: classifyExecutionKind({
+          title: task.title,
+          description: task.content,
+          requiresFunding: task.requiresFunding,
+          estimatedCostSAR: task.estimatedCostSAR,
+        }),
+        ...(task.requiresFunding ? { requiresFunding: true } : {}),
+        ...(Number(task.estimatedCostSAR || 0) > 0 ? { estimatedCostSAR: task.estimatedCostSAR } : {}),
+      },
     })),
     kpis: blueprint.kpis.map((kpi) => ({
       name: kpi.name,
