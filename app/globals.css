@@ -5,17 +5,27 @@
  * first and this :root wins shared names); it may only add [data-theme] scopes
  * and tokens that do not exist here. Brand identity tokens live in brand.css. */
 :root {
-  --bg: #0c1118;
-  --panel: #141b25;
-  --panel-2: #192230;
-  --line: rgba(255, 255, 255, 0.1);
-  --text: #f5f7fb;
-  --muted: #b0bac8;
-  --primary: #2f80ed;
-  --green: #38d39f;
+  /* Orvanta teal-ink — a deliberately chosen deep petrol-black drawn from the
+   * brand mark (#0797b7), NOT the default cool blue-charcoal. This is the
+   * app-wide "orvanta" identity ThemeShell asks for. */
+  --bg: #08110f;
+  --panel: #0e1c1a;
+  --panel-2: #142825;
+  --line: rgba(150, 214, 210, 0.11);
+  --text: #eef4f2;
+  --muted: #97aca8;
+  --primary: #10a6c2;
+  --green: #34c98c;
   --amber: #f4b740;
   --red: #ef6461;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+  /* Tight, directional — cast from one light source, never a fat all-round bloom */
+  --shadow: 0 14px 34px -16px rgba(0, 0, 0, 0.58);
+  /* Fine film grain, embedded so it needs no network */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+
+  /* Solid, considered action — no gradient fill. Light themes override the text to white. */
+  --action-bg: var(--primary);
+  --action-text: #04181c;
 
   --text-xs: 0.72rem;
   --text-sm: 0.82rem;
@@ -49,6 +59,23 @@ body {
 }
 button, input, textarea, select { font: inherit; }
 a { color: inherit; text-decoration: none; }
+
+/* Premium grain on the substrate — behind everything, felt not seen.
+ * Fixed so it reads as one continuous surface down the whole scroll. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 140px 140px;
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+}
+@media (prefers-color-scheme: light) {
+  body::before { opacity: 0.02; }
+}
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
@@ -103,8 +130,8 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--primary), var(--green));
-  color: white;
+  background: var(--primary);
+  color: #04181c;
   font-size: var(--text-sm);
 }
 
@@ -215,7 +242,7 @@ label {
 
 .input:focus, .textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 166, 194, 0.15);
 }
 
 .textarea {
@@ -232,24 +259,37 @@ label {
 }
 
 .primary-btn {
-  border: 0;
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--primary) 72%, #000);
   border-radius: var(--radius-sm);
   min-height: 46px;
-  padding: 12px 16px;
-  color: white;
-  background: var(--action-bg, linear-gradient(135deg, var(--primary), #1f9d86));
+  padding: 12px 18px;
+  color: var(--action-text, #04181c);
+  background: var(--action-bg, var(--primary));
   font-weight: 900;
   cursor: pointer;
   display: inline-flex;
   justify-content: center;
   align-items: center;
   gap: 8px;
-  transition: filter 0.18s, transform 0.18s;
+  /* top inner-lip highlight + a tight, colour-matched directional shadow (not a bloom) */
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
+    0 6px 16px -9px color-mix(in srgb, var(--primary) 65%, transparent);
+  transition: filter var(--dur-fast, 160ms) ease, box-shadow var(--dur-fast, 160ms) ease;
 }
 
-.primary-btn:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
-.primary-btn:active:not(:disabled) { transform: translateY(0); }
+/* The button itself never lifts; state shifts cleanly and the icon slides out. */
+.primary-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent),
+    0 11px 24px -9px color-mix(in srgb, var(--primary) 75%, transparent);
+}
+.primary-btn:active:not(:disabled) { filter: brightness(0.97); }
 .primary-btn:disabled { opacity: 0.72; cursor: progress; }
+.primary-btn svg { transition: transform var(--dur-fast, 160ms) ease; }
+.primary-btn:hover:not(:disabled) svg { transform: translateX(-3px); }
 .big-action { width: 100%; font-size: 1rem; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -287,7 +327,7 @@ label {
 .employee-card.active { border-color: rgba(244, 183, 64, 0.45); }
 .employee-card.done { border-color: rgba(56, 211, 159, 0.4); }
 .department-link { transition: border-color 160ms ease, transform 160ms ease; }
-.department-link:hover { border-color: rgba(124, 199, 255, 0.45); transform: translateY(-2px); }
+.department-link:hover { border-color: rgba(16, 166, 194, 0.45); transform: translateY(-2px); }
 
 .delivery-panel { padding: clamp(16px, 3vw, 28px); }
 .delivery-header {
@@ -499,7 +539,7 @@ label {
 }
 
 .metric-card:hover {
-  border-color: rgba(124, 199, 255, 0.25);
+  border-color: rgba(16, 166, 194, 0.25);
   transform: translateY(-1px);
 }
 
@@ -573,8 +613,8 @@ label {
 }
 
 .secondary-btn:hover:not(:disabled) {
-  border-color: rgba(124, 199, 255, 0.35);
-  background: rgba(124, 199, 255, 0.08);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--line));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .dashboard-actions {
@@ -613,7 +653,7 @@ label {
 
 .department-hero-live {
   background:
-    linear-gradient(135deg, rgba(47, 128, 237, 0.08), rgba(56, 211, 159, 0.04)),
+    linear-gradient(135deg, rgba(16, 166, 194, 0.08), rgba(56, 211, 159, 0.04)),
     var(--panel);
 }
 
@@ -655,7 +695,7 @@ label {
 
 .department-live-panel {
   background:
-    radial-gradient(circle at 20% 10%, rgba(124, 199, 255, 0.08), transparent 26%),
+    radial-gradient(circle at 20% 10%, rgba(16, 166, 194, 0.08), transparent 26%),
     var(--panel);
 }
 
@@ -856,7 +896,7 @@ label {
   border-radius: 999px;
   padding: 4px 9px;
   color: var(--accent-sky, #cfe7ff);
-  background: rgba(124, 199, 255, 0.13);
+  background: rgba(16, 166, 194, 0.13);
   font-size: 0.72rem;
   font-weight: 900;
 }
@@ -920,7 +960,7 @@ label {
 
 .intelligence-panel {
   background:
-    radial-gradient(circle at 85% 10%, rgba(47, 128, 237, 0.1), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(16, 166, 194, 0.1), transparent 28%),
     var(--panel);
 }
 
@@ -1043,7 +1083,7 @@ label {
   border: 1px solid var(--line);
   border-radius: 10px;
   background:
-    linear-gradient(145deg, rgba(124, 199, 255, 0.06), transparent),
+    linear-gradient(145deg, rgba(16, 166, 194, 0.06), transparent),
     var(--panel);
   box-shadow: var(--shadow);
   padding: 16px;
@@ -1173,7 +1213,7 @@ label {
 }
 
 .document-editor {
-  border-color: rgba(124, 199, 255, 0.38);
+  border-color: rgba(16, 166, 194, 0.38);
 }
 
 .editor-header,
@@ -1213,7 +1253,7 @@ label {
   gap: 9px;
   padding: 16px 18px;
   border-top: 1px solid var(--line);
-  background: rgba(124, 199, 255, 0.025);
+  background: rgba(16, 166, 194, 0.025);
 }
 
 .inline-source-form strong {
@@ -1363,7 +1403,7 @@ label {
 
 .executive-brief {
   background:
-    linear-gradient(135deg, rgba(56, 211, 159, 0.08), rgba(47, 128, 237, 0.04)),
+    linear-gradient(135deg, rgba(56, 211, 159, 0.08), rgba(16, 166, 194, 0.04)),
     var(--panel);
 }
 
@@ -1411,7 +1451,7 @@ label {
   border-radius: 999px;
   padding: 4px 9px;
   color: var(--accent-sky, #cfe7ff);
-  background: rgba(124, 199, 255, 0.12);
+  background: rgba(16, 166, 194, 0.12);
   font-size: 0.72rem;
   font-weight: 900;
 }
@@ -1461,7 +1501,7 @@ label {
 }
 
 .notification-item:hover { background: rgba(255, 255, 255, 0.02); }
-.notification-item.unread { background: rgba(47, 128, 237, 0.06); }
+.notification-item.unread { background: rgba(16, 166, 194, 0.06); }
 .notification-item-title { display: flex; align-items: center; gap: 8px; }
 .notification-item-message { color: var(--muted); font-size: var(--text-sm); line-height: 1.7; }
 
@@ -1773,8 +1813,8 @@ label {
 
 .quick-nav-card:hover {
   color: var(--text);
-  border-color: rgba(124, 199, 255, 0.35);
-  background: rgba(124, 199, 255, 0.04);
+  border-color: rgba(16, 166, 194, 0.35);
+  background: rgba(16, 166, 194, 0.04);
   transform: translateY(-2px);
 }
 
@@ -1990,9 +2030,13 @@ label {
   transition: border-color 0.18s, transform 0.18s;
 }
 
+.apple-card {
+  min-width: 0;
+}
+
 .apple-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(124, 199, 255, 0.2);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--line));
+  background: var(--panel-2);
 }
 
 .apple-card p {
@@ -2003,8 +2047,12 @@ label {
 
 .apple-card strong {
   color: var(--text);
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  line-height: 1;
+  /* sized to sit whole inside a narrow 4-up card — never spilling past its edge */
+  font-size: clamp(1.3rem, 2.4vw, 2.05rem);
+  line-height: 1.12;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .apple-card.blue { border-top: 4px solid var(--primary); }
@@ -2049,8 +2097,8 @@ label {
 }
 
 .apple-icon-button:hover:not(:disabled) {
-  border-color: rgba(124, 199, 255, 0.35);
-  background: rgba(124, 199, 255, 0.08);
+  border-color: rgba(16, 166, 194, 0.35);
+  background: rgba(16, 166, 194, 0.08);
 }
 
 .apple-command {
@@ -2076,7 +2124,7 @@ label {
 
 .apple-command textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.15);
+  box-shadow: 0 0 0 3px rgba(16, 166, 194, 0.15);
 }
 
 .apple-command button {
