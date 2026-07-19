@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
 import { reviveDueDeferrals } from "@/lib/approvals";
+import { reopenUnprovenRealTasks } from "@/lib/company/executionHonestyServer";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
@@ -29,6 +30,11 @@ export async function GET(req: NextRequest) {
       // Deferred decisions whose reminder date passed rejoin the owner queue.
       const revived = await reviveDueDeferrals();
       if (revived.length) await heartbeat({ phase: "deferrals-revived", count: revived.length });
+
+      // Honesty sweep: any real-world task marked DONE without the owner's
+      // confirmation is reopened, so a mislabeled "100%" can never persist.
+      const reopened = await reopenUnprovenRealTasks(context.tenantId);
+      if (reopened > 0) await heartbeat({ phase: "honesty-sweep", reopened });
 
       const idea = ensureDailyIdea();
       await enrichIdea(idea.id);

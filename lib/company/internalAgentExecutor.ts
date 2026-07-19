@@ -3,6 +3,7 @@ import { runAgentStructured } from "../aiStructured";
 import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
 import { claimCompanyActionForExecution, updateCompanyActionStatus, type CompanyAction } from "./actionQueue";
+import { REAL_WORLD_AGENT_PROGRESS_CAP } from "./executionHonesty";
 import type { InitiativeOption, ProductCandidate, SpecialistPlan } from "./initiativePlanning";
 
 const AGENT_EXECUTION_STALE_MS = 5 * 60_000;
@@ -83,10 +84,42 @@ async function updateAgentTasks(action: CompanyAction, status: "DONE" | "BLOCKED
   const payload = asRecord(action.payload) || {};
   const role = text(payload.role);
   if (!supabase || !action.project_id || !role) return;
-  let update = supabase.from("tasks").update({ status, progress_percent: status === "DONE" ? 100 : 0, updated_at: new Date().toISOString() }).eq("project_id", action.project_id).contains("metadata", { executionAgent: role });
-  if (tenantId) update = update.eq("tenant_id", tenantId);
-  const { error } = await update;
-  if (error) throw new Error(`Agent task update failed: ${error.message}`);
+  const now = new Date().toISOString();
+
+  if (status === "BLOCKED") {
+    let update = supabase.from("tasks").update({ status, progress_percent: 0, updated_at: now }).eq("project_id", action.project_id).contains("metadata", { executionAgent: role });
+    if (tenantId) update = update.eq("tenant_id", tenantId);
+    const { error } = await update;
+    if (error) throw new Error(`Agent task update failed: ${error.message}`);
+    return;
+  }
+
+  // An agent deliverable completes INTERNAL work only. REAL_WORLD steps stop
+  // at REVIEW with capped progress; only the owner's confirmation (or a
+  // verified receipt) closes them — the database trigger enforces the same.
+  let select = supabase.from("tasks").select("id,status,progress_percent,metadata").eq("project_id", action.project_id).contains("metadata", { executionAgent: role });
+  if (tenantId) select = select.eq("tenant_id", tenantId);
+  const { data: rows, error: selectError } = await select;
+  if (selectError) throw new Error(`Agent task lookup failed: ${selectError.message}`);
+
+  for (const row of rows || []) {
+    const metadata = asRecord(row.metadata) || {};
+    const realWorld = String(metadata.executionKind || "INTERNAL") === "REAL_WORLD";
+    const confirmed = metadata.ownerConfirmed === true || String(metadata.ownerConfirmed || "") === "true";
+    if (realWorld && confirmed) continue;
+    const patch = realWorld
+      ? {
+          status: "REVIEW",
+          progress_percent: REAL_WORLD_AGENT_PROGRESS_CAP,
+          metadata: { ...metadata, readyForOwner: true, agentCompletedAt: now },
+          updated_at: now,
+        }
+      : { status: "DONE", progress_percent: 100, updated_at: now };
+    let update = supabase.from("tasks").update(patch).eq("id", row.id);
+    if (tenantId) update = update.eq("tenant_id", tenantId);
+    const { error } = await update;
+    if (error) throw new Error(`Agent task update failed: ${error.message}`);
+  }
 }
 
 export async function executeInternalAgentAction(id: string, actor = "executive-office", tenantId?: string) {

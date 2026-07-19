@@ -17,6 +17,12 @@ import {
   RefreshCcw,
 } from "lucide-react";
 import { buildActionProjectGroups, type ProjectExecutionGroup } from "@/lib/company/actionProjectView";
+import {
+  executionStateLabels,
+  summarizeExecutionHonesty,
+  taskExecutionState,
+  type TaskExecutionState,
+} from "@/lib/company/executionHonesty";
 
 type ActionPayload = {
   confidence?: number;
@@ -96,6 +102,7 @@ type CompanyTask = {
   progress_percent?: number;
   owner_role?: string;
   due_date?: string;
+  metadata?: Record<string, unknown> | null;
   created_at?: string;
 };
 
@@ -148,6 +155,9 @@ export default function ActionQueuePanel() {
   const [integrationUnavailable, setIntegrationUnavailable] = useState(false);
   const [executingId, setExecutingId] = useState<string | null>(null);
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+  const [confirmingTaskId, setConfirmingTaskId] = useState<string | null>(null);
+  const [proofNote, setProofNote] = useState("");
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const initialProjectResolved = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -207,9 +217,33 @@ export default function ActionQueuePanel() {
     }
   }
 
+  async function confirmRealExecution(taskId: string) {
+    setConfirmBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/tasks/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: taskId, confirmReal: true, proofNote: proofNote.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.message || "تعذر تأكيد التنفيذ الفعلي.");
+      setMessage("سُجل التنفيذ الفعلي بتأكيدك، وأصبحت المهمة مكتملة رسمياً.");
+      setConfirmingTaskId(null);
+      setProofNote("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر تأكيد التنفيذ الفعلي.");
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
   useEffect(() => { load(); }, []);
 
   const groups = useMemo(() => buildActionProjectGroups(projects, actions, tasks), [projects, actions, tasks]);
+  const honesty = useMemo(() => summarizeExecutionHonesty(tasks), [tasks]);
   useEffect(() => {
     if (initialProjectResolved.current || groups.approved.length === 0) return;
     const selected = new URLSearchParams(window.location.search).get("project");
@@ -273,6 +307,22 @@ export default function ActionQueuePanel() {
         <Metric title="فشل" value={summary.failed} />
       </div>
 
+      {honesty.realWorldTotal > 0 && (
+        <div className="notice integration-notice" aria-label="الخطة مقابل الواقع">
+          <ListChecks size={17} />
+          <div>
+            <strong>الخطة مقابل الواقع: الإنجاز الحقيقي {honesty.honestProgress}%</strong>
+            <p>
+              خطوات تحتاج تنفيذاً فعلياً: {honesty.realWorldTotal.toLocaleString("ar-SA-u-nu-latn")} —
+              نُفذ منها فعلياً {honesty.realWorldConfirmed.toLocaleString("ar-SA-u-nu-latn")}،
+              وجاهزة بانتظارك {honesty.planReady.toLocaleString("ar-SA-u-nu-latn")}،
+              وبانتظار التمويل {honesty.waitingFunding.toLocaleString("ar-SA-u-nu-latn")}.
+              الأعمال الداخلية المكتملة: {honesty.internalDone.toLocaleString("ar-SA-u-nu-latn")}/{honesty.internalTotal.toLocaleString("ar-SA-u-nu-latn")}.
+            </p>
+          </div>
+        </div>
+      )}
+
       {!loaded && loading ? (
         <div className="action-queue-loading" role="status"><RefreshCcw className="spin" size={20} /> جارٍ تحميل ملفات المشاريع…</div>
       ) : actions.length === 0 && projects.length === 0 ? (
@@ -297,6 +347,12 @@ export default function ActionQueuePanel() {
                     integrationStatus={integrationStatus}
                     executingId={executingId}
                     execute={execute}
+                    confirmingTaskId={confirmingTaskId}
+                    setConfirmingTaskId={setConfirmingTaskId}
+                    proofNote={proofNote}
+                    setProofNote={setProofNote}
+                    confirmBusy={confirmBusy}
+                    confirmRealExecution={confirmRealExecution}
                   />
                 ))}
               </div>
@@ -319,16 +375,33 @@ export default function ActionQueuePanel() {
   );
 }
 
-function ProjectExecutionCard({ group, open, onToggle, integrationStatus, executingId, execute }: {
+const executionStateClass: Record<TaskExecutionState, string> = {
+  REAL_DONE: "done",
+  PLAN_READY: "high",
+  WAITING_FUNDING: "running",
+  ON_HOLD: "high",
+  INTERNAL_DONE: "done",
+  IN_PROGRESS: "running",
+  BLOCKED: "running",
+};
+
+function ProjectExecutionCard({ group, open, onToggle, integrationStatus, executingId, execute, confirmingTaskId, setConfirmingTaskId, proofNote, setProofNote, confirmBusy, confirmRealExecution }: {
   group: ProjectExecutionGroup<CompanyProject, CompanyAction, CompanyTask>;
   open: boolean;
   onToggle: () => void;
   integrationStatus: IntegrationStatus | null;
   executingId: string | null;
   execute: (action: CompanyAction) => Promise<void>;
+  confirmingTaskId: string | null;
+  setConfirmingTaskId: (id: string | null) => void;
+  proofNote: string;
+  setProofNote: (value: string) => void;
+  confirmBusy: boolean;
+  confirmRealExecution: (taskId: string) => Promise<void>;
 }) {
   const project = group.project;
   const hasPlan = Boolean(project.financial_snapshot?.initiativePlan);
+  const projectHonesty = summarizeExecutionHonesty(group.tasks);
   return (
     <article className={`project-execution-card ${open ? "is-open" : ""}`}>
       <button type="button" className="project-execution-card__header" onClick={onToggle} aria-expanded={open}>
@@ -339,14 +412,53 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
       <div className="project-execution-card__facts">
         <span><small>إنجاز الوكلاء</small><strong>{group.doneActions}/{group.actions.length}</strong></span>
         <span><small>المهام المكتملة</small><strong>{group.doneTasks}/{group.tasks.length}</strong></span>
-        <span><small>التقدم</small><strong>{group.progress}%</strong></span>
+        {projectHonesty.realWorldTotal > 0 && (
+          <span><small>نُفذ فعلياً</small><strong className={projectHonesty.realWorldConfirmed < projectHonesty.realWorldTotal ? "danger-text" : ""}>{projectHonesty.realWorldConfirmed}/{projectHonesty.realWorldTotal}</strong></span>
+        )}
+        <span><small>الإنجاز الحقيقي</small><strong>{projectHonesty.honestProgress}%</strong></span>
         <span><small>التعثرات</small><strong className={group.failedActions ? "danger-text" : ""}>{group.failedActions}</strong></span>
       </div>
       {open && (
         <div className="project-execution-card__body">
           <div className="project-execution-card__toolbar"><div><strong>خطة العمل والتنفيذ</strong><small>كل مهمة مرتبطة بمسؤول وحالة تقدم؛ وتحتها نتيجة الوكيل عند اكتمالها.</small></div>{hasPlan && <Link className="secondary-btn btn-sm" href={`/departments/executive?project=${project.id}#initiative-delivery`}>فتح الدراسة الكاملة <ArrowUpLeft size={14} /></Link>}</div>
           <div className="project-task-list">
-            {group.tasks.map((task) => <article key={task.id}><span className={`task-state ${task.status === "DONE" ? "done" : task.status === "BLOCKED" ? "blocked" : ""}`}>{task.status === "DONE" ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}</span><div><strong>{task.task_number ? `#${task.task_number} — ` : ""}{task.title}</strong><small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small></div><b>{Number(task.progress_percent || 0)}%</b></article>)}
+            {group.tasks.map((task) => {
+              const state = taskExecutionState(task);
+              const confirmable = state === "PLAN_READY";
+              const confirming = confirmingTaskId === task.id;
+              return (
+                <article key={task.id}>
+                  <span className={`task-state ${state === "REAL_DONE" || state === "INTERNAL_DONE" ? "done" : task.status === "BLOCKED" ? "blocked" : ""}`}>{state === "REAL_DONE" || state === "INTERNAL_DONE" ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}</span>
+                  <div>
+                    <strong>{task.task_number ? `#${task.task_number} — ` : ""}{task.title}</strong>
+                    <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
+                    <small className={`status-pill ${executionStateClass[state]}`} style={{ marginTop: 4, display: "inline-flex", width: "fit-content" }}>{executionStateLabels[state]}</small>
+                    {confirmable && !confirming && (
+                      <button type="button" className="secondary-btn btn-sm" style={{ marginTop: 6, width: "fit-content" }} onClick={() => { setConfirmingTaskId(task.id); setProofNote(""); }}>
+                        تأكيد التنفيذ الفعلي
+                      </button>
+                    )}
+                    {confirming && (
+                      <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                        <input
+                          className="field"
+                          value={proofNote}
+                          onChange={(event) => setProofNote(event.target.value)}
+                          placeholder="الإثبات: رقم السجل / مرجع الدفع / رابط الوثيقة"
+                        />
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" className="primary-btn btn-sm" disabled={confirmBusy} onClick={() => void confirmRealExecution(task.id)}>
+                            {confirmBusy ? <RefreshCcw className="spin" size={14} /> : <CheckCircle2 size={14} />} تم التنفيذ فعلياً
+                          </button>
+                          <button type="button" className="secondary-btn btn-sm" disabled={confirmBusy} onClick={() => setConfirmingTaskId(null)}>إلغاء</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <b>{Number(task.progress_percent || 0)}%</b>
+                </article>
+              );
+            })}
           </div>
           <div className="project-agent-results">{group.actions.map((action) => <ActionCard key={action.id} action={action} integrationStatus={integrationStatus} executingId={executingId} execute={execute} />)}</div>
         </div>

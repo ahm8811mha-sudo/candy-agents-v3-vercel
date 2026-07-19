@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         const [numberedTasksResult, linkedActionsResult] = await Promise.all([
           supabase
             .from("tasks")
-            .select("id,project_id,task_sequence,task_number,task_date,title,description,status,priority,progress_percent,owner_role,due_date,created_at")
+            .select("id,project_id,task_sequence,task_number,task_date,title,description,status,priority,progress_percent,owner_role,due_date,metadata,created_at")
             .eq("tenant_id", auth.context.tenantId)
             .in("project_id", projectIds)
             .order("created_at", { ascending: true }),
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
         const tasksResult = operatingIdentityMigrationMissing(numberedTasksResult.error)
           ? await supabase
               .from("tasks")
-              .select("id,project_id,title,description,status,priority,progress_percent,owner_role,due_date,created_at")
+              .select("id,project_id,title,description,status,priority,progress_percent,owner_role,due_date,metadata,created_at")
               .eq("tenant_id", auth.context.tenantId)
               .in("project_id", projectIds)
               .order("created_at", { ascending: true })

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runAgentStructured } from "../aiStructured";
+import { classifyExecutionKind } from "./executionHonesty";
 
 export type SpecialistRole = "MARKET" | "FINANCE" | "OPERATIONS" | "PROCUREMENT" | "RISK";
 export type PlanSource = "AI" | "RULE_ENGINE";
@@ -322,7 +323,7 @@ export function buildInitiativeBlueprint(plan: InitiativePlan, requiresApproval 
     kpiName: step.kpi,
     kpiTarget: 1,
     dueDate: new Date(now + step.dueDay * 86_400_000).toISOString(),
-    metadata: { executionKey: step.key, executionAgent: specialist.role, agentName: specialist.agentName, deliverable: step.deliverable, startDay: step.startDay, dueDay: step.dueDay, dependencies: step.dependencies, executionMode: step.executionMode },
+    metadata: { executionKey: step.key, executionAgent: specialist.role, agentName: specialist.agentName, deliverable: step.deliverable, startDay: step.startDay, dueDay: step.dueDay, dependencies: step.dependencies, executionMode: step.executionMode, executionKind: classifyExecutionKind({ title: step.title, description: `${step.objective} ${step.deliverable}` }) },
   })));
   return {
     tasks,
