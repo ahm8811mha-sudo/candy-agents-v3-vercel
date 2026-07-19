@@ -7,18 +7,18 @@
 @import url("https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&display=swap");
 
 .fx-root {
-  --fx-ink: #061418;
-  --fx-ink-2: #082027;
-  --fx-ink-3: #0b2831;
-  --fx-surface: #0d2731;
-  --fx-text: #e8f1f1;
-  --fx-strong: #ffffff;
-  --fx-muted: #8ea9ae;
-  --fx-faint: #698a90;
-  --fx-accent: #63c8dd;
+  --fx-ink: #eef5f3;
+  --fx-ink-2: #ffffff;
+  --fx-ink-3: #e6f0ed;
+  --fx-surface: #b3ccc6;
+  --fx-text: #10312b;
+  --fx-strong: #08231f;
+  --fx-muted: #5c7370;
+  --fx-faint: #7f938f;
+  --fx-accent: #0a7f98;
   --fx-accent-deep: #0797b7;
-  --fx-btn-fill: #4cc0d8;
-  --fx-btn-ink: #04191f;
+  --fx-btn-fill: #0a7f98;
+  --fx-btn-ink: #ffffff;
   --fx-display: "Reem Kufi", "Cairo", system-ui, sans-serif;
   --fx-body: "Cairo", system-ui, sans-serif;
   --fx-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
@@ -127,7 +127,7 @@
     0 3px 3px color-mix(in srgb, var(--fx-accent-deep) 12%, transparent);
   transition: background 180ms ease;
 }
-.fx-enter:hover { background: color-mix(in srgb, var(--fx-btn-fill) 86%, #ffffff); }
+.fx-enter:hover { background: color-mix(in srgb, var(--fx-btn-fill) 88%, #000); }
 .fx-enter .fx-arrow { transition: transform 200ms cubic-bezier(0.3, 0.9, 0.4, 1); }
 .fx-enter:hover .fx-arrow { transform: translate(-3px, -3px); }
 
@@ -353,7 +353,7 @@
 }
 .fx-more .fx-arrow { transition: transform 220ms cubic-bezier(0.3, 0.9, 0.4, 1); }
 .fx-more:hover .fx-arrow { transform: translate(-4px, -4px); }
-.fx-more:hover { color: color-mix(in srgb, var(--fx-accent) 70%, #ffffff); }
+.fx-more:hover { color: color-mix(in srgb, var(--fx-accent) 78%, #000); }
 
 /* ── Departments: bare typographic entries, no tiles ────────── */
 .fx-depts {
@@ -428,7 +428,7 @@
 .fx-footer {
   position: relative;
   padding-top: clamp(70px, 10vh, 120px);
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, #03090b 85%, transparent));
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, #d5e6e1 82%, transparent));
   overflow: hidden;
 }
 .fx-footer__grid {
@@ -485,33 +485,35 @@
    login) lives on the same surface as the facade.
    ═══════════════════════════════════════════════════════════════ */
 [data-theme="orvanta"] {
-  --bg: #061418;
-  --panel: #0a2027;
-  --panel-2: #0d2731;
-  --field: #081b21;
-  --field-2: #06161b;
-  --line: rgba(126, 196, 209, 0.14);
-  --text: #e8f1f1;
-  --text-strong: #ffffff;
-  --muted: #8ea9ae;
-  --muted-2: #a5bcc0;
-  --primary: #0797b7;
-  --primary-2: #4cc0d8;
-  --accent-sky: #63c8dd;
-  --accent-sky-soft: rgba(99, 200, 221, 0.12);
-  --green: #3ecfa0;
-  --amber: #f0b64a;
-  --red: #ef6f6c;
-  --green-soft: rgba(62, 207, 160, 0.13);
-  --amber-soft: rgba(240, 182, 74, 0.14);
-  --red-soft: rgba(239, 111, 108, 0.13);
-  --shadow: 0 18px 50px rgba(2, 10, 13, 0.45);
-  --shadow-ceo: 0 18px 50px rgba(2, 10, 13, 0.45);
-  --brand-gradient: linear-gradient(135deg, #0d7f99, #0797b7);
-  --action-bg: #4cc0d8;
-  --action-text: #04191f;
-  --orvanta-ink: #e8f1f1;
-  --orvanta-soft-text: #8ea9ae;
+  /* Clean light identity (ref: calm teal-on-white). Brand-tinted off-white,
+   * white cards, deep teal-ink text — never UI-kit gray or cream. */
+  --bg: #eef5f3;
+  --panel: #ffffff;
+  --panel-2: #f2f8f6;
+  --field: #f2f8f6;
+  --field-2: #e7f1ee;
+  --line: rgba(16, 92, 84, 0.13);
+  --text: #10312b;
+  --text-strong: #08231f;
+  --muted: #5c7370;
+  --muted-2: #47605c;
+  --primary: #0a7f98;
+  --primary-2: #0a9ab6;
+  --accent-sky: #0a7f98;
+  --accent-sky-soft: rgba(10, 127, 152, 0.1);
+  --green: #0f9d6c;
+  --amber: #b9791a;
+  --red: #d0574f;
+  --green-soft: rgba(15, 157, 108, 0.11);
+  --amber-soft: rgba(185, 121, 26, 0.12);
+  --red-soft: rgba(208, 87, 79, 0.1);
+  --shadow: 0 12px 30px -18px rgba(13, 74, 68, 0.2);
+  --shadow-ceo: 0 12px 30px -18px rgba(13, 74, 68, 0.16);
+  --brand-gradient: linear-gradient(135deg, #0a9fbb, #0a7d74);
+  --action-bg: #0a7f98;
+  --action-text: #ffffff;
+  --orvanta-ink: #10312b;
+  --orvanta-soft-text: #5c7370;
 }
 
 /* one display voice across the app */
@@ -532,7 +534,7 @@
 [data-theme="orvanta"] .primary-btn:hover:not(:disabled) {
   filter: none;
   transform: none;
-  background: color-mix(in srgb, #4cc0d8 86%, #ffffff) !important;
+  background: color-mix(in srgb, var(--action-bg) 88%, #000) !important;
 }
 [data-theme="orvanta"] .shell-link.is-active {
   background: var(--action-bg) !important;
@@ -583,10 +585,10 @@
 [data-theme="orvanta"] .hero-scenic {
   border: 1px solid var(--line) !important;
   background:
-    linear-gradient(215deg, rgba(7, 151, 183, 0.18) 0%, transparent 46%),
-    linear-gradient(180deg, #082027, #061418) !important;
+    linear-gradient(215deg, rgba(10, 159, 187, 0.1) 0%, transparent 48%),
+    linear-gradient(180deg, #ffffff, #eaf3f0) !important;
   color: var(--text) !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow) !important;
 }
 [data-theme="orvanta"] .hero-title { color: var(--text-strong) !important; }
 [data-theme="orvanta"] .hero-title em {
