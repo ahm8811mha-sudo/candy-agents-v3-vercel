@@ -8,17 +8,17 @@
  * Never redefine a token here that globals.css already defines at :root. */
 
 :root {
-  --field: #0c1a18;
-  --field-2: #081210;
-  --muted-2: #9fb3b0;
-  --text-strong: #ffffff;
+  --field: #f2f8f6;
+  --field-2: #e7f1ee;
+  --muted-2: #47605c;
+  --text-strong: #08231f;
 
   --primary-2: #0a7d74;
-  /* accent is the brand teal family, never a stray light blue */
-  --accent-sky: #4fd0e0;
-  --accent-sky-soft: rgba(79, 208, 224, 0.12);
+  /* accent is the brand teal family */
+  --accent-sky: #0a7f98;
+  --accent-sky-soft: rgba(10, 127, 152, 0.1);
   /* tonal, single-hue brand gradient — for mark tiles/avatars only, never buttons */
-  --brand-gradient: linear-gradient(135deg, #12a7c4, #0a7d74);
+  --brand-gradient: linear-gradient(135deg, #0a9fbb, #0a7d74);
 
   --green-soft: rgba(56, 211, 159, 0.13);
   --amber-soft: rgba(244, 183, 64, 0.13);

@@ -8,24 +8,26 @@
   /* Orvanta teal-ink — a deliberately chosen deep petrol-black drawn from the
    * brand mark (#0797b7), NOT the default cool blue-charcoal. This is the
    * app-wide "orvanta" identity ThemeShell asks for. */
-  --bg: #08110f;
-  --panel: #0e1c1a;
-  --panel-2: #142825;
-  --line: rgba(150, 214, 210, 0.11);
-  --text: #eef4f2;
-  --muted: #97aca8;
-  --primary: #10a6c2;
-  --green: #34c98c;
-  --amber: #f4b740;
-  --red: #ef6461;
-  /* Tight, directional — cast from one light source, never a fat all-round bloom */
-  --shadow: 0 14px 34px -16px rgba(0, 0, 0, 0.58);
+  --bg: #eef5f3;
+  --panel: #ffffff;
+  --panel-2: #f2f8f6;
+  --line: rgba(16, 92, 84, 0.13);
+  --text: #10312b;
+  --text-strong: #08231f;
+  --muted: #5c7370;
+  --primary: #0a7f98;
+  --primary-2: #0a7d74;
+  --green: #0f9d6c;
+  --amber: #b9791a;
+  --red: #d0574f;
+  /* Soft, tight, tinted — a considered lift on white, never a black bloom */
+  --shadow: 0 12px 30px -18px rgba(13, 74, 68, 0.2);
   /* Fine film grain, embedded so it needs no network */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 
-  /* Solid, considered action — no gradient fill. Light themes override the text to white. */
+  /* Solid, considered action — no gradient fill, white label on the deep teal. */
   --action-bg: var(--primary);
-  --action-text: #04181c;
+  --action-text: #ffffff;
 
   --text-xs: 0.72rem;
   --text-sm: 0.82rem;
