@@ -7,6 +7,8 @@
  * UI and downstream departments (finance / procurement / marketing) keep working.
  */
 
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 const API_VERSION = "2024-01";
 
 export type ShopifyProduct = {
@@ -136,6 +138,61 @@ export async function deleteShopifyProduct(productId: string): Promise<{ deleted
 export async function setShopifyProductStatus(productId: string, status: string): Promise<{ id: string; status: string }> {
   await shopifyWrite(`products/${productId}.json`, "PUT", { product: { id: Number(productId), status } });
   return { id: productId, status };
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks: the Shopify → site half of the two-way sync.
+// ---------------------------------------------------------------------------
+
+function webhookSecret() {
+  return process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_API_SECRET || "";
+}
+
+export function isShopifyWebhookConfigured(): boolean {
+  return Boolean(webhookSecret());
+}
+
+/**
+ * Verify a Shopify webhook against the shared secret. Shopify signs the raw
+ * request body with HMAC-SHA256 (base64) in the X-Shopify-Hmac-Sha256 header.
+ * Constant-time comparison; returns false on any mismatch or missing secret.
+ */
+export function verifyShopifyWebhook(rawBody: string, hmacHeader: string | null): boolean {
+  const secret = webhookSecret();
+  if (!secret || !hmacHeader) return false;
+  const digest = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+  const a = Buffer.from(digest);
+  const b = Buffer.from(hmacHeader);
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+const PRODUCT_WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"] as const;
+
+/**
+ * Register the product webhooks with Shopify so the store pushes changes back
+ * to the site. Idempotent per topic (Shopify rejects duplicates, which we
+ * treat as already-registered). Requires a public callback base URL.
+ */
+export async function registerShopifyProductWebhooks(callbackBaseUrl: string): Promise<Array<{ topic: string; status: string }>> {
+  if (!isShopifyWriteConfigured()) throw new Error("Shopify write access is not configured.");
+  const address = `${callbackBaseUrl.replace(/\/$/, "")}/api/shopify/webhook`;
+  const results: Array<{ topic: string; status: string }> = [];
+  for (const topic of PRODUCT_WEBHOOK_TOPICS) {
+    try {
+      await shopifyWrite("webhooks.json", "POST", { webhook: { topic, address, format: "json" } });
+      results.push({ topic, status: "registered" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Shopify returns 422 "for this topic and address already been taken".
+      results.push({ topic, status: /already been taken|422/.test(message) ? "already-registered" : `failed: ${message.slice(0, 120)}` });
+    }
+  }
+  return results;
 }
 
 function mockSnapshot(): ShopifySnapshot {
