@@ -5,7 +5,14 @@ import {
   verifyOwnerAccessToken,
 } from "@/lib/security/personalAccess";
 
-const PUBLIC_EXACT_PATHS = new Set(["/login", "/api/owner-access", "/api/health"]);
+const PUBLIC_EXACT_PATHS = new Set([
+  "/login",
+  "/api/owner-access",
+  "/api/health",
+  // Shopify calls this without the owner cookie; the route verifies Shopify's
+  // HMAC signature itself, which is the correct authentication for a webhook.
+  "/api/shopify/webhook",
+]);
 
 function secureEqual(left: string | null | undefined, right: string | null | undefined) {
   if (!left || !right || left.length !== right.length) return false;
