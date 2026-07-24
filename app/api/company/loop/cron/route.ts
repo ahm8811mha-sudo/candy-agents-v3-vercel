@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
 import { reviveDueDeferrals } from "@/lib/approvals";
 import { reopenUnprovenRealTasks } from "@/lib/company/executionHonestyServer";
+import { sweepDecisionCommitments } from "@/lib/company/executiveSecretariat";
 import { getLearningSnapshot } from "@/lib/company/learning";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
@@ -36,6 +37,11 @@ export async function GET(req: NextRequest) {
       const reopened = await reopenUnprovenRealTasks(context.tenantId);
       if (reopened > 0) await heartbeat({ phase: "honesty-sweep", reopened });
 
+      // The Executive Secretariat chases overdue decisions and escalates the
+      // stuck ones, so no approved decision is ever left unowned.
+      const chased = await sweepDecisionCommitments(context.tenantId);
+      if (chased.reminded > 0) await heartbeat({ phase: "decision-sweep", ...chased });
+
       const idea = ensureDailyIdea();
       await enrichIdea(idea.id);
       await heartbeat({ phase: "idea-enriched", ideaId: idea.id });
@@ -57,7 +63,7 @@ export async function GET(req: NextRequest) {
       return {
         processedCount: 1 + workflowProcessed + outboxProcessed,
         failedCount: outboxFailed,
-        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea.id },
+        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
         body: {
           dailyIdea: { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode },
           learning: {
