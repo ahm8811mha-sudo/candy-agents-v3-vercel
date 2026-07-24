@@ -13,6 +13,7 @@ import {
   Activity,
   Brain,
   Bot,
+  ClipboardCheck,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
@@ -105,6 +106,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const links: NavLink[] = [
     { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
     { href: "/inbox", label: "القرارات", icon: Inbox, badge: pending },
+    { href: "/decisions-followup", label: "متابعة القرارات", icon: ClipboardCheck },
     { href: "/employee-runtime", label: "الموظفون الذاتيون", icon: Bot },
     { href: "/operations", label: "التنفيذ", icon: Send },
     { href: "/departments", label: "الأقسام", icon: Building2 },

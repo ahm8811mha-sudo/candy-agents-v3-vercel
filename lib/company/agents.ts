@@ -154,6 +154,22 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
     authorityLimitSAR: 0,
     reportsTo: "sultan",
   },
+  {
+    id: "diwan",
+    name: "ريّان",
+    title: "رئيس الديوان التنفيذي (Chief of Staff)",
+    rank: "FUNCTIONAL",
+    department: "الديوان التنفيذي",
+    href: "/decisions-followup",
+    responsibilities: [
+      "التقاط كل قرار معتمد أو محال لحظة صدوره وتحويله إلى التزام متتبَّع",
+      "إسناد مسؤول محدد وتاريخ استحقاق لكل قرار",
+      "مطاردة المواعيد وتذكير المسؤولين وتصعيد المتأخر للمالك",
+      "تأكيد إغلاق القرار بدليل ثم ربطه بما نفّذه فعلاً",
+    ],
+    authorityLimitSAR: 0,
+    reportsTo: "sultan",
+  },
 ];
 
 export function getAgent(id: string): CompanyAgent | undefined {

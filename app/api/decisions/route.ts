@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordDecision, listDecisions, decisionMap, decisionStats, hydrateDecisions, type DecisionAction } from "@/lib/decisions";
+import { openDecisionCommitment, type CommitmentPriority } from "@/lib/company/executiveSecretariat";
 
 export const dynamic = "force-dynamic";
+
+// The secretariat only tracks decisions that require follow-through.
+const FOLLOW_THROUGH_ACTIONS: DecisionAction[] = ["APPROVED", "FORWARDED"];
 
 const VALID_ACTIONS: DecisionAction[] = ["APPROVED", "REJECTED", "NOTED", "FORWARDED"];
 
@@ -47,7 +51,28 @@ export async function POST(req: NextRequest) {
       decidedBy: String(body.decidedBy || "CEO"),
     });
 
-    return NextResponse.json({ ok: true, record, map: decisionMap(), stats: decisionStats() });
+    // The Executive Secretariat catches every follow-through decision the
+    // instant it is issued, so it can never fall off the radar. A missing
+    // owner does not block the decision — the commitment opens as "needs owner".
+    let commitment = null;
+    if (FOLLOW_THROUGH_ACTIONS.includes(action)) {
+      const result = await openDecisionCommitment({
+        decisionId: record.id,
+        sourceType: record.sourceType,
+        sourceId: record.sourceId,
+        title: record.title,
+        detail: record.note,
+        decidedBy: record.decidedBy,
+        priority: (body.priority as CommitmentPriority) || "MEDIUM",
+        assigneeId: body.assigneeId ? String(body.assigneeId) : undefined,
+        assigneeName: body.assigneeName || record.forwardedTo || undefined,
+        dueInDays: body.dueInDays ? Number(body.dueInDays) : undefined,
+        requiresProof: Boolean(body.requiresProof),
+      });
+      commitment = result.commitment;
+    }
+
+    return NextResponse.json({ ok: true, record, commitment, map: decisionMap(), stats: decisionStats() });
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Decision failed" },
