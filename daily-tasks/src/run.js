@@ -45,20 +45,36 @@ async function main() {
     const tasks = await collectTaskRows(page, config, selectors, logger);
     summary.seen = tasks.length;
 
+    // سجل الحالة يمنع إعادة التنفيذ، والإكسل يمنع تكرار الصف. وهما شرطان منفصلان:
+    // معاملة سجلت في وضع التجربة يجب أن تنفذ لاحقا دون أن يتكرر صفها.
+    const pending = tasks.filter((task) => {
+      const key = task.taskNumber || task.url;
+      if (!key) return false;
+      if (isProcessed(state, key)) {
+        summary.skipped += 1;
+        return false;
+      }
+      return true;
+    });
+
+    if (summary.skipped) logger.info(`تم تخطي ${summary.skipped} معاملة نفذت سابقا.`);
+
+    // تعالج المهام على دفعات: كل دفعة تسجل في الإكسل ثم تنفذ ثم يحفظ سجل الحالة.
+    // بهذا لا تضيع نتيجة ساعة كاملة من العمل لو انقطع الاتصال في المهمة الأخيرة.
+    const batches = [];
+    for (let index = 0; index < pending.length; index += config.batchSize) {
+      batches.push(pending.slice(index, index + config.batchSize));
+    }
+    logger.info(`${pending.length} معاملة للمعالجة على ${batches.length} دفعة (حجم الدفعة ${config.batchSize}).`);
+
+    for (const [batchIndex, batch] of batches.entries()) {
+    logger.step(`الدفعة ${batchIndex + 1} من ${batches.length}`);
+
     // ============ المرحلة الأولى: قراءة كل معاملة وتسجيلها في الإكسل ============
     const collected = [];
 
-    for (const task of tasks) {
+    for (const task of batch) {
       const key = task.taskNumber || task.url;
-      if (!key) continue;
-
-      // سجل الحالة يمنع إعادة التنفيذ، والإكسل يمنع تكرار الصف. وهما شرطان منفصلان:
-      // معاملة سجلت في وضع التجربة يجب أن تنفذ لاحقا دون أن يتكرر صفها.
-      if (isProcessed(state, key)) {
-        summary.skipped += 1;
-        logger.info(`المهمة ${key}: نفذت سابقا، تم تخطيها.`);
-        continue;
-      }
 
       try {
         await openTask(page, task, config, selectors, gotoList);
@@ -134,6 +150,7 @@ async function main() {
       if (!rows.length) continue;
       const result = await appendRows(file, day, rows);
       summary.recorded += result.added;
+      for (const row of rows) alreadyInExcel.add(row.taskNumber);
       logger.info(`تم تسجيل ${result.added} معاملة في شريحة «${day}» بملف ${path.basename(file)}.`);
     }
 
@@ -169,7 +186,12 @@ async function main() {
       await updateStatuses(workbooks[category], day, updates);
     }
 
+    // حفظ سجل الحالة بعد كل دفعة، لا في نهاية التشغيلة فقط.
     saveState(state);
+    logger.info(
+      `نهاية الدفعة ${batchIndex + 1}: مسجلة ${summary.recorded}، تحت التنفيذ ${summary.marked}، أخطاء ${summary.failed}.`
+    );
+    }
   } finally {
     await context.close().catch(() => {});
     await browser.close().catch(() => {});

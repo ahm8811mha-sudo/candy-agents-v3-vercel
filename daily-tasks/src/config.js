@@ -53,6 +53,8 @@ export function loadConfig(argv = process.argv.slice(2)) {
     // مسار متصفح جاهز على الجهاز (Chrome أو Edge)، للأجهزة التي يمنع فيها تحميل متصفح جديد.
     chromiumPath: (process.env.CHROMIUM_PATH || "").trim(),
     maxTasks: Number(process.env.MAX_TASKS_PER_RUN || 200),
+    // حجم الدفعة: بعد كل دفعة يكتب الإكسل ويحفظ سجل الحالة، فلا يضيع العمل عند الانقطاع.
+    batchSize: Math.max(1, Number(process.env.BATCH_SIZE || 25)),
 
     outputDir: resolveDir(process.env.OUTPUT_DIR, "./output"),
     pdfDir: resolveDir(process.env.PDF_DIR, "./pdfs"),

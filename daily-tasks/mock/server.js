@@ -10,26 +10,38 @@ import http from "node:http";
 
 const PORT = Number(process.env.MOCK_PORT || 8910);
 
+// عناوين على نفس نمط ttn.ksu.edu.sa:
+//   نوع الطلب - اسم المريض - رقم الملف - [الطبيب] - القسم
 const TASKS = [
-  { id: "44120", subject: "تحويل لجلسات علاج طبيعي", sender: "عيادة العظام", date: "2026-07-27",
-    patient: "Ahmed Al Otaibi", file: "789456", dept: "Physiotherapy", diagnosis: "Lower back pain" },
-  { id: "44121", subject: "طلب منظار قولون", sender: "عيادة الباطنة", date: "2026-07-27",
-    patient: "Noura Al Salem", file: "112233", dept: "Gastroenterology", diagnosis: "Chronic abdominal pain" },
-  { id: "44122", subject: "متابعة تأهيل بعد عملية", sender: "قسم الجراحة", date: "2026-07-27",
-    patient: "Khalid Al Harbi", file: "556677", dept: "Physiotherapy", diagnosis: "Post operative rehabilitation" },
-];
+  { id: "144800006202", patient: "خلود سالم محمد القحطاني", file: "1065170",
+    doctor: "ماجد الماضي", dept: "الجهاز الهضمي", hijri: "05 صفر 1448", greg: "19 يوليو 2026",
+    diagnosis: "Chronic gastritis" },
+  { id: "144800006900", patient: "هويده جميل سنوسي صابر", file: "10389908",
+    doctor: "", dept: "العلاج الطبيعي", hijri: "08 صفر 1448", greg: "22 يوليو 2026",
+    diagnosis: "Lower back pain" },
+  { id: "144800006641", patient: "دليل محسن هميجان المطيري", file: "10285310",
+    doctor: "سعد الخويطر", dept: "الجهاز الهضمي", hijri: "07 صفر 1448", greg: "21 يوليو 2026",
+    diagnosis: "Colon screening" },
+  { id: "144800006644", patient: "حصه علي ابراهيم البيطار", file: "123727",
+    doctor: "", dept: "العلاج الطبيعي", hijri: "07 صفر 1448", greg: "21 يوليو 2026",
+    diagnosis: "Post operative rehabilitation" },
+].map((task) => ({
+  ...task,
+  title: ["طلب تقرير انجليزي", task.patient, task.file, task.doctor, task.dept]
+    .filter(Boolean)
+    .join(" - "),
+}));
 
 const state = new Map(TASKS.map((task) => [task.id, { status: "جديدة", note: "" }]));
 const sessions = new Set();
 
 function buildPdf(task) {
+  // المرفق يحمل "باقي المعلومات" فقط؛ الاسم ورقم الملف والقسم تؤخذ من عنوان المهمة.
   const lines = [
     `Task No: ${task.id}`,
-    `Patient Name: ${task.patient}`,
     `File No: ${task.file}`,
-    `Department: ${task.dept}`,
     `Diagnosis: ${task.diagnosis}`,
-    `Date: ${task.date}`,
+    `Request Type: English medical report`,
   ];
 
   const content = lines
@@ -105,23 +117,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/tasks") {
-    const rows = TASKS.map((task) => `
-      <tr>
-        <td>${task.id}</td>
-        <td>${task.subject}</td>
-        <td>${task.sender}</td>
-        <td>${task.date}</td>
-        <td>${state.get(task.id).status}</td>
-        <td><a href="/task/${task.id}">فتح</a></td>
-      </tr>`).join("");
+    // قائمة بطاقات لا جدول، مطابقة لشكل صفحة المهام الواردة الحقيقية.
+    const cards = TASKS.map((task) => `
+      <div class="panel">
+        <a href="/task/${task.id}">${task.title}</a>
+        <span class="status">${state.get(task.id).status}</span>
+        <span class="task-number">الرقم: ${task.id}</span>
+        <div>من: Munirah Aldosari إلى: أحمد ناصر فهد الأحمد</div>
+        <div class="task-date">${task.hijri} الموافق ${task.greg}</div>
+        <div>
+          <button type="button">إسناد</button>
+          <button type="button">تعليق</button>
+          <button type="button">رفض</button>
+        </div>
+      </div>`).join("");
 
     return send(res, 200, page(`
       <a href="/logout">تسجيل الخروج</a>
-      <h1>المهام الواردة</h1>
-      <table>
-        <thead><tr><th>رقم المهمة</th><th>الموضوع</th><th>الجهة المرسلة</th><th>التاريخ</th><th>الحالة</th><th>إجراء</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`));
+      <h1>المهام الواردة (${TASKS.length})</h1>
+      ${cards}`));
   }
 
   const detail = url.pathname.match(/^\/task\/(\d+)$/);
@@ -146,7 +160,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, page(`
       <a href="/tasks">المهام الواردة</a>
       <h1>تفاصيل المهمة ${task.id}</h1>
-      <p>الموضوع: ${task.subject}</p>
+      <p>${task.title}</p>
       <p><a href="/task/${task.id}/attachment.pdf">المرفق</a></p>
       <p>الحالة الحالية: ${current.status}</p>
       <form method="post">

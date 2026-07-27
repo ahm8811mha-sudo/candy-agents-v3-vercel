@@ -1,5 +1,5 @@
-import { findFirst, requireFirst } from "./locate.js";
-import { clean, normalizeDigits } from "./parse.js";
+import { findFirst, requireFirst, preferRemembered, rememberSelector } from "./locate.js";
+import { clean, normalizeDigits, parseTaskTitle, parseTaskNumber, parseArabicDate, parseSender } from "./parse.js";
 
 /** يقرأ صفوف جدول المهام الواردة عبر كل الصفحات ويعيد وصفا مبدئيا لكل مهمة. */
 export async function collectTaskRows(page, config, selectors, logger) {
@@ -31,16 +31,29 @@ export async function collectTaskRows(page, config, selectors, logger) {
         return clean(text);
       };
 
-      const link = await findFirst(row, selectors.taskList.openTaskLink, { timeout: 1200 });
+      const link = await findFirst(row, selectors.taskList.openTaskLink, { timeout: 1200, cacheKey: "openTaskLink" });
       const href = link ? await link.locator.getAttribute("href").catch(() => null) : null;
 
+      // نص البطاقة كاملا: منه نقرأ رقم المهمة والتاريخ عندما لا تكون الصفحة جدولا.
+      const cardText = clean(await row.innerText().catch(() => ""));
+
+      const titleFound = await findFirst(row, selectors.taskList.titleText || [], { timeout: 1200, cacheKey: "titleText" });
+      const title = titleFound ? clean(await titleFound.locator.innerText().catch(() => "")) : "";
+
+      // عنوان المهمة يحمل: نوع الطلب - اسم المريض - رقم الملف - الطبيب - القسم
+      const fromTitle = parseTaskTitle(title);
+
       const record = {
-        taskNumber: normalizeDigits(await valueAt(columns.taskNumber)),
-        patientName: await valueAt(columns.patientName),
-        fileNumber: normalizeDigits(await valueAt(columns.fileNumber)),
-        subject: await valueAt(columns.subject),
-        sender: await valueAt(columns.sender),
-        date: await valueAt(columns.date),
+        taskNumber: normalizeDigits(await valueAt(columns.taskNumber)) || parseTaskNumber(cardText),
+        patientName: (await valueAt(columns.patientName)) || fromTitle.patientName || "",
+        fileNumber: normalizeDigits(await valueAt(columns.fileNumber)) || fromTitle.fileNumber || "",
+        department: fromTitle.department || "",
+        doctor: fromTitle.doctor || "",
+        requestType: fromTitle.requestType || "",
+        title,
+        subject: (await valueAt(columns.subject)) || title,
+        sender: (await valueAt(columns.sender)) || parseSender(cardText),
+        date: (await valueAt(columns.date)) || parseArabicDate(cardText),
         url: href && !href.startsWith("javascript:") && !href.startsWith("#")
           ? new URL(href, page.url()).toString()
           : null,
@@ -110,15 +123,18 @@ export async function markTaskInProgress(page, config, selectors, taskNumber, lo
   let box = null;
   let clickedAny = false;
 
-  for (const candidate of selectors.taskDetail.inProgressButton) {
+  for (const candidate of preferRemembered("inProgressButton", selectors.taskDetail.inProgressButton)) {
     const button = await findFirst(page, [candidate], { timeout: 3000 });
     if (!button) continue;
 
     await button.locator.click().catch(() => {});
     clickedAny = true;
 
-    box = await findFirst(page, selectors.taskDetail.commentBox, { timeout: 5000 });
-    if (box) break;
+    box = await findFirst(page, selectors.taskDetail.commentBox, { timeout: 5000, cacheKey: "commentBox" });
+    if (box) {
+      rememberSelector("inProgressButton", candidate);
+      break;
+    }
   }
 
   if (!clickedAny) {
@@ -141,7 +157,7 @@ export async function markTaskInProgress(page, config, selectors, taskNumber, lo
     await box.locator.fill(config.inProgressComment);
   }
 
-  const save = await findFirst(page, selectors.taskDetail.saveButton, { timeout: 8000 });
+  const save = await findFirst(page, selectors.taskDetail.saveButton, { timeout: 8000, cacheKey: "saveButton" });
   if (!save) {
     logger.warn(`المهمة ${taskNumber}: لم يوجد زر الحفظ — لم يحفظ أي تغيير.`);
     return { marked: false, reason: "save-button-not-found" };
@@ -149,7 +165,7 @@ export async function markTaskInProgress(page, config, selectors, taskNumber, lo
   await save.locator.click();
   await page.waitForLoadState("networkidle").catch(() => {});
 
-  const confirmed = await findFirst(page, selectors.taskDetail.saveConfirmation, { timeout: 6000 });
+  const confirmed = await findFirst(page, selectors.taskDetail.saveConfirmation, { timeout: 6000, cacheKey: "saveConfirmation" });
   logger.info(
     confirmed
       ? `المهمة ${taskNumber}: تم وضعها تحت التنفيذ وحفظ الملاحظة.`

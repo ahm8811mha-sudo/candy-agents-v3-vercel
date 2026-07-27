@@ -18,6 +18,69 @@ export function clean(value) {
     .trim();
 }
 
+const ARABIC_MONTHS = {
+  يناير: 1, فبراير: 2, مارس: 3, أبريل: 4, ابريل: 4, مايو: 5, يونيو: 6, يونيه: 6,
+  يوليو: 7, يوليه: 7, أغسطس: 8, اغسطس: 8, سبتمبر: 9, أكتوبر: 10, اكتوبر: 10,
+  نوفمبر: 11, ديسمبر: 12,
+};
+
+/**
+ * عنوان المهمة في نظام متابعة المهام يحمل البيانات مفصولة بشرطات:
+ *   نوع الطلب - اسم المريض - رقم الملف - الطبيب - القسم
+ * وأحيانا بلا اسم طبيب:
+ *   نوع الطلب - اسم المريض - رقم الملف - القسم
+ * لذلك نعتمد على موقع الجزء الرقمي بدل عد الأجزاء، فيصح الشكلان.
+ */
+export function parseTaskTitle(title) {
+  const parts = clean(title)
+    .split(/\s+[-–—]\s+/)
+    .map((part) => clean(part))
+    .filter(Boolean);
+
+  if (parts.length < 3) return {};
+
+  const fileIndex = parts.findIndex((part, index) => index > 0 && /^\d{4,12}$/.test(normalizeDigits(part)));
+  if (fileIndex < 1) return { requestType: parts[0], department: parts[parts.length - 1] };
+
+  const tail = parts.slice(fileIndex + 1);
+
+  return {
+    requestType: parts.slice(0, fileIndex - 1).join(" - "),
+    patientName: parts[fileIndex - 1],
+    fileNumber: normalizeDigits(parts[fileIndex]),
+    // ما بين رقم الملف والقسم هو اسم الطبيب، والقسم دائما الجزء الأخير.
+    doctor: tail.length > 1 ? tail.slice(0, -1).join(" - ") : "",
+    department: tail.length ? tail[tail.length - 1] : "",
+  };
+}
+
+/** «الرقم: 144800006202» → «144800006202» */
+export function parseTaskNumber(text) {
+  const normalized = normalizeDigits(clean(text));
+  return normalized.match(/(?:الرقم|رقم المهمة|رقم المعاملة)\s*[:：]?\s*(\d{6,20})/)?.[1]
+    || normalized.match(/\b(\d{10,20})\b/)?.[1]
+    || "";
+}
+
+/** «من: Munirah Aldosari إلى: أحمد ناصر فهد الأحمد» → «Munirah Aldosari» */
+export function parseSender(text) {
+  const match = clean(text).match(/من\s*[:：]\s*(.+?)\s*(?:إلى\s*[:：]|الرقم\s*[:：]|$)/);
+  return clean(match?.[1]).slice(0, 80);
+}
+
+/** «05 صفر 1448 الموافق 19 يوليو 2026» → «2026-07-19» (نأخذ الميلادي بعد "الموافق"). */
+export function parseArabicDate(text) {
+  const normalized = normalizeDigits(clean(text));
+  const after = normalized.includes("الموافق") ? normalized.split("الموافق").pop() : normalized;
+
+  const match = after.match(/(\d{1,2})\s+([؀-ۿ]+)\s+(\d{4})/);
+  if (match && ARABIC_MONTHS[match[2]]) {
+    return `${match[3]}-${String(ARABIC_MONTHS[match[2]]).padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  }
+
+  return normalizeDate(after);
+}
+
 /**
  * يبحث عن «المسمى : القيمة» ويقف عند نهاية السطر أو عند بداية مسمى آخر،
  * حتى لا تبتلع القيمة بقية الصفحة عندما يكون الـPDF مستخرجا كسطر واحد طويل.
@@ -103,9 +166,9 @@ export function parsePdfFields(rawText) {
     requestType,
     sender,
     documentDate: normalizeDate(documentDate),
-    // ملخص مقروء عندما ينجح الاستخراج، وإلا مقتطف خام يساعد على المراجعة اليدوية.
+    // ملخص مقروء متى نجح الاستخراج، وإلا مقتطف خام يساعد على المراجعة اليدوية.
     summary:
-      patientName && fileNumber
+      [patientName, fileNumber, taskNumber, diagnosis, requestType].filter(Boolean).length >= 2
         ? [requestType, diagnosis].filter(Boolean).join(" — ")
         : text.slice(0, 300),
   };
@@ -142,10 +205,11 @@ export function mergeSources({ row = {}, pdf = {}, ai = {} }) {
     taskNumber: pick(row.taskNumber, pdf.taskNumber, ai.taskNumber),
     patientName: pick(row.patientName, pdf.patientName, ai.patientName),
     fileNumber: pick(row.fileNumber, pdf.fileNumber, ai.fileNumber),
-    department: pick(pdf.department, ai.department, row.subject),
-    doctor: pick(pdf.doctor, ai.referringDoctor),
+    // القسم والطبيب ونوع الطلب مذكورة في عنوان المهمة نفسه، وهي أوثق من نص الـPDF.
+    department: pick(row.department, pdf.department, ai.department),
+    doctor: pick(row.doctor, pdf.doctor, ai.referringDoctor),
     diagnosis: pick(pdf.diagnosis, ai.diagnosis),
-    requestType: pick(row.subject, pdf.requestType, ai.requestType),
+    requestType: pick(row.requestType, row.subject, pdf.requestType, ai.requestType),
     sender: pick(row.sender, pdf.sender, ai.senderEntity),
     documentDate: normalizeDate(pick(pdf.documentDate, ai.documentDate, row.date)),
     summary: pick(ai.summary, pdf.summary),

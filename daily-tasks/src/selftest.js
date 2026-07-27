@@ -3,7 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 
-import { parsePdfFields, mergeSources, normalizeDate, normalizeDigits } from "./parse.js";
+import {
+  parsePdfFields, mergeSources, normalizeDate, normalizeDigits,
+  parseTaskTitle, parseTaskNumber, parseArabicDate, parseSender,
+} from "./parse.js";
 import { classify, categoryLabel, PHYSIO, GASTRO, UNKNOWN } from "./classify.js";
 import { appendRows, existingTaskNumbers, updateStatuses, COLUMNS } from "./excel.js";
 import { extractPdfText } from "./pdf.js";
@@ -64,6 +67,57 @@ const SAMPLE = `مستشفى الملك فهد
 async function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "daily-tasks-selftest-"));
   const selectors = loadSelectors();
+
+  // عناوين حقيقية منقولة حرفيا من صفحة المهام الواردة في ttn.ksu.edu.sa
+  await check("قراءة عنوان المهمة بخمسة أجزاء (مع اسم الطبيب)", () => {
+    const parsed = parseTaskTitle("طلب تقرير انجليزي - خلود سالم محمد القحطاني - 1065170 - ماجد الماضي - الجهاز الهضمي");
+    assert.equal(parsed.requestType, "طلب تقرير انجليزي");
+    assert.equal(parsed.patientName, "خلود سالم محمد القحطاني");
+    assert.equal(parsed.fileNumber, "1065170");
+    assert.equal(parsed.doctor, "ماجد الماضي");
+    assert.equal(parsed.department, "الجهاز الهضمي");
+  });
+
+  await check("قراءة عنوان المهمة بأربعة أجزاء (بلا اسم طبيب)", () => {
+    const parsed = parseTaskTitle("طلب تقرير انجليزي - هويده جميل سنوسي صابر - 10389908 - العلاج الطبيعي");
+    assert.equal(parsed.patientName, "هويده جميل سنوسي صابر");
+    assert.equal(parsed.fileNumber, "10389908");
+    assert.equal(parsed.doctor, "", `توقعنا بلا طبيب لكن ظهر: ${parsed.doctor}`);
+    assert.equal(parsed.department, "العلاج الطبيعي");
+  });
+
+  await check("التصنيف من عنوان المهمة مباشرة", () => {
+    const cases = [
+      ["طلب تقرير انجليزي - دليل محسن هميجان المطيري - 10285310 - سعد الخويطر - الجهاز الهضمي", GASTRO],
+      ["طلب تقرير انجليزي - حصه علي ابراهيم البيطار - 123727 - العلاج الطبيعي", PHYSIO],
+      ["طلب تقرير انجليزي - نوال فرحان هريسان الرشيدي - 1201518 - نهله عزام - الجهاز الهضمي", GASTRO],
+      ["طلب تقرير انجليزي - مسفر محمد عون الجبيري - 10392393 - مهند الطيب - الجهاز الهضمي", GASTRO],
+      ["طلب تقرير انجليزي - حميد بخيت القثامي - 10567029 - الجهاز الهضمي", GASTRO],
+    ];
+    for (const [title, expected] of cases) {
+      const parsed = parseTaskTitle(title);
+      const verdict = classify(parsed, title, selectors.classification);
+      assert.equal(verdict.category, expected, `${title} صنف كـ${verdict.category}`);
+    }
+  });
+
+  await check("قراءة الجهة المرسلة من البطاقة", () => {
+    assert.equal(
+      parseSender("من: Munirah Aldosari إلى: أحمد ناصر فهد الأحمد"),
+      "Munirah Aldosari"
+    );
+  });
+
+  await check("قراءة رقم المهمة من البطاقة", () => {
+    assert.equal(parseTaskNumber("الرقم: 144800006202"), "144800006202");
+    assert.equal(parseTaskNumber("الرقم: ١٤٤٨٠٠٠٠٦٩٠٠"), "144800006900");
+  });
+
+  await check("قراءة التاريخ الميلادي بعد «الموافق»", () => {
+    assert.equal(parseArabicDate("05 صفر 1448 الموافق 19 يوليو 2026"), "2026-07-19");
+    assert.equal(parseArabicDate("08 صفر 1448 الموافق 22 يوليو 2026"), "2026-07-22");
+    assert.equal(parseArabicDate("07 صفر 1448 الموافق 21 يوليو 2026"), "2026-07-21");
+  });
 
   await check("استخراج الحقول من نص عربي", () => {
     const fields = parsePdfFields(SAMPLE);

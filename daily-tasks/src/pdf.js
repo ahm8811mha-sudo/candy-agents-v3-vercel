@@ -4,7 +4,7 @@ import { findFirst } from "./locate.js";
 
 /** يحمل مرفق المعاملة ويعيد مساره على القرص، أو null إذا لم يوجد مرفق. */
 export async function downloadTaskPdf(page, context, config, selectors, taskId, logger) {
-  const found = await findFirst(page, selectors.taskDetail.pdfLink, { timeout: 6000 });
+  const found = await findFirst(page, selectors.taskDetail.pdfLink, { timeout: 6000, cacheKey: "pdfLink" });
   if (!found) {
     logger.warn(`المهمة ${taskId}: لا يوجد مرفق PDF ظاهر في الصفحة.`);
     return null;
