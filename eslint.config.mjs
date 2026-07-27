@@ -12,6 +12,8 @@ export default defineConfig([
     "playwright-report/**",
     "test-results/**",
     "next-env.d.ts",
+    // حزمة مستقلة لها اعتمادياتها وتشغيلها الخاص، خارج بناء تطبيق Next.
+    "daily-tasks/**",
   ]),
   {
     rules: {
