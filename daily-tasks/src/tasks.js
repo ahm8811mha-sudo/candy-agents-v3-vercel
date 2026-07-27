@@ -104,16 +104,31 @@ export async function markTaskInProgress(page, config, selectors, taskNumber, lo
     return { marked: false, reason: "dry-run" };
   }
 
-  const button = await findFirst(page, selectors.taskDetail.inProgressButton, { timeout: 8000 });
-  if (!button) {
+  // نجرب مرشحي الزر واحدا واحدا ونتحقق بعد كل ضغطة من ظهور خانة الكتابة.
+  // السبب: عبارة "تحت التنفيذ" قد ترد كنص حالة في الصفحة، فالضغط عليها لا يفعل شيئا،
+  // والاكتفاء بأول مطابقة يجعل السكربت يظن أنه ضغط الزر وهو لم يضغطه.
+  let box = null;
+  let clickedAny = false;
+
+  for (const candidate of selectors.taskDetail.inProgressButton) {
+    const button = await findFirst(page, [candidate], { timeout: 3000 });
+    if (!button) continue;
+
+    await button.locator.click().catch(() => {});
+    clickedAny = true;
+
+    box = await findFirst(page, selectors.taskDetail.commentBox, { timeout: 5000 });
+    if (box) break;
+  }
+
+  if (!clickedAny) {
     logger.warn(`المهمة ${taskNumber}: لم يوجد زر "تحت التنفيذ" في الصفحة.`);
     return { marked: false, reason: "button-not-found" };
   }
-  await button.locator.click();
-
-  const box = await findFirst(page, selectors.taskDetail.commentBox, { timeout: 10_000 });
   if (!box) {
-    logger.warn(`المهمة ${taskNumber}: لم تظهر خانة الكتابة بعد الضغط على الزر.`);
+    logger.warn(
+      `المهمة ${taskNumber}: لم تظهر خانة الكتابة بعد الضغط. عدل taskDetail.inProgressButton أو taskDetail.commentBox في config/selectors.json.`
+    );
     return { marked: false, reason: "comment-box-not-found" };
   }
 

@@ -52,9 +52,11 @@ async function main() {
       const key = task.taskNumber || task.url;
       if (!key) continue;
 
-      if (isProcessed(state, key) || alreadyInExcel.has(String(task.taskNumber))) {
+      // سجل الحالة يمنع إعادة التنفيذ، والإكسل يمنع تكرار الصف. وهما شرطان منفصلان:
+      // معاملة سجلت في وضع التجربة يجب أن تنفذ لاحقا دون أن يتكرر صفها.
+      if (isProcessed(state, key)) {
         summary.skipped += 1;
-        logger.info(`المهمة ${key}: مسجلة سابقا، تم تخطيها.`);
+        logger.info(`المهمة ${key}: نفذت سابقا، تم تخطيها.`);
         continue;
       }
 
@@ -86,12 +88,14 @@ async function main() {
 
         const merged = mergeSources({ row: task, pdf: pdfFields, ai: aiFields });
         const verdict = classify(merged, `${rawText} ${task.subject || ""}`, selectors.classification);
+        const taskNumber = merged.taskNumber || String(task.taskNumber || key);
 
         collected.push({
           key,
           category: verdict.category,
+          alreadyRecorded: alreadyInExcel.has(taskNumber) || alreadyInExcel.has(String(task.taskNumber)),
           row: {
-            taskNumber: merged.taskNumber || String(task.taskNumber || key),
+            taskNumber,
             patientName: merged.patientName,
             fileNumber: merged.fileNumber,
             department: merged.department || categoryLabel(verdict.category),
@@ -110,8 +114,9 @@ async function main() {
           task,
         });
 
+        const note = alreadyInExcel.has(taskNumber) ? " (مسجلة في الإكسل سابقا، ستنفذ فقط)" : "";
         logger.info(
-          `المهمة ${key}: ${merged.patientName || "اسم غير مستخرج"} / ملف ${merged.fileNumber || "غير مستخرج"} → ${categoryLabel(verdict.category)}`
+          `المهمة ${key}: ${merged.patientName || "اسم غير مستخرج"} / ملف ${merged.fileNumber || "غير مستخرج"} → ${categoryLabel(verdict.category)}${note}`
         );
       } catch (error) {
         summary.failed += 1;
@@ -123,7 +128,9 @@ async function main() {
 
     // كتابة الإكسل قبل أي تعديل على النظام، حتى لا تضيع بيانات معاملة نفذت ولم تسجل.
     for (const [category, file] of Object.entries(workbooks)) {
-      const rows = collected.filter((item) => item.category === category).map((item) => item.row);
+      const rows = collected
+        .filter((item) => item.category === category && !item.alreadyRecorded)
+        .map((item) => item.row);
       if (!rows.length) continue;
       const result = await appendRows(file, day, rows);
       summary.recorded += result.added;

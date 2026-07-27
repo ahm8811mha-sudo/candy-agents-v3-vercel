@@ -67,10 +67,13 @@
     ],
     "patientNameField": ["text=اسم المريض", "text=المريض"],
     "fileNumberField": ["text=رقم الملف", "text=الملف الطبي"],
+    "_ترتيب_مهم": "العناصر القابلة للضغط أولا. لو وضعت 'text=تحت التنفيذ' في الأول فقد يلتقط عبارة الحالة المكتوبة في الصفحة بدل الزر نفسه.",
     "inProgressButton": [
-      "text=تحت التنفيذ",
       "button:has-text('تحت التنفيذ')",
-      "input[value='تحت التنفيذ']"
+      "input[value='تحت التنفيذ']",
+      "a:has-text('تحت التنفيذ')",
+      "[role='button']:has-text('تحت التنفيذ')",
+      "text=تحت التنفيذ"
     ],
     "commentBox": [
       "textarea",
@@ -79,9 +82,10 @@
       "div[contenteditable='true']"
     ],
     "saveButton": [
-      "text=حفظ",
       "button:has-text('حفظ')",
       "input[value='حفظ']",
+      "a:has-text('حفظ')",
+      "text=حفظ",
       "text=Save"
     ],
     "saveConfirmation": [
