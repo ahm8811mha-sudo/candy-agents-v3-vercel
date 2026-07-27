@@ -1,0 +1,123 @@
+{
+  "_تعليمات": [
+    "هذا الملف يربط السكربت بصفحات نظامك. كل حقل يقبل قائمة محاولات تجرب بالترتيب حتى تنجح واحدة.",
+    "صيغة المحاولة: إما محدد CSS عادي، أو 'text=النص الظاهر' لمطابقة نص الزر أو الرابط.",
+    "شغل 'npm run discover' أولا: سيفتح النظام ويحفظ لقطات الشاشة وبنية الصفحة في مجلد screenshots/",
+    "ثم عدل القيم أدناه بما يطابق نظامك فعليا. لا تحتاج لتعديل أي ملف آخر."
+  ],
+
+  "login": {
+    "usernameInput": [
+      "input[name='username']",
+      "input[name='UserName']",
+      "input[id*='user' i]",
+      "input[type='text']"
+    ],
+    "passwordInput": [
+      "input[name='password']",
+      "input[id*='pass' i]",
+      "input[type='password']"
+    ],
+    "submitButton": [
+      "button[type='submit']",
+      "input[type='submit']",
+      "text=دخول",
+      "text=تسجيل الدخول",
+      "text=Login"
+    ],
+    "successIndicator": [
+      "text=المهام",
+      "text=تسجيل الخروج",
+      "text=خروج"
+    ]
+  },
+
+  "navigation": {
+    "incomingTasksLink": [
+      "text=المهام الواردة",
+      "text=الوارد",
+      "a[href*='inbox' i]",
+      "a[href*='task' i]"
+    ]
+  },
+
+  "taskList": {
+    "rowContainer": ["table tbody tr", "div[role='row']", ".task-row"],
+    "openTaskLink": ["a", "button"],
+    "nextPageButton": ["text=التالي", "a[rel='next']", "text=Next"],
+    "columns": {
+      "_شرح": "رقم العمود يبدأ من 0. اجعل القيمة null إذا كان العمود غير موجود في الجدول وسيستخرج من الـPDF بدلا عنه.",
+      "taskNumber": 0,
+      "patientName": null,
+      "fileNumber": null,
+      "subject": 1,
+      "sender": 2,
+      "date": 3
+    }
+  },
+
+  "taskDetail": {
+    "pdfLink": [
+      "a[href$='.pdf']",
+      "a[href*='.pdf']",
+      "a[href*='attachment' i]",
+      "a[href*='download' i]",
+      "text=المرفق",
+      "text=مرفق"
+    ],
+    "patientNameField": ["text=اسم المريض", "text=المريض"],
+    "fileNumberField": ["text=رقم الملف", "text=الملف الطبي"],
+    "inProgressButton": [
+      "text=تحت التنفيذ",
+      "button:has-text('تحت التنفيذ')",
+      "input[value='تحت التنفيذ']"
+    ],
+    "commentBox": [
+      "textarea",
+      "input[name*='note' i]",
+      "input[name*='comment' i]",
+      "div[contenteditable='true']"
+    ],
+    "saveButton": [
+      "text=حفظ",
+      "button:has-text('حفظ')",
+      "input[value='حفظ']",
+      "text=Save"
+    ],
+    "saveConfirmation": [
+      "text=تم الحفظ",
+      "text=تمت العملية بنجاح",
+      "text=بنجاح"
+    ]
+  },
+
+  "classification": {
+    "_شرح": "تصنيف المعاملة لأي ملف إكسل. تبحث الكلمات في نص الـPDF وفي عنوان المهمة.",
+    "physiotherapy": [
+      "العلاج الطبيعي",
+      "علاج طبيعي",
+      "العلاج الطبيعى",
+      "التأهيل",
+      "تأهيل طبي",
+      "physiotherapy",
+      "physical therapy",
+      "rehabilitation"
+    ],
+    "gastro": [
+      "الجهاز الهضمي",
+      "جهاز هضمي",
+      "الجهاز الهضمى",
+      "الباطنة",
+      "المناظير",
+      "منظار",
+      "القولون",
+      "المعدة",
+      "الكبد",
+      "gastro",
+      "gastroenterology",
+      "endoscopy",
+      "colonoscopy",
+      "hepatology"
+    ]
+  }
+}

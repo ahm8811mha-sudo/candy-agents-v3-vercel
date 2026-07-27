@@ -1,0 +1,12 @@
+# بيانات الدخول - لا ترفع هذا الملف أبدا
+.env
+
+# مخرجات تحتوي على بيانات مرضى - لا ترفع للمستودع
+output/
+state/
+logs/
+pdfs/
+storage-state.json
+screenshots/
+
+node_modules/
