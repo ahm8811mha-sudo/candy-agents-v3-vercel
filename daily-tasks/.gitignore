@@ -6,7 +6,10 @@ output/
 state/
 logs/
 pdfs/
-storage-state.json
 screenshots/
 
-node_modules/
+# بيئة بايثون
+.venv/
+venv/
+__pycache__/
+*.py[cod]

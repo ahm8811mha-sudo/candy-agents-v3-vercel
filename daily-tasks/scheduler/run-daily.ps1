@@ -19,7 +19,11 @@ foreach ($folder in @("logs", "pdfs", "screenshots")) {
     }
 }
 
-& node "src/run.js"
+# يفضل بايثون البيئة الافتراضية إن وجدت، وإلا يستخدم بايثون النظام.
+$venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$python = if (Test-Path $venvPython) { $venvPython } else { "python" }
+
+& $python -m daily_tasks.run
 $code = $LASTEXITCODE
 
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
