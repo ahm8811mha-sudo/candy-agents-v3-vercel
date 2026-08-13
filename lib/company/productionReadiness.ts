@@ -46,7 +46,14 @@ export function getProductionReadiness(): ProductionReadiness {
   const supabaseEnvironment = getSupabaseEnvironmentReadiness();
   const hasServerSecret = supabaseEnvironment.hasServerKey;
   const hasPublicAnonServerWriteFallback = Boolean(process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const personalAccessCodeConfigured = Boolean(process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY);
+  const personalAccessCode = process.env.ORVANTA_OWNER_ACCESS_KEY || process.env.API_SECRET_KEY || "";
+  const personalAccessCodeConfigured = Boolean(personalAccessCode);
+  // Strength is judged on the CONFIGURED code, not on what the login form
+  // accepts. This is the only place a length rule protects anything: it warns
+  // the owner that the key guarding the whole system is weak, without ever
+  // blocking them from signing in with the key they actually have.
+  const OWNER_CODE_MIN_LENGTH = 12;
+  const ownerCodeStrong = personalAccessCode.length >= OWNER_CODE_MIN_LENGTH;
   const googleWorkspace = getGoogleWorkspaceStatus();
   const workflowRuntimeEnabled = personalMode
     ? process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED !== "false"
@@ -86,6 +93,17 @@ export function getProductionReadiness(): ProductionReadiness {
         : isAuthEnabled()
           ? "Commercial authentication is enabled. Sensitive routes require authenticated roles and tenant context."
           : "AUTH_ENABLED is not true. Commercial routes must fail closed."
+    ),
+    check(
+      "owner-code-strength",
+      "Owner access code strength",
+      !personalMode || !personalAccessCodeConfigured || ownerCodeStrong,
+      !personalAccessCodeConfigured
+        ? "No owner access code is configured yet."
+        : ownerCodeStrong
+          ? `The configured owner code is at least ${OWNER_CODE_MIN_LENGTH} characters.`
+          : `The configured owner code is only ${personalAccessCode.length} characters. It unlocks the entire financial and operating system — replace ORVANTA_OWNER_ACCESS_KEY with at least ${OWNER_CODE_MIN_LENGTH} characters (20+ recommended) and redeploy.`,
+      false
     ),
     check(
       "owner-cookie-secret",

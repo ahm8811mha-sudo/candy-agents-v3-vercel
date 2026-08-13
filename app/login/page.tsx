@@ -67,12 +67,20 @@ export default function LoginPage() {
               <span style={{ fontWeight: 800 }}>رمز وصول المالك</span>
               <div style={{ position: "relative" }}>
                 <KeyRound size={19} style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)" }} />
+                {/*
+                  No minLength here on purpose. A length rule on the *entry*
+                  field adds zero security — an attacker posts to the API
+                  directly and never sees this form (brute force is stopped by
+                  the server's rate limit). All it can do is lock the real
+                  owner out when the configured code is shorter than the rule.
+                  Code strength is enforced where it belongs: the readiness
+                  gate warns when the configured owner code is weak.
+                */}
                 <input
                   className="input"
                   type="password"
                   autoComplete="one-time-code"
                   required
-                  minLength={12}
                   maxLength={128}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
