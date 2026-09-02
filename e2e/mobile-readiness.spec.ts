@@ -138,7 +138,7 @@ test("the executive office replaces the raw Supabase error with an actionable pr
   );
   await expect(page.getByText("Supabase is not configured.")).toHaveCount(0);
   await expect(page.getByText("صحة الشركة —")).toBeVisible();
-  await expect(page.getByText("Preview isolated")).toBeVisible();
+  await expect(page.getByText("نسخة معاينة معزولة", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "تشغيل رادار الفرص" })).toBeDisabled();
   await expect(page.locator(".ops-metrics")).toHaveCount(0);
 

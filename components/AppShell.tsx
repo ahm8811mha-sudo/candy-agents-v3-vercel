@@ -197,28 +197,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
 
+        <div className="shell-group">الذكاء</div>
         <Link
           href="/company-brain"
-          className="notice"
+          className={`shell-link ${pathname.startsWith("/company-brain") ? "is-active" : ""}`}
           onClick={() => setOpen(false)}
-          style={{
-            margin: "22px 12px 0",
-            fontSize: ".78rem",
-            lineHeight: 1.7,
-            display: "grid",
-            gap: 6,
-            textDecoration: "none",
-          }}
+          aria-current={pathname.startsWith("/company-brain") ? "page" : undefined}
         >
-          <strong
-            style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
-          >
-            <Brain size={14} /> العقل المؤسسي
-          </strong>
-          <span style={{ color: "var(--muted)" }}>
-            التوأم الرقمي، التوقعات، المحاكاة، التخطيط والسرد التنفيذي في
-            مساحة واحدة.
-          </span>
+          <Brain size={16} aria-hidden="true" />
+          العقل المؤسسي
         </Link>
       </aside>
 
@@ -249,9 +236,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <CommandPalette />
             <NotificationCenter />
             <SessionControl />
-            <span className="app-header__status hide-mobile">
-              <span className="app-header__dot" />
-              Orvanta جاهز
+            <span className="app-header__status hide-mobile" title="النظام متصل">
+              <span className="app-header__dot" aria-hidden="true" />
+              متصل
             </span>
           </div>
         </div>

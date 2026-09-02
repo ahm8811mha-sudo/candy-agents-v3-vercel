@@ -168,15 +168,7 @@
   box-shadow: 0 8px 22px rgba(15, 111, 255, 0.16);
 }
 
-.bento-kicker,
-.eyebrow,
-.department-badge strong {
-  color: var(--orvanta-cyan) !important;
-}
-
-:focus-visible {
-  outline-color: var(--orvanta-cyan) !important;
-}
+/* Section labels and focus colour are decided by system.css. */
 
 .brand-loading,
 .brand-error,

@@ -276,11 +276,11 @@ export default function InboxCenter() {
                   <button className="primary-btn btn-sm" disabled={busy === item.id} onClick={() => decideSystem(item, "APPROVED")}>
                     {busy === item.id ? <Loader2 className="spin" size={14} /> : <Check size={14} />} اعتماد وتنفيذ
                   </button>
-                  <button className="secondary-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => decideSystem(item, "REJECTED")}>
+                  <button className="ghost-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => decideSystem(item, "REJECTED")}>
                     <X size={14} /> رفض
                   </button>
                   <button
-                    className="secondary-btn btn-sm"
+                    className="ghost-btn btn-sm"
                     disabled={busy === item.id}
                     onClick={() => {
                       setDeferFor(deferFor === item.id ? null : item.id);
@@ -296,13 +296,13 @@ export default function InboxCenter() {
                   <button className="primary-btn btn-sm" disabled={busy === item.id} onClick={() => reviewCompany(item, "APPROVED")}>
                     {busy === item.id ? <Loader2 className="spin" size={14} /> : <Check size={14} />} اعتماد
                   </button>
-                  <button className="secondary-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => reviewCompany(item, "REJECTED")}>
+                  <button className="ghost-btn btn-sm danger-text" disabled={busy === item.id} onClick={() => reviewCompany(item, "REJECTED")}>
                     <X size={14} /> رفض
                   </button>
-                  <button className="secondary-btn btn-sm" onClick={() => { setNoteFor(noteFor === item.id ? null : item.id); setForwardFor(null); }}>
+                  <button className="ghost-btn btn-sm" onClick={() => { setNoteFor(noteFor === item.id ? null : item.id); setForwardFor(null); }}>
                     <MessageSquarePlus size={14} /> ملاحظة
                   </button>
-                  <button className="secondary-btn btn-sm" onClick={() => { setForwardFor(forwardFor === item.id ? null : item.id); setNoteFor(null); }}>
+                  <button className="ghost-btn btn-sm" onClick={() => { setForwardFor(forwardFor === item.id ? null : item.id); setNoteFor(null); }}>
                     <Share2 size={14} /> إحالة
                   </button>
                 </>

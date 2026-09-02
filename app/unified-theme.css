@@ -231,10 +231,12 @@
   color: var(--text);
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-@keyframes appViewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Route settle: transform only. Content is never at opacity 0, so a stalled
+ * or unsupported animation can never leave a page blank. */
+@keyframes appViewIn { from { transform: translateY(6px); } to { transform: none; } }
 .app-view { opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
-  .app-view { animation: appViewIn 0.32s var(--ease) both; }
+  .app-view { animation: appViewIn 0.28s var(--ease) both; }
 }
 @media (max-width: 920px) {
   .app-header__brand small { display: none; }

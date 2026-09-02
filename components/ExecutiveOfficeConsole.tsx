@@ -236,10 +236,10 @@ export default function ExecutiveOfficeConsole() {
     : loading
       ? "جارٍ التحقق"
       : databaseIssue?.isPreview
-        ? "Preview isolated"
+        ? "نسخة معاينة معزولة"
         : databaseIssue?.code === "SUPABASE_AUTH_REJECTED"
-          ? "Database key rejected"
-          : "Database required";
+          ? "مفتاح قاعدة البيانات مرفوض"
+          : "تحتاج اتصال قاعدة البيانات";
 
   return (
     <main className="company-app ops-console">
@@ -265,7 +265,7 @@ export default function ExecutiveOfficeConsole() {
           </div>
         </div>
         <div className="department-badge">
-          <strong>CEO Office</strong>
+          <strong>مكتب الرئيس التنفيذي</strong>
           <small className={databaseReady ? "" : "is-warning"}>
             {databaseBadge}
           </small>
