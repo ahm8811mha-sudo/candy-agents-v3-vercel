@@ -4,7 +4,6 @@
    Display: Reem Kufi (geometric Kufi) · Body: Cairo (app voice).
    Scoped under .fx-root so app themes never leak in.
    ═══════════════════════════════════════════════════════════════ */
-@import url("https://fonts.googleapis.com/css2?family=Reem+Kufi:wght@400;500;600;700&display=swap");
 
 .fx-root {
   --fx-ink: #eef5f3;
@@ -525,16 +524,10 @@
 
 /* filled actions: ink label on the teal fill, no hover jump.
    (orvanta-logo-final.css pins these blue with !important — outrank it) */
-[data-theme="orvanta"] .primary-btn {
-  background: var(--action-bg) !important;
-  color: var(--action-text) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 3px 3px rgba(7, 151, 183, 0.12) !important;
-}
+/* Button treatment lives in system.css (loaded last) — one source of truth. */
 [data-theme="orvanta"] .primary-btn:hover:not(:disabled) {
   filter: none;
   transform: none;
-  background: color-mix(in srgb, var(--action-bg) 88%, #000) !important;
 }
 [data-theme="orvanta"] .shell-link.is-active {
   background: var(--action-bg) !important;

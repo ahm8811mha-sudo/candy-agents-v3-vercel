@@ -3,17 +3,24 @@
 /**
  * Orvanta system status — one page for infrastructure, readiness, scheduled
  * jobs, failed writes, alerts, integration evidence, and capability truth.
+ *
+ * Information design: the summary comes before the detail. Readiness gates
+ * are grouped by severity — what blocks release first, then warnings, then
+ * what already passes — and every gate is named in the owner's language.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, RefreshCw, Loader2, Database, ShieldCheck } from "lucide-react";
 import OperationalReliabilityPanel from "@/components/OperationalReliabilityPanel";
+
+type Severity = "PASS" | "WARN" | "FAIL";
+type ReadinessCheck = { id: string; label: string; severity: Severity; detail: string };
 
 type Health = {
   ok: boolean;
   version?: string;
   productionReady?: boolean;
-  readiness?: { checks: Array<{ id: string; label: string; severity: "PASS" | "WARN" | "FAIL"; detail: string }> };
+  readiness?: { checks: ReadinessCheck[] };
   checks?: Record<string, unknown>;
   deployment?: {
     platform: "vercel" | "local";
@@ -41,6 +48,49 @@ const SERVICES: Array<{ key: string; name: string; desc: string }> = [
   { key: "reconciliation", name: "الإثبات والتسوية", desc: "لا يكتمل التنفيذ الخارجي دون Receipt" },
   { key: "vercelMonitoring", name: "النشر على Vercel", desc: "تشغيل النسخة الحالية وحالة الربط التفصيلي لسجل النشر" },
 ];
+
+/** Readiness gates in the owner's language. Unknown ids fall back to the server label. */
+const GATE_LABELS: Record<string, string> = {
+  "google-workspace": "تنفيذ Google Workspace",
+  "access-gate": "بوابة وصول المالك",
+  "owner-code-strength": "قوة رمز المالك",
+  "owner-cookie-secret": "سر توقيع جلسة المالك",
+  "basic-auth-disabled": "لا Basic Auth في الإنتاج",
+  "supabase-service-role": "الديمومة على الخادم",
+  "core-schema-ready": "مخطط نظام الشركة الأساسي",
+  "execution-transaction": "حزمة التنفيذ الذرّية",
+  "migration-baseline": "خط أساس الهجرات المرتّب",
+  "tenant-rls-ready": "حدود المستأجر وRLS",
+  "rls-regression-tested": "اختبار انحدار RLS",
+  "workflow-runtime": "محرك سير العمل الدائم",
+  "outbox-publisher": "ناشر الصندوق الصادر",
+  "watchdog": "المراقب وتتبّع المهام المجدولة",
+  "failed-write-worker": "إعادة محاولة الكتابات الفاشلة",
+  "external-reconciliation": "الإيصال الخارجي والتسوية",
+  "capability-registry": "سجل القدرات الصادق",
+  "company-brain-cycle": "دورة إنتاج العقل المؤسسي",
+  "accounting-controls": "ضوابط المحاسبة وإغلاق الفترات",
+  "e2e-verified": "بوابة اختبار التصفح (سطح المكتب والجوال)",
+  "backup-restore": "تمرين استعادة النسخ الاحتياطية",
+  "api-secret": "سر واجهة API الداخلية",
+  "cron-secret": "مصادقة المُجدوِل",
+  "openai-key": "تشغيل الذكاء الاصطناعي",
+  "public-anon-write-fallback-disabled": "لا كتابة عامة بمفتاح anon",
+  "browser-e2e": "بوابة اختبار التصفح (سطح المكتب والجوال)",
+  "failed-write-recovery": "إعادة محاولة الكتابات الفاشلة",
+  "reconciliation-required": "الإيصال الخارجي والتسوية",
+};
+
+function gateLabel(check: ReadinessCheck) {
+  return GATE_LABELS[check.id] || check.label;
+}
+
+const SEVERITY_ORDER: Severity[] = ["FAIL", "WARN", "PASS"];
+const SEVERITY_META: Record<Severity, { title: string; dot: string }> = {
+  FAIL: { title: "يوقف الجاهزية", dot: "fail" },
+  WARN: { title: "تحذيرات لا توقف الإطلاق", dot: "warn" },
+  PASS: { title: "ناجح", dot: "ok" },
+};
 
 export default function StatusPage() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -78,11 +128,26 @@ export default function StatusPage() {
   const allCore = Boolean(serviceReady("supabase") && checks.accessGate && checks.tenantIsolation && checks.workflowRuntime && checks.outboxPublisher);
   const checking = loading && !health;
 
+  const readiness = useMemo(() => {
+    const list = health?.readiness?.checks || [];
+    const groups = SEVERITY_ORDER.map((severity) => ({
+      severity,
+      items: list.filter((c) => c.severity === severity),
+    })).filter((g) => g.items.length > 0);
+    return {
+      total: list.length,
+      fail: list.filter((c) => c.severity === "FAIL").length,
+      warn: list.filter((c) => c.severity === "WARN").length,
+      pass: list.filter((c) => c.severity === "PASS").length,
+      groups,
+    };
+  }, [health]);
+
   return (
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Activity size={16} /> Orvanta Status</span>
+          <span className="eyebrow"><Activity size={16} /> حالة النظام</span>
           <h1 className="glow-title">النظام</h1>
           <p className="page-sub">
             الحالة الحقيقية للبنية، الحماية، المهام المجدولة، التنبيهات، الكتابات والتكاملات{checkedAt ? ` · آخر فحص ${checkedAt}` : ""}.
@@ -90,6 +155,7 @@ export default function StatusPage() {
         </div>
         <button className="secondary-btn btn-sm" onClick={() => void load()} aria-label="تحديث">
           {loading ? <Loader2 className="spin" size={14} /> : <RefreshCw size={14} />}
+          تحديث
         </button>
       </header>
 
@@ -110,8 +176,8 @@ export default function StatusPage() {
         {checking
           ? "جاري الفحص…"
           : allCore
-            ? "الأنظمة الجوهرية تعمل والحماية والديمومة ومحرك التنفيذ مفعلة."
-            : `${configuredCount} من ${SERVICES.length} بوابات جوهرية ناجحة. لا تعتبر الحالة جاهزة قبل إغلاق جميع حالات FAIL.`}
+            ? "الأنظمة الجوهرية تعمل: الحماية والديمومة ومحرك التنفيذ مفعّلة."
+            : `${configuredCount} من ${SERVICES.length} خدمات جوهرية تعمل. الجاهزية الكاملة تحتاج إغلاق كل بند «يوقف الجاهزية» أدناه.`}
       </div>
 
       <section className="bento-card bento-full" style={{ padding: 0 }}>
@@ -124,13 +190,13 @@ export default function StatusPage() {
                 {service.name}
                 <div className="status-row__desc">{service.desc}</div>
               </span>
-              <span className="mini-pill" style={{ color: enabled ? "var(--green)" : "var(--muted)" }}>
+              <span className={`status-pill ${enabled ? "done" : ""}`}>
                 {checking
                   ? "جارٍ الفحص"
                   : enabled && service.key === "vercelMonitoring" && !health?.deployment?.detailedMonitoring
                     ? "النشر يعمل"
                     : enabled
-                      ? "مفعّل"
+                      ? "يعمل"
                       : health?.deployment?.isPreview
                         ? "غير مهيأ للمعاينة"
                         : "غير جاهز"}
@@ -160,23 +226,34 @@ export default function StatusPage() {
       )}
 
       {health?.readiness && (
-        <section className="bento-card bento-full" style={{ gap: 10 }}>
+        <section className="bento-card bento-full" style={{ gap: 14 }}>
           <span className="bento-kicker">
-            <ShieldCheck size={15} /> جاهزية الإنتاج {health.productionReady ? "· جاهز ✓" : "· ناقصة"}
+            <ShieldCheck size={15} /> جاهزية الإنتاج {health.productionReady ? "· جاهز" : `· ${readiness.fail} بنداً يوقف الإطلاق`}
           </span>
-          <div className="bento-list">
-            {health.readiness.checks.map((check) => (
-              <div key={check.id} className="bento-list__row" style={{ alignItems: "flex-start" }}>
-                <span style={{ display: "inline-flex", alignItems: "flex-start", gap: 8 }}>
-                  <span className={`status-dot ${check.severity === "PASS" ? "ok" : check.severity === "WARN" ? "warn" : "fail"}`} style={{ marginTop: 5 }} />
-                  <span>
-                    <b style={{ color: "var(--text-strong)" }}>{check.label}</b>
-                    <div className="status-row__desc" style={{ lineHeight: 1.7 }}>{check.detail}</div>
-                  </span>
-                </span>
-              </div>
-            ))}
+
+          <div className="readiness-summary" aria-label="ملخص بوابات الجاهزية">
+            <div className={readiness.fail ? "is-fail" : ""}><b>{readiness.fail}</b><small>يوقف الجاهزية</small></div>
+            <div className={readiness.warn ? "is-warn" : ""}><b>{readiness.warn}</b><small>تحذير</small></div>
+            <div className="is-pass"><b>{readiness.pass}</b><small>ناجح من {readiness.total}</small></div>
           </div>
+
+          {readiness.groups.map((group) => (
+            <div key={group.severity} className="readiness-group">
+              <div className="readiness-group__title">
+                <span className={`status-dot ${SEVERITY_META[group.severity].dot}`} />
+                {SEVERITY_META[group.severity].title} ({group.items.length})
+              </div>
+              {group.items.map((check) => (
+                <div key={check.id} className="readiness-item">
+                  <span className={`status-dot ${SEVERITY_META[check.severity].dot}`} />
+                  <span>
+                    <b>{gateLabel(check)}</b>
+                    <small>{check.detail}</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
         </section>
       )}
 

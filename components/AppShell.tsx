@@ -14,6 +14,8 @@ import {
   Brain,
   Bot,
   ClipboardCheck,
+  Lightbulb,
+  FolderKanban,
 } from "lucide-react";
 import NotificationCenter from "./NotificationCenter";
 import OrvantaLogo from "./OrvantaLogo";
@@ -33,6 +35,8 @@ const PAGE_TITLES: Array<[string, string]> = [
   ["/control-room", "مركز قيادة الشركة"],
   ["/inbox", "القرارات"],
   ["/ideas", "الأفكار"],
+  ["/projects", "المشاريع"],
+  ["/decisions-followup", "متابعة القرارات"],
   ["/correspondence-center", "مركز المخاطبات"],
   ["/recovery-center", "Crisis Room"],
   ["/operations", "التنفيذ"],
@@ -107,6 +111,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: "نظرة عامة", icon: LayoutDashboard },
     { href: "/inbox", label: "القرارات", icon: Inbox, badge: pending },
     { href: "/decisions-followup", label: "متابعة القرارات", icon: ClipboardCheck },
+    { href: "/ideas", label: "الأفكار", icon: Lightbulb },
+    { href: "/projects", label: "المشاريع", icon: FolderKanban },
     { href: "/employee-runtime", label: "الموظفون الذاتيون", icon: Bot },
     { href: "/operations", label: "التنفيذ", icon: Send },
     { href: "/departments", label: "الأقسام", icon: Building2 },
@@ -129,7 +135,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return [
         "/operations",
         "/control-room",
-        "/ideas",
         "/correspondence-center",
         "/recovery-center",
       ].some((route) => pathname.startsWith(route));
@@ -197,28 +202,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
 
+        <div className="shell-group">الذكاء</div>
         <Link
           href="/company-brain"
-          className="notice"
+          className={`shell-link ${pathname.startsWith("/company-brain") ? "is-active" : ""}`}
           onClick={() => setOpen(false)}
-          style={{
-            margin: "22px 12px 0",
-            fontSize: ".78rem",
-            lineHeight: 1.7,
-            display: "grid",
-            gap: 6,
-            textDecoration: "none",
-          }}
+          aria-current={pathname.startsWith("/company-brain") ? "page" : undefined}
         >
-          <strong
-            style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
-          >
-            <Brain size={14} /> العقل المؤسسي
-          </strong>
-          <span style={{ color: "var(--muted)" }}>
-            التوأم الرقمي، التوقعات، المحاكاة، التخطيط والسرد التنفيذي في
-            مساحة واحدة.
-          </span>
+          <Brain size={16} aria-hidden="true" />
+          العقل المؤسسي
         </Link>
       </aside>
 
@@ -249,9 +241,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <CommandPalette />
             <NotificationCenter />
             <SessionControl />
-            <span className="app-header__status hide-mobile">
-              <span className="app-header__dot" />
-              Orvanta جاهز
+            <span className="app-header__status hide-mobile" title="النظام متصل">
+              <span className="app-header__dot" aria-hidden="true" />
+              متصل
             </span>
           </div>
         </div>

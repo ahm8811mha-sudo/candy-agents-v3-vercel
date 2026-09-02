@@ -5,6 +5,7 @@ import "./brand.css";
 import "./facade.css";
 import "./orvanta-exact-logo.css";
 import "./orvanta-logo-final.css";
+import "./system.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
@@ -60,8 +61,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#061418",
-  colorScheme: "dark",
+  themeColor: "#eef5f3",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -70,6 +71,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ar" dir="rtl">
+      <head>
+        <link rel="preload" href="/fonts/cairo-arabic.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/reem-kufi-arabic.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      </head>
       <body>
         <ThemeShell>
           <AppShell>{children}</AppShell>
