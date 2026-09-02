@@ -1,0 +1,159 @@
+name: Production Verification
+
+# Proves the release gates against the production database itself, then records
+# the evidence the readiness page reads.
+#
+# Why against production and not staging: the `Database Security` workflow
+# verifies the chain and the policies on a staging copy and records its evidence
+# under `staging`. That is a different database — its RLS policies, its grants
+# and its migration ledger are not production's. The readiness page reads
+# `production` evidence, so nothing but a check against production can honestly
+# satisfy it.
+#
+# Safety. Every suite in supabase/tests opens a transaction and ends with
+# `rollback;`, so none of them can leave a row behind. Two of them
+# (rls_regression, company_brain_regression) only ever write to temporary
+# tables; the rest write to real tables inside the rolled-back transaction and
+# use a dedicated test tenant. A pre-flight step refuses to run any file that
+# does not end in a rollback, so this stays true if a suite is ever edited.
+#
+# Evidence expires after 14 days, so this runs weekly. If it stops running, the
+# gates go red on their own rather than resting on a stale pass.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_DB_URL: ${{ secrets.PRODUCTION_DB_URL }}
+      PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Detect production database configuration
+        id: configuration
+        shell: bash
+        run: |
+          if [ -n "$PRODUCTION_DB_URL" ] && [ -n "$PRODUCTION_SUPABASE_URL" ] && [ -n "$PRODUCTION_SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Set PRODUCTION_DB_URL, PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_SERVICE_ROLE_KEY to verify the release gates. Until then they stay red, which is correct."
+          fi
+
+      - name: Install PostgreSQL client
+        if: steps.configuration.outputs.configured == 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install dependencies
+        if: steps.configuration.outputs.configured == 'true'
+        run: npm ci --ignore-scripts
+
+      # The one thing that makes running these against production defensible.
+      - name: Refuse any suite that is not rollback-only
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for suite in supabase/tests/*.sql; do
+            last=$(grep -vE '^[[:space:]]*(--|$)' "$suite" | tail -1 | tr -d '[:space:]')
+            if [ "$last" != "rollback;" ]; then
+              echo "::error::$suite does not end with rollback; refusing to run it against production."
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Verify the migration chain is applied to production
+        if: steps.configuration.outputs.configured == 'true'
+        id: chain
+        continue-on-error: true
+        shell: bash
+        run: node scripts/check-migration-chain.mjs
+
+      - name: Run the regression suites against production
+        if: steps.configuration.outputs.configured == 'true'
+        id: suites
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          status=0
+          run_suite() {
+            local name="$1" file="$2"
+            echo "::group::$name"
+            if psql "$PRODUCTION_DB_URL" -v ON_ERROR_STOP=1 -f "$file"; then
+              echo "${name}=pass" >> "$GITHUB_OUTPUT"
+              echo "::endgroup::"
+            else
+              echo "${name}=fail" >> "$GITHUB_OUTPUT"
+              echo "::endgroup::"
+              echo "::error::$file failed against production."
+              status=1
+            fi
+          }
+          run_suite rls supabase/tests/rls_regression.sql
+          run_suite execution supabase/tests/execution_bundle.sql
+          run_suite accounting supabase/tests/accounting_controls_regression.sql
+          run_suite company_brain supabase/tests/company_brain_regression.sql
+          run_suite owner_absence supabase/tests/owner_absence_continuity.sql
+          exit $status
+
+      # Evidence is recorded per key, only for the check that actually passed.
+      # A failed suite records nothing, so its gate stays red.
+      - name: Record production evidence for what passed
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        env:
+          CHAIN_RESULT: ${{ steps.chain.outcome }}
+          RLS_RESULT: ${{ steps.suites.outputs.rls }}
+          EXECUTION_RESULT: ${{ steps.suites.outputs.execution }}
+          ACCOUNTING_RESULT: ${{ steps.suites.outputs.accounting }}
+        run: |
+          set -uo pipefail
+          record() {
+            npm run readiness:evidence -- \
+              --key "$1" \
+              --environment production \
+              --status PASS \
+              --expires-hours 336 \
+              --details "{\"verifiedAgainst\":\"production\",\"commit\":\"${GITHUB_SHA}\",\"run\":\"${GITHUB_RUN_ID}\"}" \
+              --optional
+          }
+          gate() {
+            if [ "$2" = "$3" ]; then
+              record "$1"
+            else
+              echo "$1: the check did not pass, so no evidence is recorded and the gate stays red."
+            fi
+          }
+          gate migration-chain-applied "$CHAIN_RESULT" success
+          gate rls-regression "${RLS_RESULT:-}" pass
+          gate execution-transaction-smoke "${EXECUTION_RESULT:-}" pass
+          gate accounting-controls-smoke "${ACCOUNTING_RESULT:-}" pass
+
+      - name: Fail the run if any production check failed
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        run: |
+          if [ "${{ steps.chain.outcome }}" != "success" ] || [ "${{ steps.suites.outcome }}" != "success" ]; then
+            echo "::error::One or more production verification checks failed. The corresponding readiness gates remain red."
+            exit 1
+          fi
+          echo "All production verification checks passed and their evidence is recorded."
