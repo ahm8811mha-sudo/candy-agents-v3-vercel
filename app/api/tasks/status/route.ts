@@ -1,70 +1,36 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { logError } from "@/lib/logger";
-import { recordAuditCritical } from "@/lib/company/audit";
+import { requireCompanyContext } from "@/lib/company-os/context";
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const id = String(body.id || "");
-    if (!id) return NextResponse.json({ ok: false, message: "Task id is required" }, { status: 400 });
-    const supabase = getSupabaseAdmin();
-    if (!supabase) return NextResponse.json({ ok: false, message: "Supabase is not configured" }, { status: 500 });
-
-    // Owner confirmation of a real-world step: the only path that closes a
-    // REAL_WORLD task. Stamps the proof into metadata (which the DB trigger
-    // requires) and leaves an audit trail.
-    if (body.confirmReal === true) {
-      const { data: current, error: readError } = await supabase.from("tasks").select("id,title,status,metadata").eq("id", id).single();
-      if (readError) throw readError;
-      const metadata = asRecord(current.metadata);
-      const proofNote = String(body.proofNote || "").trim();
-      const confirmedMetadata = {
-        ...metadata,
-        ownerConfirmed: true,
-        ownerConfirmedAt: new Date().toISOString(),
-        ...(proofNote ? { proofNote } : {}),
-      };
-      const { data, error } = await supabase
-        .from("tasks")
-        .update({ status: "DONE", progress_percent: 100, metadata: confirmedMetadata, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
-      await recordAuditCritical({
-        actor: "owner",
-        action: "CONFIRM_REAL_EXECUTION",
-        entityType: "task",
-        entityId: id,
-        detail: `أكد المالك التنفيذ الفعلي للمهمة «${current.title}»${proofNote ? ` — الإثبات: ${proofNote.slice(0, 300)}` : ""}.`,
-      }).catch(() => undefined);
-      return NextResponse.json({ ok: true, task: data });
-    }
-
-    const status = String(body.status || "");
-    const progress = Number(body.progressPercent ?? (status === "DONE" ? 100 : status === "IN_PROGRESS" ? 50 : 0));
-    const patch: Record<string, unknown> = { status: status === "ARCHIVED" ? "DONE" : status, progress_percent: progress, updated_at: new Date().toISOString() };
-    if (status === "DONE" || status === "ARCHIVED") patch.completed_at = new Date().toISOString();
-    if (status === "ARCHIVED") patch.archived_at = new Date().toISOString();
-    const { data, error } = await supabase.from("tasks").update(patch).eq("id", id).select().single();
-    if (error) {
-      // The DB proof gate rejects closing an unconfirmed real-world task.
-      if (/REAL_WORLD task/.test(String(error.message))) {
-        return NextResponse.json(
-          { ok: false, code: "OWNER_CONFIRMATION_REQUIRED", message: "هذه مهمة تنفيذ فعلي: لا تُغلق إلا بتأكيدك المباشر مع الإثبات (زر «تأكيد التنفيذ الفعلي»)." },
-          { status: 409 }
-        );
-      }
-      throw error;
-    }
-    return NextResponse.json({ ok: true, task: data });
-  } catch (error) {
-    await logError("TASK_STATUS_FAILED", error);
-    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Failed to update task" }, { status: 500 });
+const inputSchema = z.object({
+  id: z.string().min(1).max(180),
+  status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "DONE", "BLOCKED", "ARCHIVED", "WAITING_FUNDING", "ON_HOLD"]).optional(),
+  progressPercent: z.number().int().min(0).max(100).optional(),
+  confirmReal: z.boolean().optional(), proofNote: z.string().trim().max(3000).optional(),
+});
+export async function POST(req: NextRequest) {
+  const auth = await requireCompanyContext(req, "EMPLOYEE");
+  if (!auth.ok) return auth.response;
+  const parsed = inputSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success || (!parsed.data.confirmReal && !parsed.data.status)) return NextResponse.json({ ok: false, message: "حالة المهمة أو نسبة التقدم غير صالحة." }, { status: 400 });
+  const body = parsed.data;
+  const { actor, tenantId, systemCall } = auth.context;
+  if (body.confirmReal && (systemCall || !["OWNER", "ADMIN"].includes(actor.role))) return NextResponse.json({ ok: false, message: "تأكيد التنفيذ الفعلي يحتاج جلسة بشرية لصاحب الصلاحية." }, { status: 403 });
+  if (body.confirmReal && (body.proofNote?.length || 0) < 10) return NextResponse.json({ ok: false, code: "OWNER_PROOF_REQUIRED", message: "دوّن إثباتاً واضحاً لا يقل عن 10 أحرف: ما نُفّذ ومرجع التحقق منه." }, { status: 400 });
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return NextResponse.json({ ok: false, message: "قاعدة البيانات غير مهيأة. لم تُعدّل المهمة." }, { status: 503 });
+  const status = body.confirmReal ? "DONE" : body.status!;
+  const { data, error } = await supabase.rpc("orvanta_update_task_status", {
+    p_tenant_id: tenantId, p_id: body.id, p_status: status,
+    p_progress: body.confirmReal ? 100 : body.progressPercent ?? (status === "DONE" ? 100 : status === "IN_PROGRESS" ? 50 : 0),
+    p_actor: actor.id, p_actor_role: actor.role, p_confirm_real: Boolean(body.confirmReal), p_proof_note: body.proofNote || null,
+  });
+  if (error) {
+    const message = /FUNDING_REQUIRED/.test(error.message) ? "يلزم اعتماد تمويل هذه الخطوة أولاً."
+      : /OWNER_PROOF_REQUIRED|REAL_WORLD task/.test(error.message) ? "لا تُغلق مهمة فعلية دون تأكيد بشري وإثبات."
+        : /COMPLETE_BEFORE_ARCHIVE/.test(error.message) ? "أكمل المهمة قبل أرشفتها." : "تعذر حفظ المهمة وسجل تدقيقها؛ لم يُعتمد التغيير.";
+    return NextResponse.json({ ok: false, message }, { status: /TASK_NOT_FOUND/.test(error.message) ? 404 : 409 });
   }
+  return NextResponse.json({ ok: true, task: data });
 }

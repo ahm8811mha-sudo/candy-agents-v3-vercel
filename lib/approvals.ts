@@ -3,14 +3,14 @@
  *
  * A single place where every item that needs human sign-off (trades above the
  * limit, budget gates, CEO decisions) is collected and acted on. The in-memory
- * store is the fast working copy; when Supabase is configured every write is
- * also persisted to `company_approvals` and the store is hydrated from it once
- * per process (see hydrateApprovals), so decisions survive serverless restarts.
+ * store is a compatibility snapshot. Critical reads refresh from Supabase;
+ * critical decisions commit the approval and audit entry atomically before
+ * updating that snapshot. Legacy synchronous helpers remain for older callers.
  */
 
 import { createHash } from "node:crypto";
-import { persist, persistCritical, fetchRows, hydrateOnce, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
-import { getTenantId, isMultiTenantEnabled } from "./tenant";
+import { persist, persistCritical, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
+import { getTenantId } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
@@ -93,16 +93,20 @@ export function rememberDurableApprovalRow(row: Record<string, unknown>): Approv
   return item;
 }
 
-/** Hydrate the store from Supabase once per process (before reads). */
-export const hydrateApprovals = hydrateOnce(async () => {
-  const rows = await fetchRows("company_approvals", { orderBy: "created_at", limit: 200 });
-  const seen = new Set(store.map((a) => a.id));
-  for (const r of rows) {
-    if (seen.has(String(r.id))) continue;
-    store.push(fromRow(r));
+/** Refresh from durable rows on every request; a failed read is not an empty queue. */
+export async function hydrateApprovals(tenantId = getTenantId()) {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  const rows: ApprovalItem[] = [];
+  for (let offset = 0; ; offset += 250) {
+    const { data, error } = await client.from("company_approvals").select("*").eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false }).order("id").range(offset, offset + 249);
+    if (error) throw error;
+    rows.push(...(data || []).map(fromRow));
+    if (!data || data.length < 250) break;
   }
-  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-});
+  store.splice(0, store.length, ...rows);
+}
 
 export type CreateApprovalInput = {
   type: ApprovalType;
@@ -150,22 +154,19 @@ function buildApproval(input: CreateApprovalInput): ApprovalItem {
   };
 }
 
-async function findDurableApproval(id: string, dedupeKey?: string): Promise<ApprovalItem | null> {
+async function findDurableApproval(id: string, dedupeKey?: string, tenantId = getTenantId()): Promise<ApprovalItem | null> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
   if (dedupeKey) {
-    let dedupeQuery = supabase
+    const dedupeQuery = supabase
       .from("company_approvals")
       .select("*")
-      .eq("dedupe_key", dedupeKey)
-      .eq("status", "PENDING");
-    if (isMultiTenantEnabled()) dedupeQuery = dedupeQuery.eq("tenant_id", getTenantId());
+      .eq("dedupe_key", dedupeKey).eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(1);
     const { data: deduped, error: dedupeError } = await dedupeQuery.maybeSingle();
     if (dedupeError) throw dedupeError;
     if (deduped) return fromRow(deduped as Record<string, unknown>);
   }
-  let query = supabase.from("company_approvals").select("*").eq("id", id);
-  if (isMultiTenantEnabled()) query = query.eq("tenant_id", getTenantId());
+  const query = supabase.from("company_approvals").select("*").eq("id", id).eq("tenant_id", tenantId);
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data ? fromRow(data as Record<string, unknown>) : null;
@@ -188,26 +189,25 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
  * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
  */
 export async function createApprovalCritical(input: CreateApprovalInput): Promise<ApprovalItem> {
-  const existing = findExistingApproval(input);
-  if (existing) return existing;
-
-  const item = buildApproval(input);
-  if (hasSupabaseEnv()) {
-    const durable = await findDurableApproval(item.id, item.dedupeKey);
-    if (durable) {
-      if (!store.some((approval) => approval.id === durable.id)) store.unshift(durable);
-      return durable;
-    }
-    await persistCritical("company_approvals", toRow(item));
+  const client = getSupabaseAdmin();
+  if (!client) {
+    if (process.env.NODE_ENV === "production") throw new Error("Durable approval storage is unavailable.");
+    return createApproval(input);
   }
-  store.unshift(item);
-  emitWebhook("approval.created", { id: item.id, type: item.type, title: item.title, amount: item.amount ?? null });
-  return item;
+  const item = buildApproval(input);
+  const durable = await findDurableApproval(item.id, item.dedupeKey);
+  if (durable) return rememberDurableApprovalRow(toRow(durable));
+  // DO NOTHING protects a concurrent decision from being reset to PENDING.
+  const { error } = await client.from("company_approvals").upsert({ ...toRow(item), tenant_id: getTenantId() }, { onConflict: "id", ignoreDuplicates: true });
+  if (error) throw error;
+  const saved = await findDurableApproval(item.id);
+  if (!saved) throw new Error("Approval was not confirmed by the database.");
+  return rememberDurableApprovalRow(toRow(saved));
 }
 
 export function listApprovals(status?: ApprovalStatus): ApprovalItem[] {
   const items = status ? store.filter((a) => a.status === status) : store;
-  return items.slice(0, 100);
+  return [...items];
 }
 
 export function decideApproval(
@@ -234,34 +234,19 @@ export function decideApproval(
  * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
  */
 export async function decideApprovalCritical(
-  id: string,
-  decision: "APPROVED" | "REJECTED",
-  decidedBy = "CEO",
-  note?: string
+  id: string, decision: "APPROVED" | "REJECTED", decidedBy = "CEO", note?: string, tenantId = getTenantId()
 ): Promise<ApprovalItem | null> {
-  let item = store.find((a) => a.id === id);
-  if (!item && hasSupabaseEnv()) {
-    // Created on another serverless instance after this one hydrated.
-    const durable = await findDurableApproval(id);
-    if (durable) {
-      if (!store.some((approval) => approval.id === durable.id)) store.unshift(durable);
-      item = durable;
-    }
+  const client = getSupabaseAdmin();
+  if (!client) {
+    if (process.env.NODE_ENV === "production") throw new Error("Durable decision storage is unavailable.");
+    return decideApproval(id, decision, decidedBy, note);
   }
-  if (!item) return null;
-  if (item.status !== "PENDING") return item;
-
-  const decided: ApprovalItem = {
-    ...item,
-    status: decision,
-    decidedAt: new Date().toISOString(),
-    decidedBy,
-    ...(note ? { note } : {}),
-  };
-  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(decided));
-  Object.assign(item, decided);
-  emitWebhook("approval.decided", { id: item.id, type: item.type, title: item.title, decision, decidedBy });
-  return item;
+  const { data, error } = await client.rpc("orvanta_decide_approval", {
+    p_tenant_id: tenantId, p_id: id, p_decision: decision, p_actor: decidedBy, p_note: note || null,
+  });
+  if (error) throw error;
+  if (!data?.id) throw new Error("Decision commit was not confirmed.");
+  return rememberDurableApprovalRow(data);
 }
 
 /**
@@ -294,13 +279,10 @@ export function approvalStats(): { pending: number; approved: number; rejected: 
 }
 
 /** Find an approval locally, falling back to the database across instances. */
-export async function getApprovalCritical(id: string): Promise<ApprovalItem | null> {
-  const local = store.find((a) => a.id === id);
-  if (local) return local;
-  if (!hasSupabaseEnv()) return null;
-  const durable = await findDurableApproval(id);
-  if (durable && !store.some((approval) => approval.id === durable.id)) store.unshift(durable);
-  return durable;
+export async function getApprovalCritical(id: string, tenantId = getTenantId()): Promise<ApprovalItem | null> {
+  if (!getSupabaseAdmin()) return store.find((a) => a.id === id) || null;
+  const durable = await findDurableApproval(id, undefined, tenantId);
+  return durable ? rememberDurableApprovalRow(toRow(durable)) : null;
 }
 
 /**
@@ -336,7 +318,13 @@ export async function deferApprovalCritical(
     note: reason,
     metadata: { ...item.metadata, deferral },
   };
-  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(deferred));
+  const client = getSupabaseAdmin();
+  if (client) {
+    const { data, error } = await client.rpc("orvanta_change_deferral", { p_tenant_id: getTenantId(), p_id: id, p_actor: input.deferredBy, p_deferral: deferral });
+    if (error) throw error;
+    return rememberDurableApprovalRow(data);
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("Durable approval storage is unavailable.");
   Object.assign(item, deferred);
   emitWebhook("approval.deferred", {
     id: item.id,
@@ -357,6 +345,15 @@ export async function reviveDueDeferrals(): Promise<ApprovalItem[]> {
     const deferral = item.metadata?.deferral as DeferralInfo | undefined;
     const due = deferral?.remindAt ? Date.parse(deferral.remindAt) : NaN;
     if (Number.isNaN(due) || due > now) continue;
+
+    const client = getSupabaseAdmin();
+    if (client) {
+      const { data, error } = await client.rpc("orvanta_change_deferral", { p_tenant_id: getTenantId(), p_id: item.id, p_actor: "scheduler", p_deferral: null });
+      if (error) throw error;
+      const saved = rememberDurableApprovalRow(data);
+      if (saved.status === "PENDING") revived.push(saved);
+      continue;
+    }
 
     item.status = "PENDING";
     item.note = `عادت للصندوق بعد التأجيل — السبب السابق: ${deferral?.reason ?? "غير مذكور"}`;

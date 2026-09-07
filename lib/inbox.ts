@@ -10,7 +10,7 @@
  *   - COMPANY items (repository)  → POST /api/decisions (review actions)
  */
 
-import { listApprovals as listSystemApprovals } from "./approvals";
+import { listApprovals as listSystemApprovals, reviveDueDeferrals } from "./approvals";
 import { listApprovals as listCompanyApprovals } from "./repository";
 import { decisionMap } from "./decisions";
 import { hydrateCompany } from "./company/hydrate";
@@ -57,6 +57,7 @@ export function decisionAge(createdAt: string, now: Date = new Date()): { hours:
 
 export async function getInbox(): Promise<{ items: InboxItem[]; pending: number; stale: number; oldestPendingHours: number }> {
   await hydrateCompany();
+  await reviveDueDeferrals();
   const items: InboxItem[] = [];
 
   // 1) System approvals (trades, budget gates) — actionable via /api/approvals/decisions.

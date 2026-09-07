@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { ensureDailyIdea } from "@/lib/company/ideas";
+import { generateDailyIdeaCritical } from "@/lib/company/ideas";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { executeTrackedCron } from "@/lib/operations/trackedCron";
 
@@ -12,14 +12,15 @@ export async function GET(req: NextRequest) {
     req,
     jobName: "daily-company-idea",
     schedule: "30 4 * * *",
-    run: async (_context, heartbeat) => {
+    run: async (context, heartbeat) => {
       await hydrateCompany();
       await heartbeat({ phase: "hydrated" });
-      const idea = ensureDailyIdea();
+      const result = await generateDailyIdeaCritical(context.tenantId);
+      const idea = result.idea;
       return {
-        processedCount: 1,
-        details: { ideaId: idea.id, dayKey: idea.dayKey, status: idea.status },
-        body: { idea: { id: idea.id, title: idea.title, status: idea.status, dayKey: idea.dayKey } },
+        processedCount: result.created ? 1 : 0,
+        details: { ideaId: idea?.id, reason: result.reason },
+        body: result,
       };
     },
   });
