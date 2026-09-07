@@ -61,6 +61,6 @@ test("owner can open a draft, save an operational study, and reach its decision"
 test("failed data reads stay distinct from an empty company", async ({ page }) => {
   await page.route("**/api/company/ideas", (route) => route.fulfill({ status: 503, json: { ok: false, error: "تعذر الاتصال بقاعدة البيانات" } }));
   await page.goto("/ideas");
-  await expect(page.getByRole("alert")).toHaveText("تعذر الاتصال بقاعدة البيانات");
+  await expect(page.getByRole("alert").filter({ hasText: "تعذر الاتصال بقاعدة البيانات" })).toBeVisible();
   await expect(page.getByText("مساحة للأفكار التي تستحق الدراسة.")).toHaveCount(0);
 });

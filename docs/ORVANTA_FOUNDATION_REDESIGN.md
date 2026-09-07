@@ -51,17 +51,23 @@ and function grants. Sequence counters can advance during rolled-back fixtures.
 - ESLint has no errors; one existing unused-variable warning remains in the
   design-system token generator.
 - Browser fixtures cover owner access, the work desk, operational study entry,
-  decision links and read failures on Chromium and iPhone WebKit. These tests
-  are intended to run in the repository's existing Browser E2E CI workflow.
+  decision links and read failures on Chromium and iPhone WebKit. The first CI
+  run passed the work desk and study journeys on both devices. It exposed an
+  ambiguous error-message test locator, which is now scoped to the application
+  message, and an intermittent login interaction. Owner-entry fields now wait
+  until their client handlers are ready. The subsequent Browser E2E run must
+  pass before accepting this revision.
 - Local browser execution was blocked by unavailable browser binaries and a
   browser environment that refused the local development address. No local
   screenshot or visual acceptance is claimed.
 - Browser fixtures do not prove live persistence. The real database functions
   were verified separately with the rollback SQL suite. The real core-loop E2E
   path requires explicit staging configuration before it creates business data.
-- Live model-provider calls and the user's original Vercel deployment have not
-  been verified for this revision. The connected Vercel account returned 404
-  for Candy Agents; a different visible project must not be used to publish it.
+- GitHub's Vercel integration successfully built a preview for this branch in
+  the correct Candy Agents project, as recorded on pull request #56. The
+  connected Vercel app still returns 404 for that project's API and cannot
+  fetch its protected preview. Live model calls, the preview's runtime, and
+  the user's original deployment have not been verified for this revision.
 - Legacy synchronous helpers and specialist screens remain; this change does
   not claim to replace every older persistence path in the application.
 

@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [destination, setDestination] = useState("/");
   const [missingSetup, setMissingSetup] = useState(false);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -15,6 +16,7 @@ export default function LoginPage() {
     const searchParams = new URLSearchParams(window.location.search);
     setDestination(safeInternalDestination(searchParams.get("next")));
     setMissingSetup(searchParams.get("setup") === "missing");
+    setReady(true);
   }, []);
 
   async function submit(event: FormEvent) {
@@ -57,10 +59,10 @@ export default function LoginPage() {
               <label className="field-label" htmlFor="owner-code">رمز وصول المالك</label>
               <div className="entry-code">
                 <KeyRound size={19} aria-hidden="true" />
-                <input className="input" id="owner-code" name="owner-code" type="password" autoComplete="one-time-code" required maxLength={128} value={code} onChange={(event) => setCode(event.target.value)} placeholder="رمز الوصول الخاص" dir="ltr" aria-describedby="entry-session-note" />
+                <input className="input" id="owner-code" name="owner-code" type="password" autoComplete="one-time-code" required maxLength={128} disabled={!ready || loading} value={code} onChange={(event) => setCode(event.target.value)} placeholder="رمز الوصول الخاص" dir="ltr" aria-describedby="entry-session-note" />
               </div>
               {error ? <div className="workspace-notice is-error" role="alert">{error}</div> : null}
-              <button className="entry-submit" type="submit" disabled={loading}>{loading ? <Loader2 className="spin" size={18} /> : null}<span>{loading ? "جارٍ التحقق…" : "فتح النسخة الخاصة"}</span><ArrowLeft size={18} aria-hidden="true" /></button>
+              <button className="entry-submit" type="submit" disabled={!ready || loading}>{loading ? <Loader2 className="spin" size={18} /> : null}<span>{loading ? "جارٍ التحقق…" : "فتح النسخة الخاصة"}</span><ArrowLeft size={18} aria-hidden="true" /></button>
               <p id="entry-session-note" className="entry-session-note">يبقى هذا الجهاز معتمداً لمدة سنة. يمكنك قفله في أي وقت من داخل مساحة العمل.</p>
             </form>
           )}
