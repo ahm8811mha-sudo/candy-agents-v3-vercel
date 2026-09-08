@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeInternalDestination } from "@/lib/security/navigation";
 import {
   OWNER_ACCESS_COOKIE,
   isOwnerAccessConfigured,
@@ -79,7 +80,7 @@ export async function proxy(req: NextRequest) {
 
   if (req.nextUrl.pathname === "/login" && unlocked) {
     const destination = req.nextUrl.searchParams.get("next");
-    const safeDestination = destination?.startsWith("/") && destination !== "/login" ? destination : "/";
+    const safeDestination = safeInternalDestination(destination);
     return NextResponse.redirect(new URL(safeDestination, req.url));
   }
 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
-import { hydrateCompany } from "@/lib/company/hydrate";
-import { listIdeas } from "@/lib/company/ideas";
+import { getIdeaCritical } from "@/lib/company/ideas";
 import { runIdeaToExecution } from "@/lib/employee-runtime/runtime";
 import type { EmployeeRiskLevel } from "@/lib/employee-runtime/types";
 
@@ -20,8 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const ideaId = String(body.ideaId || "").trim();
-    await hydrateCompany();
-    const idea = listIdeas().find((item) => item.id === ideaId);
+    const idea = await getIdeaCritical(ideaId, auth.context.tenantId);
     if (!idea) throw new Error("Approved idea was not found.");
     if (idea.status !== "APPROVED") {
       throw new Error(

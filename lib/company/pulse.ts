@@ -72,7 +72,7 @@ export function getCompanyPulse(now: Date = new Date()): {
         agentName: rec.agentName,
         kind: "STUDY",
         kindLabel: "دراسة",
-        title: `درس «${idea.title}» — ${rec.verdict === "APPROVE" ? "يُوصى" : rec.verdict === "REJECT" ? "لا يُوصى" : "بتحفظ"} بثقة ${(rec.confidence * 100).toFixed(0)}%`,
+        title: `درس «${idea.title}» — ${rec.verdict === "APPROVE" ? "يُوصى" : rec.verdict === "REJECT" ? "لا يُوصى" : "بتحفظ"} باكتمال مدخلات ${(rec.confidence * 100).toFixed(0)}%`,
         createdAt: rec.createdAt,
       });
     }

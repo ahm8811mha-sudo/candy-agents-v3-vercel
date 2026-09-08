@@ -9,8 +9,9 @@
  * on the screen is the number the rules produce.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { requireCompanyContext } from "@/lib/company-os/context";
 import { logError } from "@/lib/logger";
 import {
   isRealWorldTask,
@@ -33,7 +34,10 @@ type TaskRow = HonestyTask & {
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireCompanyContext(req);
+  if (!auth.ok) return auth.response;
+  const tenantId = auth.context.tenantId;
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
@@ -45,23 +49,36 @@ export async function GET() {
       });
     }
 
-    const [projectsResult, tasksResult] = await Promise.all([
-      supabase.from("projects").select("*").order("created_at", { ascending: false }).limit(40),
-      supabase
-        .from("tasks")
-        .select("id,project_id,title,description,content,status,priority,owner_role,due_date,progress_percent,created_at,metadata")
-        .is("archived_at", null)
-        .order("created_at", { ascending: true })
-        .limit(400),
-    ]);
-    if (projectsResult.error) throw projectsResult.error;
-    if (tasksResult.error) throw tasksResult.error;
-
-    const tasks = (tasksResult.data || []) as TaskRow[];
+    const projectRows: Record<string, unknown>[] = [];
+    for (let offset = 0; ; offset += 250) {
+      const { data, error } = await supabase.from("projects").select("*").eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false }).order("id").range(offset, offset + 249);
+      if (error) throw error;
+      projectRows.push(...(data || []));
+      if (!data || data.length < 250) break;
+    }
+    const tasks: TaskRow[] = [];
+    for (let batch = 0; batch < projectRows.length; batch += 100) {
+      const ids = projectRows.slice(batch, batch + 100).map((project) => String(project.id));
+      for (let offset = 0; ; offset += 250) {
+        const { data, error } = await supabase.from("tasks")
+          .select("id,project_id,title,description,content,status,priority,owner_role,due_date,progress_percent,created_at,metadata")
+          .eq("tenant_id", tenantId).in("project_id", ids).order("created_at").order("id").range(offset, offset + 249);
+        if (error) throw error;
+        tasks.push(...((data || []) as TaskRow[]));
+        if (!data || data.length < 250) break;
+      }
+    }
+    const tasksByProject = new Map<string, TaskRow[]>();
+    for (const task of tasks) {
+      if (!task.project_id) continue;
+      const group = tasksByProject.get(task.project_id) || [];
+      group.push(task); tasksByProject.set(task.project_id, group);
+    }
     const today = new Date().toISOString().slice(0, 10);
 
-    const projects = (projectsResult.data || []).map((project: Record<string, unknown>) => {
-      const projectTasks = tasks.filter((task) => task.project_id === project.id);
+    const projects = projectRows.map((project: Record<string, unknown>) => {
+      const projectTasks = tasksByProject.get(String(project.id)) || [];
       const summary = summarizeExecutionHonesty(projectTasks);
       const shaped = projectTasks.map((task) => ({
         id: task.id,
