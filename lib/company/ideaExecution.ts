@@ -3,11 +3,11 @@ import { buildExecutionBlueprint, evaluateBusiness, type BusinessIntelligence } 
 import { invalidateCache } from "../cache";
 import { getSupabaseAdmin } from "../supabase";
 import { normalizeActionInitialStatus } from "./actionQueue";
-import { recordAudit } from "./audit";
 import { createExecutionBundle } from "./executionRepository";
 import { classifyExecutionKind } from "./executionHonesty";
-import { listIdeas, markIdeaExecuted } from "./ideas";
-import { createApprovalCritical } from "../approvals";
+import { getIdeaCritical, markIdeaExecuted } from "./ideas";
+import { getTenantId } from "../tenant";
+import { rememberDurableApprovalRow } from "../approvals";
 
 export type ApprovedIdeaExecutionResult = {
   ok: boolean;
@@ -83,7 +83,8 @@ function asApprovedIntelligence(base: BusinessIntelligence, budgetSAR: number, a
 
 export async function executeApprovedIdea(
   metadata: Record<string, unknown> | undefined,
-  actor = "المالك"
+  actor = "المالك",
+  tenantId = getTenantId()
 ): Promise<ApprovedIdeaExecutionResult> {
   const ideaId = metadataValue(metadata, "ideaId");
   if (!ideaId) {
@@ -97,7 +98,9 @@ export async function executeApprovedIdea(
     };
   }
 
-  const idea = listIdeas().find((item) => item.id === ideaId);
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, ideaId, mode: "memory-only", saved: false, counts: { tasks: 0, kpis: 0, actions: 0 }, reason: "قاعدة البيانات غير مهيأة؛ لم يُنشأ مشروع." };
+  const idea = await getIdeaCritical(ideaId, tenantId);
   if (!idea) {
     return {
       ok: false,
@@ -109,48 +112,16 @@ export async function executeApprovedIdea(
     };
   }
 
-  // Fast-path idempotency for the UI: an idea converts into exactly ONE
-  // project (the execution bundle's idempotencyKey guards the DB layer too).
-  if (idea.executedProjectId) {
-    return {
-      ok: true,
-      ideaId,
-      mode: "durable",
-      saved: true,
-      counts: { tasks: 0, kpis: 0, actions: 0 },
-      reason: `سبق تحويل هذه الفكرة إلى مشروع (${idea.executedProjectId}) — لا يُنشأ مشروع مكرر.`,
-    };
-  }
+  if (idea.status !== "APPROVED") return { ok: false, ideaId, mode: "durable", saved: false, counts: { tasks: 0, kpis: 0, actions: 0 }, reason: "يلزم اعتماد الفكرة أولاً." };
 
   const request = `تنفيذ الفكرة المعتمدة: ${idea.title}. الفرضية: ${idea.hypothesis}. الميزانية المعتمدة: ${idea.budgetSAR} ريال. الأفق الزمني: ${idea.horizonDays} يوم.`;
   const financials = await calculateFinancials();
   const baseIntelligence = evaluateBusiness(request, financials);
   const intelligence = asApprovedIntelligence(baseIntelligence, idea.budgetSAR, idea.approvalId);
   const blueprint = buildExecutionBlueprint(request, intelligence);
-  const supabase = getSupabaseAdmin();
-
-  if (!supabase) {
-    recordAudit({
-      actor,
-      action: "EXECUTE_APPROVED_IDEA_SKIPPED",
-      entityType: "idea",
-      entityId: idea.id,
-      detail: `تم اعتماد الفكرة «${idea.title}» لكن Supabase غير مضبوط، لذلك لم تُحفظ كمشروع دائم.`,
-      tier: idea.tier,
-    });
-
-    return {
-      ok: true,
-      ideaId,
-      mode: "memory-only",
-      saved: false,
-      counts: { tasks: blueprint.tasks.length, kpis: blueprint.kpis.length, actions: blueprint.actions.length },
-      reason: "تم تجهيز خطة التنفيذ داخلياً، لكن حفظ المشروع يتطلب ضبط Supabase.",
-    };
-  }
-
   const execution = await createExecutionBundle({
     source: "approved-idea",
+    tenantId,
     idempotencyKey: `idea:${idea.id}`,
     actorId: actor,
     actorRole: "OWNER",
@@ -266,33 +237,14 @@ export async function executeApprovedIdea(
   });
 
   const projectId = String((execution.project as Record<string, unknown>).id);
+  // Always finalize on retry, even when an earlier request created the project.
+  // The RPC uses persisted task metadata, never blueprint array positions.
+  const { data: funding, error: fundingError } = await supabase.rpc("orvanta_finalize_idea_funding", {
+    p_tenant_id: tenantId, p_idea_id: idea.id, p_project_id: projectId, p_actor: actor,
+  });
+  if (fundingError || !funding?.projectId) throw new Error("المشروع محفوظ لكن استكمال التمويل لم يكتمل. أعد المحاولة بأمان. " + (fundingError?.message || ""));
+  for (const row of funding.approvals || []) rememberDurableApprovalRow(row);
   markIdeaExecuted(idea.id, projectId);
-
-  // Funding gate: each WAITING_FUNDING step raises a BUDGET item to the CFO
-  // in the unified decision center with the estimated amount.
-  for (let index = 0; index < blueprint.tasks.length; index += 1) {
-    const step = blueprint.tasks[index];
-    if (!step.requiresFunding) continue;
-    const bundleTask = execution.tasks[index] as Record<string, unknown> | undefined;
-    if (!bundleTask?.id) continue;
-    await createApprovalCritical({
-      type: "BUDGET",
-      title: `اعتماد مالي مطلوب: ${step.title}`,
-      detail: `خطوة «${step.title}» في مشروع «${idea.title}» تتطلب مبلغاً تقديرياً ${(
-        step.estimatedCostSAR ?? 0
-      ).toLocaleString("ar-SA")} ر.س قبل التنفيذ — لا تُنفَّذ الخطوة قبل هذا الاعتماد.`,
-      amount: step.estimatedCostSAR,
-      requestedRole: "CFO",
-      dedupeKey: `task-funding-${bundleTask.id}`,
-      metadata: {
-        kind: "TASK_FUNDING",
-        taskId: String(bundleTask.id),
-        projectId,
-        ideaId: idea.id,
-        estimatedCostSAR: step.estimatedCostSAR ?? null,
-      },
-    });
-  }
 
   invalidateCache("dashboard-data");
 

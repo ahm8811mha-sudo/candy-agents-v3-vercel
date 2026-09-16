@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { ensureDailyIdea, enrichIdea } from "@/lib/company/ideas";
+import { generateDailyIdeaCritical, enrichIdea } from "@/lib/company/ideas";
 import { reviveDueDeferrals } from "@/lib/approvals";
 import { reopenUnprovenRealTasks } from "@/lib/company/executionHonestyServer";
 import { sweepDecisionCommitments } from "@/lib/company/executiveSecretariat";
@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
       const chased = await sweepDecisionCommitments(context.tenantId);
       if (chased.reminded > 0) await heartbeat({ phase: "decision-sweep", ...chased });
 
-      const idea = ensureDailyIdea();
-      await enrichIdea(idea.id);
-      await heartbeat({ phase: "idea-enriched", ideaId: idea.id });
+      const generated = await generateDailyIdeaCritical(context.tenantId);
+      const idea = generated.idea;
+      if (idea) await enrichIdea(idea.id, context.tenantId);
+      await heartbeat({ phase: "opportunities-reviewed", ideaId: idea?.id, reason: generated.reason });
 
       const learning = getLearningSnapshot();
       const workflows = process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED === "true"
@@ -61,11 +62,12 @@ export async function GET(req: NextRequest) {
       const outboxFailed = Number((outbox as { retried?: number }).retried || 0) + Number((outbox as { deadLettered?: number }).deadLettered || 0);
 
       return {
-        processedCount: 1 + workflowProcessed + outboxProcessed,
+        processedCount: Number(generated.created) + workflowProcessed + outboxProcessed,
         failedCount: outboxFailed,
-        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
+        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea?.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
         body: {
-          dailyIdea: { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode },
+          dailyIdea: idea ? { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode } : null,
+          opportunityReason: generated.reason,
           learning: {
             decisionsAnalyzed: learning.decisionsAnalyzed,
             confidenceThreshold: learning.confidenceThreshold,

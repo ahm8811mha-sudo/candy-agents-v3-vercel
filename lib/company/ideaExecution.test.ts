@@ -15,7 +15,7 @@ describe("executeApprovedIdea", () => {
     expect(result.counts).toEqual({ tasks: 0, kpis: 0, actions: 0 });
   });
 
-  it("turns an approved idea into an execution blueprint even without Supabase", async () => {
+  it("does not report a saved project or prepared-task counts without Supabase", async () => {
     const idea = submitIdea({
       title: uniqueTitle(),
       hypothesis: "اختبار قابلية تحويل الفكرة المعتمدة إلى خطة تنفيذ.",
@@ -27,10 +27,11 @@ describe("executeApprovedIdea", () => {
 
     const result = await executeApprovedIdea({ ideaId: idea.id }, "اختبار");
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.saved).toBe(false);
     expect(result.ideaId).toBe(idea.id);
-    expect(result.counts.tasks).toBeGreaterThan(0);
-    expect(result.counts.kpis).toBeGreaterThan(0);
-    expect(result.counts.actions).toBeGreaterThan(0);
+    expect(result.counts.tasks).toBe(0);
+    expect(result.counts.kpis).toBe(0);
+    expect(result.counts.actions).toBe(0);
   });
 });

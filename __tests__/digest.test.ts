@@ -1,3 +1,4 @@
+import { completeStudy } from "./fixtures/idea-study";
 import { describe, it, expect, beforeEach } from "vitest";
 import { composeDigest, dispatchDigest } from "../lib/company/digest";
 import { submitIdea, _clearIdeas } from "../lib/company/ideas";
@@ -10,7 +11,7 @@ describe("daily digest (F5)", () => {
   });
 
   it("composes an Arabic brief with the key numbers", () => {
-    submitIdea({ title: "فكرة تجريبية للملخص", hypothesis: "ف", budgetSAR: 30_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "فكرة تجريبية للملخص", hypothesis: "ف", budgetSAR: 30_000, horizonDays: 30 });
     const d = composeDigest();
     expect(d.text).toContain("ملخص شركة النجمة الذهبية");
     expect(d.pendingDecisions).toBeGreaterThanOrEqual(1);
@@ -20,8 +21,10 @@ describe("daily digest (F5)", () => {
 
   it("headline reflects whether decisions are pending", () => {
     const empty = composeDigest();
-    // A daily team idea is auto-created, so there is at least one pending item.
-    expect(empty.headline).toContain("بانتظار اعتمادك");
+    // Reading a digest must never create a business idea or pending approval.
+    expect(empty.headline).toContain("لا قرارات معلّقة");
+    expect(empty.ideasFromTeam).toBe(0);
+    expect(empty.pendingDecisions).toBe(0);
   });
 
   it("dispatch records safely when no channel is configured", async () => {

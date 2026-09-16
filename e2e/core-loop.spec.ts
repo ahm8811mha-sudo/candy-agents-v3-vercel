@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { completeStudy } from "../__tests__/fixtures/idea-study";
 
 /**
  * The core operating loop, end to end through the real HTTP surface:
@@ -27,6 +28,7 @@ async function submitIdea(request: APIRequestContext, title: string) {
       hypothesis: "توسيع قناة البيع أونلاين سيرفع الإيراد الشهري 15%",
       budgetSAR: 9_000,
       horizonDays: 60,
+      study: completeStudy,
     },
   });
   expect(res.status()).toBe(200);
@@ -37,8 +39,16 @@ async function submitIdea(request: APIRequestContext, title: string) {
   return body.idea as { id: string; approvalId: string };
 }
 
-test("an approved idea becomes a project with tasks, KPIs, and queued actions", async ({ request }) => {
+test("idea execution requires durable storage; configured staging also verifies the complete workflow", async ({ request }) => {
   await unlock(request);
+  if (!process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const result = await request.post("/api/company/ideas", { data: { title: "اختبار غياب قاعدة البيانات", hypothesis: "يجب ألا ينجح حفظ الفكرة دون قاعدة بيانات", budgetSAR: 9000, horizonDays: 30, study: completeStudy } });
+    expect(result.status()).toBe(503);
+    expect((await result.json()).ok).toBe(false);
+    test.info().annotations.push({ type: "scope", description: "No DB configured: verified refusal only. Durable workflow is covered by the SQL transaction suite." });
+    return;
+  }
+  test.skip(process.env.ORVANTA_E2E_STAGING !== "true", "Business fixture writes require an explicitly configured staging deployment.");
 
   const idea = await submitIdea(request, uniqueTitle("متجر إلكتروني للحلويات"));
 
@@ -83,8 +93,12 @@ test("an approved idea becomes a project with tasks, KPIs, and queued actions", 
   expect(repeated.item.status).toBe("APPROVED");
 });
 
-test("a rejected idea never executes", async ({ request }) => {
+test("invalid submissions are refused; configured staging also verifies rejected-idea execution", async ({ request }) => {
   await unlock(request);
+  const invalid = await request.post("/api/company/ideas", { data: { title: "", hypothesis: "", budgetSAR: -1, horizonDays: 0 } });
+  expect(invalid.status()).toBe(400);
+  if (!process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+  test.skip(process.env.ORVANTA_E2E_STAGING !== "true", "Business fixture writes require an explicitly configured staging deployment.");
 
   const idea = await submitIdea(request, uniqueTitle("فكرة مرفوضة"));
 

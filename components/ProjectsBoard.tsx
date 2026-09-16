@@ -149,8 +149,8 @@ export default function ProjectsBoard() {
   }
 
   async function confirmReal(task: ProjectTask) {
-    if (!proofNote.trim()) {
-      setTaskError("اكتب الإثبات: ماذا تم فعلياً، ومتى، وأين يمكن التحقق منه.");
+    if (proofNote.trim().length < 10) {
+      setTaskError("اكتب إثباتاً لا يقل عن 10 أحرف: ماذا تم فعلياً، ومتى، وأين يمكن التحقق منه.");
       return;
     }
     setBusyTask(task.id);
@@ -206,7 +206,7 @@ export default function ProjectsBoard() {
         </div>
       )}
 
-      {!loading && projects.length === 0 && configured && (
+      {!loading && !error && projects.length === 0 && configured && (
         <div className="empty-state" style={{ minHeight: 160 }}>
           <FolderKanban size={30} />
           <strong>لا توجد مشاريع بعد</strong>

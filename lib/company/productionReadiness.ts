@@ -2,6 +2,7 @@ import { getSupabaseEnvironmentReadiness, hasSupabaseEnv } from "../supabase";
 import { isAuthEnabled, isPersonalOwnerMode } from "../auth";
 import { isOwnerAccessConfigured, hasDedicatedCookieSecret } from "../security/personalAccess";
 import { getGoogleWorkspaceStatus } from "../integrations/googleWorkspace";
+import { outboxConfiguration } from "../company-os/outboxConfiguration";
 
 export type ReadinessSeverity = "PASS" | "WARN" | "FAIL";
 
@@ -55,6 +56,7 @@ export function getProductionReadiness(): ProductionReadiness {
   const OWNER_CODE_MIN_LENGTH = 12;
   const ownerCodeStrong = personalAccessCode.length >= OWNER_CODE_MIN_LENGTH;
   const googleWorkspace = getGoogleWorkspaceStatus();
+  const outbox = outboxConfiguration();
   const workflowRuntimeEnabled = personalMode
     ? process.env.ORVANTA_WORKFLOW_RUNTIME_ENABLED !== "false"
     : enabled("ORVANTA_WORKFLOW_RUNTIME_ENABLED");
@@ -184,10 +186,10 @@ export function getProductionReadiness(): ProductionReadiness {
     check(
       "outbox-publisher",
       "Transactional outbox publisher",
-      enabled("ORVANTA_OUTBOX_ENABLED") && Boolean(process.env.CRON_SECRET),
-      enabled("ORVANTA_OUTBOX_ENABLED") && process.env.CRON_SECRET
-        ? "Outbox publishing and scheduler authentication are enabled."
-        : "Enable ORVANTA_OUTBOX_ENABLED and configure CRON_SECRET before publishing external events."
+      outbox.ready,
+      outbox.ready
+        ? "Outbox scheduler authentication, HTTPS destination and signing secret are configured; this does not prove delivery."
+        : `Outbox publishing is blocked. Missing or invalid: ${outbox.missing.join(", ")}. Pending events must remain queued.`
     ),
     check(
       "watchdog",

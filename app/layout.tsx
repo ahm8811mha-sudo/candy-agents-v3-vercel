@@ -6,6 +6,7 @@ import "./facade.css";
 import "./orvanta-exact-logo.css";
 import "./orvanta-logo-final.css";
 import "./system.css";
+import "./workspace.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";

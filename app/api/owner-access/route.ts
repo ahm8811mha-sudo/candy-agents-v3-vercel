@@ -77,9 +77,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json().catch(() => ({}));
-  const code = String(body.code || "").trim();
-  if (code.length < 12 || code.length > 128) {
+  const body: unknown = await req.json().catch(() => null);
+  const code = body && typeof body === "object" && "code" in body && typeof body.code === "string"
+    ? body.code.trim()
+    : "";
+  // Match the configured code regardless of its strength. The readiness check
+  // warns about short configured codes; login must still let the owner in.
+  if (!code || code.length > 128) {
     return NextResponse.json({ ok: false, error: "رمز الوصول غير صحيح." }, { status: 401 });
   }
 
