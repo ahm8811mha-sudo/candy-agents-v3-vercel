@@ -79,7 +79,15 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const code = String(body.code || "").trim();
-  if (code.length < 12 || code.length > 128) {
+  // Match the configured code regardless of its strength. A minimum length here
+  // protected nothing — an attacker posts straight to this endpoint, and brute
+  // force is stopped by the rate limit below. Its only real effect was to lock
+  // the owner out whenever the configured code was shorter than the rule, with
+  // an error claiming the code was wrong when it was in fact correct. Strength
+  // is reported where it belongs: the readiness gate warns about a weak code.
+  // The upper bound stays, purely so an oversized body is rejected before it is
+  // hashed.
+  if (!code || code.length > 128) {
     return NextResponse.json({ ok: false, error: "رمز الوصول غير صحيح." }, { status: 401 });
   }
 
