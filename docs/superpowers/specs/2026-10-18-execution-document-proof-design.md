@@ -113,11 +113,18 @@ Found while exploring; each item names where.
 
 2. **`database/schema.sql` grants the anonymous role read access to every
    document.** It creates `for select to anon, authenticated using (true)` on
-   `gov_documents`, `gov_document_files` and `gov_document_extractions`. The
-   anonymous key ships to every browser. If that file was ever applied to
-   production and the v2 file was not, every uploaded commercial registration
-   and contract is readable by anyone. The v2 file drops those policies, so the
-   real state depends on which files were run by hand, in which order.
+   `gov_documents`, `gov_document_files` and `gov_document_extractions`.
+   Correction, checked after this was first written: this application has
+   never sent the anonymous key to a browser. No client code reads it (its
+   only reference is a server-side readiness check), git history shows it was
+   only ever read in `lib/supabase.ts` on the server, and the live login
+   bundle (10 chunks, about 619 KB) contains neither a key nor the project
+   reference. So if that file was ever applied to production and the v2 file
+   was not, the documents are readable by anyone holding the anonymous key
+   from elsewhere (a Supabase anonymous key is designed to be public), not by
+   every visitor of this site. Still a hole to close; smaller than first
+   stated. The v2 file drops those policies, so the real state depends on
+   which files were run by hand, in which order.
 
 3. **Production has a document schema nobody here has seen.** The migration
    `202607150003_database_advisor_hardening.sql` was generated from production's
