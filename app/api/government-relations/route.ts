@@ -25,7 +25,10 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Reading a document may take up to 55 s on its own, and refreshing the
+// regulatory sources fetches each page in turn; at 60 s the platform could
+// stop a request between its storage upload and its database writes.
+export const maxDuration = 300;
 
 type JsonBody = Record<string, unknown> & {
   action?: string;

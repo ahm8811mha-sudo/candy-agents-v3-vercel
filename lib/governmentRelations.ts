@@ -2,6 +2,7 @@ import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governa
 import { getSupabaseAdmin } from "./supabase";
 import { createHash } from "node:crypto";
 import { toLegacyDecisionAuditRow } from "./company/audit";
+import { callOpenAIChat } from "./ai/openai";
 
 type GovernmentDocumentInput = {
   documentId?: string;
@@ -465,25 +466,20 @@ ${fallbackText.slice(0, 6000)}`,
     });
   }
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
+  let raw: string;
+  try {
+    const result = await callOpenAIChat({
+      agentName: "government-documents-v1",
       model: "gpt-4o-mini",
-      temperature: 0,
       messages: [
         { role: "system", content: "You are an OCR-quality Saudi government document analyst. Extract only visible facts." },
         { role: "user", content },
       ],
-    }),
-  });
-
-  if (!res.ok) return null;
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content || "{}";
+    });
+    raw = result.text || "{}";
+  } catch {
+    return null;
+  }
   try {
     const parsed = JSON.parse(extractJson(raw));
     const type = detectDocumentType(input, `${parsed.documentType || ""} ${parsed.title || ""} ${parsed.issuer || ""}`);
@@ -1269,24 +1265,18 @@ async function analyzeRegulatoryChange(source: any, previousExcerpt: string, cur
   };
   if (!process.env.OPENAI_API_KEY) return fallback;
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: "You analyze changes in official Saudi government service and regulation pages. Do not invent legal conclusions. Return concise JSON only.",
-          },
-          {
-            role: "user",
-            content: `Compare the previous and current official source text for ${source.title}.
+    const result = await callOpenAIChat({
+      agentName: "regulatory-monitor",
+      model: "gpt-4o-mini",
+      responseFormat: "json_object",
+      messages: [
+        {
+          role: "system",
+          content: "You analyze changes in official Saudi government service and regulation pages. Do not invent legal conclusions. Return concise JSON only.",
+        },
+        {
+          role: "user",
+          content: `Compare the previous and current official source text for ${source.title}.
 Return JSON: {"title":"Arabic title","summary":"Arabic actionable summary","changeType":"FEE|REQUIREMENT|DEADLINE|PORTAL_PROCESS|REGULATION|TECHNICAL_PAGE_CHANGE","impactLevel":"LOW|MEDIUM|HIGH|CRITICAL"}.
 Use TECHNICAL_PAGE_CHANGE and LOW if the difference appears cosmetic or unclear.
 Previous:
@@ -1294,13 +1284,10 @@ ${previousExcerpt.slice(0, 6000)}
 
 Current:
 ${currentExcerpt.slice(0, 6000)}`,
-          },
-        ],
-      }),
+        },
+      ],
     });
-    if (!res.ok) return fallback;
-    const data = await res.json();
-    const parsed = JSON.parse(extractJson(data.choices?.[0]?.message?.content || "{}"));
+    const parsed = JSON.parse(extractJson(result.text || "{}"));
     const impact = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(parsed.impactLevel) ? parsed.impactLevel : "MEDIUM";
     return {
       title: cleanText(parsed.title) || fallback.title,

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "./supabase";
 import { createCompanyEvent } from "./company-os/events";
 import { appendCompanyEvent } from "./company-os/outboxPublisher";
+import { callOpenAIResponses, type ResponsesInput } from "./ai/openai";
 
 export type GovernmentContext = {
   tenantId: string;
@@ -253,15 +254,6 @@ function fallbackAnalysis(input: GovernmentUploadInput): GovernmentDocumentAnaly
   return partial;
 }
 
-function responseText(payload: any) {
-  if (typeof payload?.output_text === "string") return payload.output_text;
-  return (payload?.output || [])
-    .flatMap((item: any) => item?.content || [])
-    .map((part: any) => part?.text || part?.output_text || "")
-    .filter(Boolean)
-    .join("\n");
-}
-
 function jsonFromText(value: string) {
   const fenced = value.match(/```json\s*([\s\S]*?)```/i);
   if (fenced?.[1]) return fenced[1];
@@ -353,7 +345,7 @@ async function analyzeWithOpenAI(input: GovernmentUploadInput): Promise<Analysis
 - اكتب النتائج بالعربية مع إبقاء الأرقام كما تظهر.
 بيانات المستخدم: النوع المختار ${input.documentType || "غير محدد"}، العنوان ${input.title || "غير محدد"}، الجهة ${input.issuer || "غير محددة"}، الملاحظة ${input.notes || "لا يوجد"}.`;
 
-  const content: any[] = [{ type: "input_text", text: prompt }];
+  const content: ResponsesInput = [{ type: "input_text", text: prompt }];
   const dataUrl = `data:${input.mimeType || "application/octet-stream"};base64,${input.fileBase64}`;
   if (input.mimeType === "application/pdf" || /\.pdf$/i.test(input.fileName)) {
     content.unshift({ type: "input_file", filename: input.fileName, file_data: dataUrl, detail: "high" });
@@ -365,22 +357,7 @@ async function analyzeWithOpenAI(input: GovernmentUploadInput): Promise<Analysis
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: DOCUMENT_MODEL,
-        input: [{ role: "user", content }],
-        temperature: 0,
-      }),
-      signal: AbortSignal.timeout(55_000),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(clean(payload?.error?.message) || `OpenAI returned HTTP ${response.status}`);
-    const raw = responseText(payload);
+    const { text: raw } = await callOpenAIResponses({ agentName: "government-documents", model: DOCUMENT_MODEL, content, timeoutMs: 55_000 });
     const parsed = JSON.parse(jsonFromText(raw));
     return {
       analysis: normalizeAnalysis(input, parsed),
