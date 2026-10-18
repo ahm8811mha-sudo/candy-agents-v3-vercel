@@ -64,7 +64,7 @@ Each is a deliberate call, listed so the owner can overrule it.
 | `supabase/tests/document_access_regression.sql` | No `gov_%` table reachable by `anon`/`authenticated`; bucket private |
 | `supabase/tests/execution_proofs_regression.sql` | Seal, limits, v2 and v3 confirmation paths |
 | `lib/executionProofs/rules.ts` | Limits, type sniffing, object paths, `ProofError` (pure) |
-| `lib/ai/openaiResponses.ts` | One `fetch` to the Responses API, text and token extraction |
+| `lib/ai/openai.ts` (exists) | Bounded, ledger-recorded OpenAI calls (`callOpenAIResponses`, `callOpenAIChat`) |
 | `lib/executionProofs/reading.ts` | Prompt, normalisation, merge, comparison with company records |
 | `lib/executionProofs/store.ts` | Drafts, upload slots, registration, views, signed downloads, copy to Government Relations |
 | `app/api/tasks/proof/route.ts` | Owner-only HTTP surface for the store |
@@ -78,6 +78,8 @@ Each is a deliberate call, listed so the owner can overrule it.
 ---
 
 ### Task 1: Production Verification stops looking green when it checked nothing
+
+Done in `e81cb9b`: test red then green; YAML parses; the snapshot query ran read-only on a throwaway Postgres 16 and listed only `gov_` tables.
 
 **Files:**
 - Modify: `.github/workflows/production-verification.yml:48-57`
@@ -256,20 +258,14 @@ export function isPathOfProof(path: string, tenantId: string, taskId: string, pr
 ### Task 7: Reading a proof, and checking it against the company
 
 **Files:**
-- Create: `lib/ai/openaiResponses.ts`, `lib/executionProofs/reading.ts`
-- Modify: `lib/governmentRelationsV2.ts:256-271,367-391` (use the shared call)
-- Test: `__tests__/openaiResponses.test.ts`, `__tests__/executionProofReading.test.ts`
+- Create: `lib/executionProofs/reading.ts`
+- Test: `__tests__/executionProofReading.test.ts`
 
 **Interfaces:**
+- Consumes (exists since `c518527`, tested in `__tests__/openaiCalls.test.ts`): `callOpenAIResponses({ agentName, model, content: ResponsesInput, timeoutMs }): Promise<{ text, inputTokens, outputTokens, latencyMs }>` from `lib/ai/openai.ts`. It throws on an HTTP or network error and records every call in the usage ledger. Government document reading already uses it.
 - Produces:
 
 ```ts
-// lib/ai/openaiResponses.ts
-export type ResponsesInput = Array<{ type: "input_text"; text: string } | { type: "input_file"; filename: string; file_data: string } | { type: "input_image"; image_url: string; detail: "high" }>;
-export async function callOpenAIResponses(args: { model: string; content: ResponsesInput; timeoutMs: number; agentName: string }):
-  Promise<{ text: string; inputTokens: number; outputTokens: number; latencyMs: number }>; // throws on HTTP or network error; records usage via recordAiUsage
-export function extractJsonObject(text: string): unknown; // fenced ```json or first {...}; {} when none
-
 // lib/executionProofs/reading.ts
 export type ProofFactKey = "documentKind" | "reference" | "issuer" | "parties" | "issueDate" | "expiryDate" | "amount" | "currency";
 export type ProofReading = {
@@ -287,14 +283,13 @@ export function compareWithCompany(facts: AttestedFacts, company: { legalName: s
 ```
 
 - [ ] **Step 1: Write the failing tests** (mock `global.fetch`):
-  - `callOpenAIResponses` posts to `https://api.openai.com/v1/responses` with `temperature: 0`, returns `output_text`, reads `usage.input_tokens/output_tokens`, calls `recordAiUsage` once with `ok: true`; on HTTP 500 it throws and records `ok: false`; an `AbortSignal.timeout(timeoutMs)` is passed.
   - `proofReadingEnabled({})` false; `{ OPENAI_API_KEY: "x" }` false; `{ ORVANTA_PROOF_READING: "openai", OPENAI_API_KEY: "x" }` true.
   - `readProofFile` when disabled returns `status: "NOT_READ"`, `engine: "none"` and never calls fetch; when fetch rejects returns `status: "FAILED"` with the message; a model answer is normalised: confidence clamped to 0..1, Arabic-Indic digits converted (`"١٠١٠٢٣"` → `"101023"`, `"٤٬٥٠٠٫٠٠"` → `"4500.00"`), dates kept only as `YYYY-MM-DD` Gregorian (`"1447-03-12"` with a Hijri marker or year < 1900 is dropped from `issueDate`/`expiryDate`, never guessed).
   - `mergeReadings` keeps, per key, the highest-confidence non-empty value and its file id.
   - `compareWithCompany`: holder "شركة النجمه الذهبيه" vs legal name "شركة النجمة الذهبية" → no flag (hamza, ta marbuta, ya, tatweel, diacritics normalised); a different name → `HOLDER_NOT_COMPANY`; `legalName: null` → no holder flag; `expiryDate` before `today` → `EXPIRED`; amount `4500` vs funding `4500.4` → none, vs `5000` → `AMOUNT_DIFFERS` (tolerance 1%); currency other than SAR with funding set → `AMOUNT_DIFFERS`.
 - [ ] **Step 2: Run** both files. Expected: FAIL.
-- [ ] **Step 3: Implement.** `callOpenAIResponses` is the fetch at `governmentRelationsV2.ts:367-384` plus `responseText`; switch `analyzeWithOpenAI` to it with `agentName: "government-documents"` and keep its fallback behaviour. `readProofFile` builds the content like `analyzeWithOpenAI` (`input_file` for PDF, `input_image` for images, base64 data URL), model `process.env.OPENAI_DOCUMENT_MODEL || "gpt-4.1-mini"`, `timeoutMs: 55_000`, `agentName: "execution-proof"`. The prompt asks, in Arabic, for JSON with the eight keys each as `{ "value", "confidence" }` plus `governmentType`, only what is visible, no national ID numbers, no guessing.
-- [ ] **Step 4: Run** both files and the full suite. Expected: PASS, government tests unchanged.
+- [ ] **Step 3: Implement.** `readProofFile` calls `callOpenAIResponses`, parses the answer with `extractJsonBlock` from `lib/aiStructured.ts`, and builds the content like `analyzeWithOpenAI` (`input_file` for PDF, `input_image` for images, base64 data URL), model `process.env.OPENAI_DOCUMENT_MODEL || "gpt-4.1-mini"`, `timeoutMs: 55_000`, `agentName: "execution-proof"`. The prompt asks, in Arabic, for JSON with the eight keys each as `{ "value", "confidence" }` plus `governmentType`, only what is visible, no national ID numbers, no guessing.
+- [ ] **Step 4: Run** the file and the full suite. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: read proofs and compare them with company records`.
 
 ### Task 8: The proof store
