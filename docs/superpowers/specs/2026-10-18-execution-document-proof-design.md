@@ -1,6 +1,10 @@
 # Execution proof by document — design
 
 Status: proposed, awaiting the owner's answers to the questions at the end.
+Plan: `docs/superpowers/plans/2026-10-18-execution-document-proof.md`. Where the
+plan's "Decisions" section words a point differently (server-only policies in
+4.1, sealing in 4.2, two new arguments in 4.7, the snapshot in 4.1a), the plan
+holds the current call and gives the reason.
 Author's calls are marked **[call]**; everything else is either the owner's
 stated intent or a fact found in the repository, with where it was found.
 
