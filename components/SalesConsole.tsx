@@ -238,8 +238,8 @@ export default function SalesConsole() {
           <span className="bento-kicker"><Package size={15} /> منتجات المتجر ({data.products.length})</span>
 
           <form onSubmit={addProduct} className="memory-search-bar" style={{ flexWrap: "wrap" }}>
-            <input className="input" name="title" required placeholder="اسم منتج جديد" style={{ flex: "2 1 140px" }} />
-            <input className="input" name="price" type="number" min={1} step="1" required placeholder={`السعر (${data.currency})`} style={{ flex: "1 1 90px" }} />
+            <input className="input" name="title" required placeholder="اسم منتج جديد" aria-label="اسم المنتج الجديد" style={{ flex: "2 1 140px" }} />
+            <input className="input" name="price" type="number" min={1} step="1" required placeholder={`السعر (${data.currency})`} aria-label={`سعر المنتج (${data.currency})`} style={{ flex: "1 1 130px" }} />
             <button className="primary-btn btn-sm" disabled={busy}><Plus size={14} /> إضافة</button>
           </form>
 
@@ -251,7 +251,6 @@ export default function SalesConsole() {
                   <b style={{ color: p.totalInventory <= 5 ? "var(--amber)" : "var(--text-strong)" }}>{p.totalInventory}</b>
                   <button
                     className="icon-command danger-command"
-                    style={{ width: 30, height: 30 }}
                     onClick={() => removeProduct(p)}
                     disabled={busy}
                     aria-label={`إزالة ${p.title}`}

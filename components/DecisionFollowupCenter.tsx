@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Loader2, RefreshCcw, AlertTriangle, UserPlus, CheckCircle2, Clock3, ArrowUpRight } from "lucide-react";
 import { COMPANY_AGENTS } from "@/lib/company/agents";
+import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Commitment = {
   id: string;
@@ -130,7 +131,7 @@ export default function DecisionFollowupCenter() {
       {message && <p className="notice done">{message}</p>}
 
       {brief && (
-        <section className="bento-grid" style={{ gridTemplateColumns: "repeat(5,minmax(0,1fr))" }}>
+        <section className="bento-grid" style={{ gridTemplateColumns: fluidColumns(5, 130, 14) }}>
           {[
             ["قيد المتابعة", brief.open + brief.assigned + brief.inProgress, ""],
             ["متأخرة", brief.overdue, brief.overdue ? "high" : ""],

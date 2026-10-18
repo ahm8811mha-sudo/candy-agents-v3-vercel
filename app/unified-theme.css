@@ -560,6 +560,9 @@
   margin: 0 auto;
   padding: 26px 0 48px;
   display: grid;
+  /* An implicit `auto` column grows to its widest child's min-content, so one
+     wide grid inside pushed whole pages 28-58px past a 320px screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 

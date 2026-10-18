@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ShoppingBag, Loader2, Package, AlertTriangle, TrendingUp, Plus, Trash2, RefreshCcw, Warehouse, Link2 } from "lucide-react";
+import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Product = { id: string; title: string; status: string; totalInventory: number; price: number; vendor: string };
 type Order = { id: string; name: string; totalPrice: number; financialStatus: string; fulfillmentStatus: string; createdAt: string };
@@ -150,7 +151,7 @@ export default function ShopifyPanel() {
           <span className="mini-pill" style={{ marginInlineStart: "auto" }}><Link2 size={12} /> متجر + مستودع + محاسبة</span>
         </div>
         <form onSubmit={submitCreate} style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: fluidColumns(3, 180, 10), gap: 10 }}>
             <input className="field" name="title" required placeholder="اسم المنتج" />
             <input className="field" name="sku" placeholder="SKU (اختياري)" />
             <input className="field" name="vendor" placeholder="المورّد / العلامة" />

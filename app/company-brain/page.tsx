@@ -280,7 +280,7 @@ export default function CompanyBrainPage() {
         </p>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))", gap: 14 }}>
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(310px, 100%), 1fr))", gap: 14 }}>
         <article className="bento-card">
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}><Target size={20} /><strong>توصيات القرار</strong></div>
           <div style={{ display: "grid", gap: 10 }}>
@@ -328,13 +328,13 @@ export default function CompanyBrainPage() {
         </div>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 }}>
         <form className="bento-card" onSubmit={runSimulation}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}><Activity size={20} /><strong>محاكاة ماذا لو؟</strong></div>
           <p className="page-sub">تجربة أثر نمو الإيراد 15% مع زيادة الرواتب 5% والمصروفات 3% لمدة سنة.</p>
-          <input className="input" value={revenue} onChange={(event) => setRevenue(event.target.value)} inputMode="decimal" placeholder="الإيراد الشهري" />
-          <input className="input" value={payroll} onChange={(event) => setPayroll(event.target.value)} inputMode="decimal" placeholder="الرواتب الشهرية" />
-          <input className="input" value={opex} onChange={(event) => setOpex(event.target.value)} inputMode="decimal" placeholder="المصروفات التشغيلية" />
+          <label className="field-label">الإيراد الشهري (ر.س)<input className="input" value={revenue} onChange={(event) => setRevenue(event.target.value)} inputMode="decimal" /></label>
+          <label className="field-label">الرواتب الشهرية (ر.س)<input className="input" value={payroll} onChange={(event) => setPayroll(event.target.value)} inputMode="decimal" /></label>
+          <label className="field-label">المصروفات التشغيلية الشهرية (ر.س)<input className="input" value={opex} onChange={(event) => setOpex(event.target.value)} inputMode="decimal" /></label>
           <button className="primary-btn" type="submit" disabled={running !== null}>{running === "simulation" ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />} تشغيل المحاكاة</button>
           {simulation && <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: ".78rem", lineHeight: 1.65, maxHeight: 300, overflow: "auto" }}>{JSON.stringify(simulation, null, 2)}</pre>}
         </form>
@@ -342,7 +342,7 @@ export default function CompanyBrainPage() {
         <form className="bento-card" onSubmit={buildPlan}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}><Target size={20} /><strong>المخطط الذاتي</strong></div>
           <p className="page-sub">يحوّل الهدف إلى مراحل ومهام وميزانية ومخاطر ومؤشرات، ويبقى التنفيذ الحساس خلف اعتماد المالك.</p>
-          <textarea className="input" value={goal} onChange={(event) => setGoal(event.target.value)} rows={4} style={{ resize: "vertical" }} />
+          <label className="field-label">الهدف<textarea className="input" value={goal} onChange={(event) => setGoal(event.target.value)} rows={4} style={{ resize: "vertical" }} /></label>
           <button className="primary-btn" type="submit" disabled={running !== null}>{running === "plan" ? <Loader2 className="spin" size={17} /> : <WandSparkles size={17} />} بناء الخطة</button>
           {plan && <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: ".78rem", lineHeight: 1.65, maxHeight: 300, overflow: "auto" }}>{JSON.stringify(plan, null, 2)}</pre>}
         </form>
