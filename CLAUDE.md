@@ -1,3 +1,13 @@
+# Two laws govern this repository
+
+1. **The engineering law**, imported below from `AGENTS.md`: evidence before
+   claims, root cause before fix, design before building, and the hard rules
+   for this codebase. Binding on every change. If the import does not load,
+   open `AGENTS.md` and read it before doing anything else.
+2. **The design law**, the rest of this file. Binding on every interface.
+
+@AGENTS.md
+
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!--  THE pols.dev ANTI-SLOP DESIGN LAW  ·  https://pols.dev/slop.md          -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
