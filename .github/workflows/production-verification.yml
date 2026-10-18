@@ -53,7 +53,10 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Set PRODUCTION_DB_URL, PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_SERVICE_ROLE_KEY to verify the release gates. Until then they stay red, which is correct."
+            # A skipped run must not read as a passed one.
+            echo "::warning::Nothing was verified: PRODUCTION_DB_URL, PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_SERVICE_ROLE_KEY are not set. The release gates stay red, which is correct."
+            echo "### Nothing was verified" >> "$GITHUB_STEP_SUMMARY"
+            echo "The production secrets are not configured, so no check ran against production." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Install PostgreSQL client
@@ -79,6 +82,19 @@ jobs:
             fi
           done
           exit $failed
+
+      # Structure only; the summary of a public repository is public.
+      - name: Snapshot the document schema
+        if: steps.configuration.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### gov_ tables in production"
+            echo '```'
+            psql "$PRODUCTION_DB_URL" -q -v ON_ERROR_STOP=1 -A -F ' | ' -f scripts/sql/gov-structure-snapshot.sql
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the migration chain is applied to production
         if: steps.configuration.outputs.configured == 'true'

@@ -1235,18 +1235,22 @@ label {
   flex-wrap: wrap;
 }
 
+/* A bare glyph: the hit area is the button, the mark carries no tile. */
 .icon-command {
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  border: 0;
+  border-radius: 4px;
   color: var(--accent-sky, #cfe7ff);
-  background: var(--panel-2);
+  background: none;
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: color .15s ease;
 }
+.icon-command:hover:not(:disabled) { color: var(--text-strong); }
+.icon-command:disabled { opacity: .5; cursor: wait; }
 
 .row-actions .danger-command,
 .danger-text {

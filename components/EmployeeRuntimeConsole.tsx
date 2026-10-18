@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Bot, Loader2, Play, RefreshCw, ShieldAlert } from "lucide-react";
+import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type RuntimeStatus = {
   ready: boolean;
@@ -221,7 +222,7 @@ export default function EmployeeRuntimeConsole() {
       {message && <p className="notice">{message}</p>}
       {error && <p className="notice" style={{ color: "var(--red)" }}>{error}</p>}
 
-      <section className="bento-grid" style={{ gridTemplateColumns: "repeat(4,minmax(0,1fr))" }}>
+      <section className="bento-grid" style={{ gridTemplateColumns: fluidColumns(4, 130, 14) }}>
         {[
           ["الإجمالي", summary.total],
           ["مكتمل", summary.done],
@@ -256,19 +257,19 @@ export default function EmployeeRuntimeConsole() {
         {workflow === "sale" && (
           <form onSubmit={submitSale} style={{ display: "grid", gap: 10 }}>
             <strong>البيع إلى التحصيل</strong>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 10 }}>
-              <input className={fields} name="orderId" required placeholder="رقم الطلب" />
-              <input className={fields} name="customerName" required placeholder="اسم العميل" />
-              <input className={fields} name="customerEmail" placeholder="بريد العميل" />
-              <input className={fields} name="productName" required placeholder="اسم المنتج" />
-              <input className={fields} name="sku" required placeholder="SKU" />
-              <input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required />
-              <input className={fields} name="amountSAR" type="number" min="0.01" step="0.01" placeholder="قيمة البيع" required />
-              <input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" placeholder="الضريبة" />
-              <input className={fields} name="unitCostSAR" type="number" min="0" step="0.01" defaultValue="0" placeholder="تكلفة الوحدة" />
-              <input className={fields} name="minimumMarginPercent" type="number" min="0" step="0.01" defaultValue="20" placeholder="أقل هامش" />
-              <input className={fields} name="paymentReference" required placeholder="مرجع الدفع" />
-              <input className={fields} name="channel" defaultValue="direct" placeholder="قناة البيع" />
+            <div style={{ display: "grid", gridTemplateColumns: fluidColumns(4, 180, 10), gap: 10 }}>
+              <label className="field-label">رقم الطلب<input className={fields} name="orderId" required /></label>
+              <label className="field-label">اسم العميل<input className={fields} name="customerName" required /></label>
+              <label className="field-label">بريد العميل<input className={fields} name="customerEmail" /></label>
+              <label className="field-label">اسم المنتج<input className={fields} name="productName" required /></label>
+              <label className="field-label">رمز SKU<input className={fields} name="sku" required /></label>
+              <label className="field-label">الكمية<input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required /></label>
+              <label className="field-label">قيمة البيع (ر.س)<input className={fields} name="amountSAR" type="number" min="0.01" step="0.01" required /></label>
+              <label className="field-label">الضريبة (ر.س)<input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
+              <label className="field-label">تكلفة الوحدة (ر.س)<input className={fields} name="unitCostSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
+              <label className="field-label">أقل هامش مقبول (%)<input className={fields} name="minimumMarginPercent" type="number" min="0" step="0.01" defaultValue="20" /></label>
+              <label className="field-label">مرجع الدفع<input className={fields} name="paymentReference" required /></label>
+              <label className="field-label">قناة البيع<input className={fields} name="channel" defaultValue="direct" /></label>
             </div>
             <button className="primary-btn" disabled={busy}>
               {busy ? <Loader2 className="spin" size={15} /> : <Play size={15} />} تشغيل دورة البيع
@@ -280,18 +281,18 @@ export default function EmployeeRuntimeConsole() {
           <form onSubmit={submitPurchase} style={{ display: "grid", gap: 10 }}>
             <strong>الشراء إلى السداد</strong>
             <p className="page-sub">لا يوجد اعتماد من النموذج. المبلغ يمر تلقائيًا عبر T0–T3، ولا ينفذ تحويل بنكي.</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 10 }}>
-              <input className={fields} name="requestId" required placeholder="رقم طلب الشراء" />
-              <input className={fields} name="supplierName" required placeholder="اسم المورد" />
-              <input className={fields} name="supplierEmail" placeholder="بريد المورد" />
-              <input className={fields} name="itemName" required placeholder="الصنف" />
-              <input className={fields} name="sku" required placeholder="SKU" />
-              <input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required />
-              <input className={fields} name="unitPriceSAR" type="number" min="0.01" step="0.01" placeholder="سعر الوحدة" required />
-              <input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" placeholder="الضريبة" />
-              <input className={fields} name="leadTimeDays" type="number" min="1" step="1" defaultValue="7" placeholder="مدة التوريد" />
-              <input className={fields} name="qualityScore" type="number" min="0" max="100" step="1" defaultValue="80" placeholder="تقييم الجودة" />
-              <input className={fields} name="paymentDueDate" type="date" />
+            <div style={{ display: "grid", gridTemplateColumns: fluidColumns(4, 180, 10), gap: 10 }}>
+              <label className="field-label">رقم طلب الشراء<input className={fields} name="requestId" required /></label>
+              <label className="field-label">اسم المورد<input className={fields} name="supplierName" required /></label>
+              <label className="field-label">بريد المورد<input className={fields} name="supplierEmail" /></label>
+              <label className="field-label">الصنف<input className={fields} name="itemName" required /></label>
+              <label className="field-label">رمز SKU<input className={fields} name="sku" required /></label>
+              <label className="field-label">الكمية<input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required /></label>
+              <label className="field-label">سعر الوحدة (ر.س)<input className={fields} name="unitPriceSAR" type="number" min="0.01" step="0.01" required /></label>
+              <label className="field-label">الضريبة (ر.س)<input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
+              <label className="field-label">مدة التوريد (أيام)<input className={fields} name="leadTimeDays" type="number" min="1" step="1" defaultValue="7" /></label>
+              <label className="field-label">تقييم الجودة (0 إلى 100)<input className={fields} name="qualityScore" type="number" min="0" max="100" step="1" defaultValue="80" /></label>
+              <label className="field-label">تاريخ استحقاق الدفع<input className={fields} name="paymentDueDate" type="date" /></label>
             </div>
             <label><input name="received" type="checkbox" /> تم استلام البضاعة فعليًا</label>
             <button className="primary-btn" disabled={busy}>
@@ -307,21 +308,21 @@ export default function EmployeeRuntimeConsole() {
             {approvedIdeas.filter((idea) => !idea.executed).length === 0 ? (
               <p className="page-sub">لا توجد أفكار معتمدة متاحة للتحويل بعد — اعتمد فكرة من مركز القرار أولاً، ثم ستظهر هنا تلقائياً.</p>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}>
-                <select className={fields} name="ideaId" required defaultValue="">
+              <div style={{ display: "grid", gridTemplateColumns: fluidColumns(2, 180, 10), gap: 10 }}>
+                <label className="field-label">الفكرة المعتمدة<select className={fields} name="ideaId" required defaultValue="">
                   <option value="" disabled>اختر الفكرة المعتمدة</option>
                   {approvedIdeas.filter((idea) => !idea.executed).map((idea) => (
                     <option key={idea.id} value={idea.id}>
                       {idea.title}{Number(idea.budgetSAR || 0) > 0 ? ` — ${Number(idea.budgetSAR).toLocaleString("ar-SA-u-nu-latn")} ر.س` : ""}
                     </option>
                   ))}
-                </select>
-                <select className={fields} name="riskLevel" defaultValue="MEDIUM">
+                </select></label>
+                <label className="field-label">مستوى المخاطر<select className={fields} name="riskLevel" defaultValue="MEDIUM">
                   <option value="LOW">مخاطر منخفضة</option>
                   <option value="MEDIUM">مخاطر متوسطة</option>
                   <option value="HIGH">مخاطر مرتفعة</option>
                   <option value="CRITICAL">مخاطر حرجة</option>
-                </select>
+                </select></label>
               </div>
             )}
             <button className="primary-btn" disabled={busy || approvedIdeas.filter((idea) => !idea.executed).length === 0}>

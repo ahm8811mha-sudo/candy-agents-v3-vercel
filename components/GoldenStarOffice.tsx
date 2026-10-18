@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Building2, Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target, ScrollText } from "lucide-react";
+import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Presence = "WORKING" | "TODAY" | "IDLE";
 
@@ -150,7 +151,7 @@ export default function GoldenStarOffice() {
         <>
           <section style={{ display: "grid", gap: 10 }}>
             <strong className="shell-group" style={{ padding: 0 }}>جناح القيادة</strong>
-            <div className="bento-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+            <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(2, 260, 14) }}>
               {leadership.map((a) => <Room key={a.id} agent={a} />)}
             </div>
           </section>

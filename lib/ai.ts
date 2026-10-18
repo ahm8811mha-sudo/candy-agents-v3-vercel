@@ -18,6 +18,14 @@ export type RawAgentResult = {
 };
 
 const DEFAULT_SYSTEM = "أنت موظف ذكاء اصطناعي داخل شركة. نفذ المطلوب عمليًا، واكتب بالعربية، ولا تشرح أنك نموذج ذكاء اصطناعي.";
+
+/**
+ * Longest wait for one model answer. A Vercel Hobby function is killed at
+ * 300 s, and a structured call may make two model calls; without a bound a
+ * stalled provider ate the whole budget and the caller got a bare 504 with
+ * nothing recorded in the usage ledger.
+ */
+export const MODEL_TIMEOUT_MS = 45_000;
 const DEFAULT_GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"];
 
 function fallbackAgentOutput(agentName: string) {
@@ -65,15 +73,17 @@ function shouldTryNextGeminiModel(error: unknown) {
 async function runGeminiModel(model: string, prompt: string, options: AgentOptions): Promise<RawAgentResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // The key travels in a header: a URL ends up in proxy logs and error traces.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: options.system || DEFAULT_SYSTEM }] },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.25, maxOutputTokens: 900 },
     }),
+    signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Gemini API error ${res.status}`);
@@ -118,6 +128,7 @@ async function runClaude(prompt: string, options: AgentOptions) {
       system: options.system || DEFAULT_SYSTEM,
       messages: [{ role: "user", content: prompt }],
     }),
+    signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Claude API error ${res.status}`);
@@ -135,7 +146,8 @@ async function runOpenAI(prompt: string, options: AgentOptions): Promise<RawAgen
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is missing");
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const client = new OpenAI({ apiKey });
+  // The client's defaults are 10 minutes per attempt and two retries.
+  const client = new OpenAI({ apiKey, timeout: MODEL_TIMEOUT_MS, maxRetries: 1 });
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.25,
@@ -161,6 +173,9 @@ function providerErrorMessage(provider: ProviderName, error: unknown) {
   const lower = message.toLowerCase();
   const name = provider === "gemini" ? "Gemini" : provider === "claude" ? "Claude" : "OpenAI";
 
+  if ((error instanceof Error && error.name === "TimeoutError") || lower.includes("timed out") || lower.includes("aborted due to timeout")) {
+    return `تعذر تنفيذ AI الحقيقي عبر ${name}: لم يرد المزود خلال ${MODEL_TIMEOUT_MS / 1000} ثانية. أعد المحاولة بعد قليل.`;
+  }
   if (provider === "gemini" && (lower.includes("high demand") || lower.includes("try again later"))) {
     return "تعذر تنفيذ AI الحقيقي عبر Gemini لأن جميع موديلات Gemini المتاحة مزدحمة مؤقتًا. جرّب بعد دقيقة، أو أضف مزودًا احتياطيًا مثل Groq/Claude لاحقًا.";
   }

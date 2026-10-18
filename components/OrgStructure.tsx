@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Power,
 } from "lucide-react";
+import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Agent = {
   id: string;
@@ -228,21 +229,21 @@ export default function OrgStructure() {
 
       <section style={{ display: "grid", gap: 10 }}>
         <strong className="shell-group" style={{ padding: 0 }}>القيادة</strong>
-        <div className="bento-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+        <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(2, 260, 14) }}>
           {leadership.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>
       </section>
 
       <section style={{ display: "grid", gap: 10 }}>
         <strong className="shell-group" style={{ padding: 0 }}>رؤساء الأقسام (يرفعون لسلطان)</strong>
-        <div className="bento-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
+        <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(3, 240, 14) }}>
           {heads.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>
       </section>
 
       <section style={{ display: "grid", gap: 10 }}>
         <strong className="shell-group" style={{ padding: 0 }}>الوحدات المساندة</strong>
-        <div className="bento-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
+        <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(3, 240, 14) }}>
           {functional.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>
       </section>
