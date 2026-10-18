@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiKey } from "@/lib/publicApi";
 import { hydrateCompany } from "@/lib/company/hydrate";
-import { listIdeas, submitIdea, ideaStats } from "@/lib/company/ideas";
+import { listIdeas, submitIdeaCritical, ideaStats } from "@/lib/company/ideas";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const idea = submitIdea({ title, hypothesis, budgetSAR, horizonDays, source: "OWNER" });
+  const idea = await submitIdeaCritical({ title, hypothesis, budgetSAR, horizonDays, source: "OWNER" });
   return NextResponse.json({ ok: true, idea, stats: ideaStats() }, { status: 201 });
 }

@@ -1,3 +1,4 @@
+import { completeStudy } from "./fixtures/idea-study";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { signWebhookBody } from "../lib/company/webhooks";
 import { getTenantId, isMultiTenantEnabled, withTenant, DEFAULT_TENANT_ID } from "../lib/tenant";
@@ -86,14 +87,14 @@ describe("realtime-lite feed cursor (roadmap #1)", () => {
 
   it("changes the fingerprint when a governed store mutates", () => {
     const before = getFeedCursor();
-    submitIdea({ title: "فكرة للبث", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
+    submitIdea({ study: completeStudy, title: "فكرة للبث", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
     const after = getFeedCursor();
     expect(after.version).not.toBe(before.version);
     expect(after.pending).toBeGreaterThan(before.pending);
   });
 
   it("is stable when nothing changes", () => {
-    submitIdea({ title: "فكرة ثابتة", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
+    submitIdea({ study: completeStudy, title: "فكرة ثابتة", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
     expect(getFeedCursor().version).toBe(getFeedCursor().version);
   });
 });

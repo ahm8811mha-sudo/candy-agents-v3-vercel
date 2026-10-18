@@ -30,7 +30,7 @@ export type AuthUser = {
   name: string;
   tenantId: string;
   departmentId?: string;
-  authMethod?: "SUPABASE" | "SYSTEM_KEY" | "CRON" | "BASIC_DEV";
+  authMethod?: "SUPABASE" | "SYSTEM_KEY" | "CRON" | "BASIC_DEV" | "OWNER_DEVICE";
 };
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
@@ -65,7 +65,7 @@ export function personalOwnerUser(): AuthUser {
     role: "OWNER",
     name: process.env.ORVANTA_OWNER_NAME?.trim() || "أحمد ناصر الأحمد",
     tenantId: process.env.ORVANTA_TENANT_ID?.trim() || DEFAULT_TENANT_ID,
-    authMethod: "SYSTEM_KEY",
+    authMethod: "OWNER_DEVICE",
   };
 }
 
@@ -175,7 +175,7 @@ export async function authUserFromSupabaseUser(dataUser: {
     : isUserRole(employeeRole)
       ? employeeRole
       : "VIEWER";
-  const tenantId = normalizeTenant(dataUser.app_metadata?.tenant_id || dataUser.user_metadata?.tenant_id);
+  const tenantId = normalizeTenant(dataUser.app_metadata?.tenant_id);
 
   return {
     id: employee?.id || dataUser.id,

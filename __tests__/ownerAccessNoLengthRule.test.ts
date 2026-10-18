@@ -99,8 +99,34 @@ describe("owner access endpoint imposes no length rule on the code", () => {
   });
 });
 
-describe("the length rule must not come back", () => {
-  it("has no minimum-length comparison in the owner-access route", () => {
+describe("the lockout tells the owner how long it lasts", () => {
+  it("names the wait instead of saying only 'try later', and never blocks the correct code", async () => {
+    process.env.ORVANTA_OWNER_ACCESS_KEY = "864209753";
+    const ip = "203.0.113.77";
+
+    // Burn the budget with wrong guesses from one address.
+    let locked;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      locked = await POST(request("000000000", ip));
+      if (locked.status === 429) break;
+    }
+
+    expect(locked?.status).toBe(429);
+    const json = await locked!.json();
+    expect(json.error).toMatch(/أعد المحاولة بعد/);
+    expect(json.retryAfterSeconds).toBeGreaterThan(0);
+    expect(locked!.headers.get("retry-after")).toBeTruthy();
+
+    // The limiter only guards mismatches, so the real code still gets in even
+    // while the address is locked out. This is the property that stops a
+    // mistyped code from locking the owner out of their own system.
+    const unlocked = await POST(request("864209753", ip));
+    expect(unlocked.status).toBe(200);
+    expect(unlocked.cookies.get(OWNER_ACCESS_COOKIE)?.value).toBeTruthy();
+  });
+});
+
+describe("the length rule must not come back", () => {  it("has no minimum-length comparison in the owner-access route", () => {
     const source = readFileSync("app/api/owner-access/route.ts", "utf8");
     // Guards against `code.length < N` in any spacing. The upper bound that
     // rejects an oversized body is fine and deliberately not matched here.

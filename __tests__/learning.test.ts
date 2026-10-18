@@ -1,3 +1,4 @@
+import { completeStudy } from "./fixtures/idea-study";
 import { describe, it, expect, beforeEach } from "vitest";
 import { getLearningSnapshot } from "../lib/company/learning";
 import { submitIdea, _clearIdeas } from "../lib/company/ideas";
@@ -15,7 +16,7 @@ describe("self-improvement loop", () => {
   });
 
   it("starts neutral with no completed decisions", () => {
-    submitIdea({ title: "ف", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "ف", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
     const snap = getLearningSnapshot();
     expect(snap.decisionsAnalyzed).toBe(0);
     expect(snap.confidenceThreshold).toBe(0.6);
@@ -23,9 +24,9 @@ describe("self-improvement loop", () => {
   });
 
   it("counts approvals and rejections from the owner's outcomes", () => {
-    submitIdea({ title: "أ", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "أ", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
     decideLatestIdea("APPROVED");
-    submitIdea({ title: "ب", hypothesis: "ف", budgetSAR: 12_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "ب", hypothesis: "ف", budgetSAR: 12_000, horizonDays: 30 });
     decideLatestIdea("REJECTED");
     const snap = getLearningSnapshot();
     expect(snap.decisionsAnalyzed).toBe(2);
@@ -36,7 +37,7 @@ describe("self-improvement loop", () => {
 
   it("raises the confidence bar when the owner rejects most ideas", () => {
     for (let i = 0; i < 4; i++) {
-      submitIdea({ title: `ر${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
+      submitIdea({ study: completeStudy, title: `ر${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
       decideLatestIdea("REJECTED");
     }
     const snap = getLearningSnapshot();
@@ -47,7 +48,7 @@ describe("self-improvement loop", () => {
 
   it("relaxes the bar when the owner approves most ideas", () => {
     for (let i = 0; i < 4; i++) {
-      submitIdea({ title: `ق${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
+      submitIdea({ study: completeStudy, title: `ق${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
       decideLatestIdea("APPROVED");
     }
     const snap = getLearningSnapshot();
@@ -57,7 +58,7 @@ describe("self-improvement loop", () => {
 
   it("keeps the threshold within safe bounds", () => {
     for (let i = 0; i < 6; i++) {
-      submitIdea({ title: `س${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
+      submitIdea({ study: completeStudy, title: `س${i}`, hypothesis: "ف", budgetSAR: 10_000 + i, horizonDays: 30 });
       decideLatestIdea("REJECTED");
     }
     const snap = getLearningSnapshot();
@@ -66,7 +67,7 @@ describe("self-improvement loop", () => {
   });
 
   it("measures per-agent alignment with owner outcomes", () => {
-    submitIdea({ title: "محاذاة", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "محاذاة", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
     decideLatestIdea("APPROVED");
     const snap = getLearningSnapshot();
     expect(snap.agentAccuracy.length).toBeGreaterThan(0);

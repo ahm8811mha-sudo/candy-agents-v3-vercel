@@ -77,8 +77,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json().catch(() => ({}));
-  const code = String(body.code || "").trim();
+  // The codex branch's stricter parsing is kept: a non-string `code` is treated
+  // as absent rather than coerced.
+  const body: unknown = await req.json().catch(() => null);
+  const code = body && typeof body === "object" && "code" in body && typeof body.code === "string"
+    ? body.code.trim()
+    : "";
   // Match the configured code regardless of its strength. A minimum length here
   // protected nothing — an attacker posts straight to this endpoint, and brute
   // force is stopped by the rate limit below. Its only real effect was to lock
@@ -102,8 +106,18 @@ export async function POST(req: NextRequest) {
     const rateLimit = await checkRateLimit(req);
     if (!rateLimit.allowed) {
       const retryAfter = Math.max(1, Math.ceil((rateLimit.resetAt - Date.now()) / 1000));
+      // The wait was already computed for the retry-after header and then
+      // thrown away, leaving the owner staring at "try later" with no idea
+      // whether that meant a minute or an hour. Say it.
+      const minutes = Math.ceil(retryAfter / 60);
       return NextResponse.json(
-        { ok: false, error: "تم إيقاف المحاولات مؤقتًا. حاول لاحقًا." },
+        {
+          ok: false,
+          error: minutes <= 1
+            ? "تم إيقاف المحاولات مؤقتاً بعد عدة محاولات خاطئة. أعد المحاولة بعد أقل من دقيقة."
+            : `تم إيقاف المحاولات مؤقتاً بعد عدة محاولات خاطئة. أعد المحاولة بعد ${minutes} دقيقة.`,
+          retryAfterSeconds: retryAfter,
+        },
         { status: 429, headers: { "retry-after": String(retryAfter) } }
       );
     }

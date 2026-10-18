@@ -3,6 +3,7 @@ import { signWebhookBody } from "../company/webhooks";
 import { executeIntegrationOnce } from "../operations/integrationExecution";
 import { eventToOutboxRecord, nextRetryAt } from "./events";
 import type { CompanyEvent } from "./types";
+import { outboxConfiguration } from "./outboxConfiguration";
 
 export type OutboxDeliveryResult = {
   id: string;
@@ -68,7 +69,7 @@ function webhookConfig() {
 
 async function rawWebhookDelivery(row: Record<string, unknown>) {
   const { url, secret } = webhookConfig();
-  if (!url) return { skipped: true, responseStatus: 204, externalUrl: undefined as string | undefined };
+  if (!url || !secret) throw new Error("Outbox destination and signing secret are required; no delivery occurred.");
 
   const body = JSON.stringify({
     id: row.id,
@@ -136,9 +137,8 @@ async function deliver(row: Record<string, unknown>) {
 export async function publishOutboxBatch(options: { tenantId?: string; limit?: number } = {}) {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is required for outbox publishing.");
-  if (process.env.ORVANTA_OUTBOX_ENABLED !== "true") {
-    throw new Error("Outbox publisher is disabled. Set ORVANTA_OUTBOX_ENABLED=true after applying the core schema.");
-  }
+  const configuration = outboxConfiguration();
+  if (!configuration.ready) throw new Error(`Outbox publishing is blocked: ${configuration.missing.join(", ")}. No events were claimed.`);
 
   const now = new Date().toISOString();
   let query = supabase
@@ -169,6 +169,9 @@ export async function publishOutboxBatch(options: { tenantId?: string; limit?: n
     try {
       const execution = await deliver(claimed);
       const delivery = execution.value as { skipped: boolean; responseStatus: number };
+      if (!delivery || delivery.skipped !== false || !Number.isInteger(delivery.responseStatus) || delivery.responseStatus < 200 || delivery.responseStatus >= 300) {
+        throw new Error("The saved integration result is not a successful external delivery; manual review is required.");
+      }
       const update = await supabase
         .from("event_outbox")
         .update({
@@ -188,7 +191,7 @@ export async function publishOutboxBatch(options: { tenantId?: string; limit?: n
       if (update.error) throw update.error;
       results.push({
         id: String(claimed.id),
-        status: delivery.skipped ? "SKIPPED" : "PUBLISHED",
+        status: "PUBLISHED",
         attempts,
         integrationAttemptId: execution.attemptId,
         receiptId: execution.receiptId,
@@ -214,7 +217,7 @@ export async function publishOutboxBatch(options: { tenantId?: string; limit?: n
   return {
     selected: (data || []).length,
     processed: results.length,
-    published: results.filter((item) => item.status === "PUBLISHED" || item.status === "SKIPPED").length,
+    published: results.filter((item) => item.status === "PUBLISHED").length,
     retried: results.filter((item) => item.status === "RETRY").length,
     deadLettered: results.filter((item) => item.status === "DEAD_LETTER").length,
     results,

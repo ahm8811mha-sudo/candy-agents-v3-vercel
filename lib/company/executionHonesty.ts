@@ -70,11 +70,11 @@ export function taskExecutionState(task: HonestyTask): TaskExecutionState {
   if (status === "ON_HOLD") return "ON_HOLD";
   if (status === "BLOCKED") return "BLOCKED";
   if (isRealWorldTask(task)) {
-    if (status === "DONE" && isOwnerConfirmed(task)) return "REAL_DONE";
-    if (status === "DONE" || status === "REVIEW" || task.metadata?.readyForOwner) return "PLAN_READY";
+    if ((status === "DONE" || status === "ARCHIVED") && isOwnerConfirmed(task)) return "REAL_DONE";
+    if (status === "DONE" || status === "ARCHIVED" || status === "REVIEW" || task.metadata?.readyForOwner) return "PLAN_READY";
     return "IN_PROGRESS";
   }
-  return status === "DONE" ? "INTERNAL_DONE" : "IN_PROGRESS";
+  return status === "DONE" || status === "ARCHIVED" ? "INTERNAL_DONE" : "IN_PROGRESS";
 }
 
 export const executionStateLabels: Record<TaskExecutionState, string> = {

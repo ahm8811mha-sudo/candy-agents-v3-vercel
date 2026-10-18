@@ -1,411 +1,304 @@
-/**
- * Ideas & feasibility pipeline (OPERATING_MODEL.md — lifecycle stages 1–4).
- *
- * Ideas come from two sources: the OWNER, and the TEAM — which is obligated to
- * produce one executable idea every day (راصد proposes it). Every idea is
- * automatically studied by the three department heads (عبدالرحمن مالياً،
- * نورة سوقياً، فهد تشغيلياً), سلطان aggregates a recommendation, other agents
- * may add their own recommendations, and the final sign-off happens ONLY in
- * the decision center (/inbox) under the authority matrix.
- *
- * Analyses here are transparent first-pass heuristics (labelled as such) —
- * deterministic from the idea's numbers so they are testable and honest.
- */
-
-import { createApproval, listApprovals } from "../approvals";
+/** Idea domain + durable repository. APIs commit through RPC before reporting success. */
+import { randomUUID } from "node:crypto";
+import { createApproval, listApprovals, rememberDurableApprovalRow } from "../approvals";
 import { getAgent } from "./agents";
-import { requiredTier, requiresFeasibility } from "./governance";
-import { runAgent } from "../ai";
-import { persist, fetchRows, hydrateOnce } from "../supabase";
-import { emitWebhook } from "./webhooks";
+import { requiredTier } from "./governance";
+import { getSupabaseAdmin } from "../supabase";
+import { getTenantId } from "../tenant";
+import { runAgentStructured } from "../aiStructured";
+import { z } from "zod";
+import { assessIdea, opportunitiesFromRecords, type IdeaAssessment, type IdeaStudyInput, type OperatingSignal } from "./ideaAssessment";
 
 export type IdeaSource = "OWNER" | "TEAM";
 export type IdeaStatus = "UNDER_STUDY" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 export type Verdict = "APPROVE" | "CONDITIONAL" | "REJECT";
-
 export type IdeaRecommendation = {
-  agentId: string;
-  agentName: string;
-  agentTitle: string;
-  verdict: Verdict;
-  confidence: number; // 0..1
-  report: string;
-  createdAt: string;
+  agentId: string; agentName: string; agentTitle: string; verdict: Verdict;
+  /** Compatibility field: evidence coverage, never a probability of commercial success. */
+  confidence: number; report: string; createdAt: string;
+  origin?: "CALCULATION" | "MODEL" | "OWNER_NOTE";
 };
-
 export type Idea = {
-  id: string;
-  title: string;
-  hypothesis: string;
-  budgetSAR: number;
-  horizonDays: number;
-  source: IdeaSource;
-  proposedBy: string;
-  proposedByName: string;
-  status: IdeaStatus;
-  tier: string;
-  tierLabel: string;
-  recommendations: IdeaRecommendation[];
-  aggregate?: { verdict: Verdict; confidence: number; summary: string; narrative?: string };
+  id: string; title: string; hypothesis: string; budgetSAR: number; horizonDays: number;
+  source: IdeaSource; proposedBy: string; proposedByName: string; status: IdeaStatus;
+  tier: string; tierLabel: string; recommendations: IdeaRecommendation[];
+  aggregate?: { verdict: Verdict; confidence: number; summary: string; narrative?: string; assessment?: IdeaAssessment; generationKey?: string; analysisWarning?: string };
   studyMode?: "LLM" | "HEURISTIC";
-  approvalId?: string;
-  dayKey?: string;
-  /** Set once the approved idea has been converted into a project. */
-  executedProjectId?: string;
-  createdAt: string;
+  approvalId?: string; dayKey?: string; executedProjectId?: string; createdAt: string;
+  revision?: number; decisionStatus?: string;
 };
-
-const store: Idea[] = [];
-
-const sar = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 0 });
-
-const verdictAr: Record<Verdict, string> = {
-  APPROVE: "يُوصى بالتنفيذ",
-  CONDITIONAL: "يُوصى بتحفظ",
-  REJECT: "لا يُوصى",
-};
-
-function genId() {
-  return `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/** Upsert the full idea row — called after every mutation (best-effort). */
-function persistIdea(idea: Idea): void {
-  persist("company_ideas", {
-    id: idea.id,
-    title: idea.title,
-    hypothesis: idea.hypothesis,
-    budget_sar: idea.budgetSAR,
-    horizon_days: idea.horizonDays,
-    source: idea.source,
-    proposed_by: idea.proposedBy,
-    proposed_by_name: idea.proposedByName,
-    status: idea.status,
-    tier: idea.tier,
-    tier_label: idea.tierLabel,
-    recommendations: idea.recommendations,
-    aggregate: idea.aggregate ?? null,
-    study_mode: idea.studyMode ?? null,
-    approval_id: idea.approvalId ?? null,
-    day_key: idea.dayKey ?? null,
-    executed_project_id: idea.executedProjectId ?? null,
-    created_at: idea.createdAt,
-  });
-}
-
-/** Hydrate the store from Supabase once per process (before reads). */
-export const hydrateIdeas = hydrateOnce(async () => {
-  const rows = await fetchRows("company_ideas", { orderBy: "created_at", limit: 100 });
-  const seen = new Set(store.map((i) => i.id));
-  for (const r of rows) {
-    if (seen.has(String(r.id))) continue;
-    store.push({
-      id: String(r.id),
-      title: String(r.title),
-      hypothesis: String(r.hypothesis ?? ""),
-      budgetSAR: Number(r.budget_sar ?? 0),
-      horizonDays: Number(r.horizon_days ?? 1),
-      source: (r.source as IdeaSource) ?? "OWNER",
-      proposedBy: String(r.proposed_by ?? "owner"),
-      proposedByName: String(r.proposed_by_name ?? "المالك"),
-      status: (r.status as IdeaStatus) ?? "UNDER_STUDY",
-      tier: String(r.tier ?? ""),
-      tierLabel: String(r.tier_label ?? ""),
-      recommendations: (r.recommendations as IdeaRecommendation[]) ?? [],
-      aggregate: (r.aggregate as Idea["aggregate"]) ?? undefined,
-      studyMode: (r.study_mode as Idea["studyMode"]) ?? undefined,
-      approvalId: r.approval_id ? String(r.approval_id) : undefined,
-      dayKey: r.day_key ? String(r.day_key) : undefined,
-      executedProjectId: r.executed_project_id ? String(r.executed_project_id) : undefined,
-      createdAt: String(r.created_at),
-    });
-  }
-  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-});
-
-/** Small deterministic jitter from the idea text so twins don't look identical. */
-function seedJitter(text: string): number {
-  let h = 0;
-  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 997;
-  return (h % 100) / 1000; // 0 .. 0.099
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
-}
-
-/* ── the three core department studies (first-pass heuristics) ── */
-
-function financeStudy(idea: Idea): IdeaRecommendation {
-  const a = getAgent("abdulrahman")!;
-  const j = seedJitter(idea.title);
-  const roi = clamp(0.07 + (30 / Math.max(idea.horizonDays, 7)) * 0.04 + (idea.budgetSAR <= 25_000 ? 0.05 : 0.01) + j, 0.04, 0.35);
-  const payback = Math.max(1, Math.round(idea.horizonDays / 30));
-  const tier = requiredTier(idea.budgetSAR);
-  const verdict: Verdict = roi >= 0.12 && tier.tier !== "T3" ? "APPROVE" : roi >= 0.07 ? "CONDITIONAL" : "REJECT";
-  return {
-    agentId: a.id,
-    agentName: a.name,
-    agentTitle: a.title,
-    verdict,
-    confidence: clamp(0.55 + roi + j, 0.5, 0.9),
-    report: `تحليل أولي آلي: عائد متوقع ${(roi * 100).toFixed(0)}% تقريباً، استرداد خلال ~${payback} شهر. الميزانية ${sar.format(idea.budgetSAR)} ر.س ضمن الفئة ${tier.tier} (${tier.label}).${tier.tier === "T3" ? " المبلغ مرتفع — يشترط اكتمال الجدوى الثلاثية." : ""}`,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function marketStudy(idea: Idea): IdeaRecommendation {
-  const a = getAgent("noura")!;
-  const j = seedJitter(idea.hypothesis || idea.title);
-  const speed = clamp(1 - idea.horizonDays / 120, 0.1, 0.9); // shorter horizon = faster validation
-  const verdict: Verdict = speed >= 0.5 ? "APPROVE" : speed >= 0.25 ? "CONDITIONAL" : "REJECT";
-  return {
-    agentId: a.id,
-    agentName: a.name,
-    agentTitle: a.title,
-    verdict,
-    confidence: clamp(0.5 + speed * 0.35 + j, 0.5, 0.88),
-    report: `تحليل أولي آلي: أفق ${idea.horizonDays} يوماً يسمح باختبار الطلب ${speed >= 0.5 ? "بسرعة مقبولة" : "ببطء نسبي"}. يُنصح ببدء اختبار مصغّر وقياس تكلفة الاستحواذ قبل التوسع.`,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function opsStudy(idea: Idea): IdeaRecommendation {
-  const a = getAgent("fahad")!;
-  const j = seedJitter(idea.title + idea.hypothesis);
-  const executable = idea.budgetSAR > 0 && idea.horizonDays >= 7;
-  const load = clamp(idea.budgetSAR / 100_000, 0.05, 1);
-  const verdict: Verdict = executable && load <= 0.5 ? "APPROVE" : executable ? "CONDITIONAL" : "REJECT";
-  return {
-    agentId: a.id,
-    agentName: a.name,
-    agentTitle: a.title,
-    verdict,
-    confidence: clamp(0.6 + (executable ? 0.15 : -0.2) + j, 0.4, 0.9),
-    report: `تحليل أولي آلي: ${executable ? `قابلة للتحويل إلى مشروع بمهام خلال ${Math.max(3, Math.round(idea.horizonDays / 10))} مراحل` : "الأفق الزمني/الميزانية غير كافيين للتنفيذ"}. الحمل التشغيلي ${load <= 0.5 ? "منخفض" : "مرتفع"} نسبةً لطاقة الفريق.`,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function aggregate(recs: IdeaRecommendation[]): { verdict: Verdict; confidence: number; summary: string } {
-  const core = recs.slice(0, 3);
-  const votes = { APPROVE: 0, CONDITIONAL: 0, REJECT: 0 } as Record<Verdict, number>;
-  for (const r of core) votes[r.verdict]++;
-  const verdict: Verdict = votes.REJECT >= 2 ? "REJECT" : votes.APPROVE >= 2 ? "APPROVE" : "CONDITIONAL";
-  const confidence = core.reduce((s, r) => s + r.confidence, 0) / core.length;
-  return {
-    verdict,
-    confidence,
-    summary: `خلاصة سلطان: ${verdictAr[verdict]} بثقة ${(confidence * 100).toFixed(0)}% — بناءً على تقارير المالية والتسويق والعمليات.`,
-  };
-}
-
-/** Run the tri-department study, sultan's aggregate, then gate to /inbox. */
-function studyAndGate(idea: Idea): Idea {
-  idea.recommendations = [financeStudy(idea), marketStudy(idea), opsStudy(idea)];
-  idea.aggregate = aggregate(idea.recommendations);
-
-  const tier = requiredTier(idea.budgetSAR);
-  const approval = createApproval({
-    id: `apr-${idea.id}`,
-    type: "IDEA",
-    title: `فكرة: ${idea.title}`,
-    detail: `${idea.aggregate.summary} · الميزانية ${sar.format(idea.budgetSAR)} ر.س · الفئة ${tier.tier} — يعتمدها ${tier.approver}${requiresFeasibility(idea.budgetSAR) ? " · الجدوى الثلاثية مرفقة ✓" : ""} · مقدَّمة من ${idea.proposedByName}`,
-    amount: idea.budgetSAR,
-    requestedRole: tier.approver,
-    dedupeKey: `idea-${idea.id}`,
-    metadata: { ideaId: idea.id, tier: tier.tier, source: idea.source },
-  });
-
-  idea.approvalId = approval.id;
-  idea.status = "PENDING_APPROVAL";
-  persistIdea(idea);
-  emitWebhook("idea.submitted", {
-    id: idea.id,
-    title: idea.title,
-    budgetSAR: idea.budgetSAR,
-    tier: idea.tier,
-    verdict: idea.aggregate?.verdict ?? null,
-    source: idea.source,
-  });
-  return idea;
-}
-
 export type SubmitIdeaInput = {
-  title: string;
-  hypothesis: string;
-  budgetSAR: number;
-  horizonDays: number;
-  source?: IdeaSource;
-  proposedBy?: string;
-  /** Optional deterministic id (e.g. the daily team idea) so concurrent cold
-   *  starts upsert one row instead of duplicating. */
-  id?: string;
-  dayKey?: string;
+  title: string; hypothesis: string; budgetSAR: number; horizonDays: number;
+  source?: IdeaSource; proposedBy?: string; id?: string; dayKey?: string;
+  study?: IdeaStudyInput; generationKey?: string;
 };
 
-export function submitIdea(input: SubmitIdeaInput): Idea {
-  // A deterministic id that already exists (hydrated or same process) is reused.
-  if (input.id) {
-    const existing = store.find((i) => i.id === input.id);
-    if (existing) return existing;
-  }
-  const proposer = input.proposedBy ? getAgent(input.proposedBy) : undefined;
-  const idea: Idea = {
-    id: input.id || genId(),
-    title: input.title.trim(),
-    hypothesis: input.hypothesis.trim(),
-    budgetSAR: Math.max(0, Math.round(input.budgetSAR)),
-    horizonDays: Math.max(1, Math.round(input.horizonDays)),
-    source: input.source || "OWNER",
-    proposedBy: input.proposedBy || "owner",
-    proposedByName: proposer ? `${proposer.name} — ${proposer.title}` : "المالك",
-    status: "UNDER_STUDY",
-    tier: requiredTier(input.budgetSAR).tier,
-    tierLabel: requiredTier(input.budgetSAR).label,
-    recommendations: [],
-    dayKey: input.dayKey,
-    createdAt: new Date().toISOString(),
+// Compatibility snapshots for pulse/digest/learning. Refreshed on each request;
+// they are never the source of truth for production writes or individual lookups.
+const store: Idea[] = [];
+const sar = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
+function db() {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("اتصال قاعدة البيانات غير مهيأ. لم تُحفظ أي تغييرات.");
+  return client;
+}
+function remember(idea: Idea) {
+  const index = store.findIndex((item) => item.id === idea.id);
+  if (index < 0) store.unshift(idea); else store[index] = idea;
+  return idea;
+}
+export function ideaFromRow(r: Record<string, unknown>): Idea {
+  return {
+    id: String(r.id), title: String(r.title), hypothesis: String(r.hypothesis || ""),
+    budgetSAR: Number(r.budget_sar || 0), horizonDays: Number(r.horizon_days || 1),
+    source: r.source as IdeaSource, proposedBy: String(r.proposed_by || "owner"),
+    proposedByName: String(r.proposed_by_name || "المالك"), status: r.status as IdeaStatus,
+    tier: String(r.tier || ""), tierLabel: String(r.tier_label || ""),
+    recommendations: (r.recommendations as IdeaRecommendation[]) || [],
+    aggregate: (r.aggregate as Idea["aggregate"]) || undefined,
+    studyMode: r.study_mode as Idea["studyMode"], approvalId: r.approval_id ? String(r.approval_id) : undefined,
+    executedProjectId: r.executed_project_id ? String(r.executed_project_id) : undefined,
+    dayKey: r.day_key ? String(r.day_key) : undefined, createdAt: String(r.created_at), revision: Number(r.revision || 0),
   };
-  store.unshift(idea);
-  return studyAndGate(idea);
 }
-
-/**
- * F3 — Enrich an idea's study with real LLM reasoning when OPENAI_API_KEY is
- * set. The heuristic verdicts/confidence remain the deterministic base (so
- * governance stays stable and testable); the LLM adds a reasoned narrative that
- * cites the idea's numbers. Without a key it degrades to heuristic-only.
- */
-export async function enrichIdea(ideaId: string): Promise<Idea | null> {
-  const idea = store.find((i) => i.id === ideaId);
-  if (!idea) return null;
-  if (!process.env.OPENAI_API_KEY) {
-    idea.studyMode = "HEURISTIC";
-    persistIdea(idea);
-    return idea;
+function toRow(i: Idea) {
+  return {
+    id: i.id, title: i.title, hypothesis: i.hypothesis, budget_sar: i.budgetSAR, horizon_days: i.horizonDays,
+    source: i.source, proposed_by: i.proposedBy, proposed_by_name: i.proposedByName,
+    status: i.status, tier: i.tier, tier_label: i.tierLabel, recommendations: i.recommendations,
+    aggregate: i.aggregate || null, study_mode: i.studyMode || "HEURISTIC", approval_id: i.approvalId || null,
+    day_key: i.dayKey || null, created_at: i.createdAt,
+  };
+}
+export async function readIdeasCritical(tenantId = getTenantId()): Promise<Idea[]> {
+  const rows: Idea[] = [];
+  const client = db();
+  for (let offset = 0; ; offset += 250) {
+    const { data, error } = await client.from("company_ideas").select("*").eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false }).order("id").range(offset, offset + 249);
+    if (error) throw new Error("تعذر قراءة سجل الأفكار: " + error.message);
+    rows.push(...(data || []).map(ideaFromRow));
+    if (!data || data.length < 250) break;
   }
-  try {
-    const prompt = `فكرة استثمارية داخل الشركة: «${idea.title}».
-الفرضية: ${idea.hypothesis}
-الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA")} ر.س · الأفق الزمني: ${idea.horizonDays} يوماً.
-تقارير الأقسام: ${idea.recommendations.map((r) => `${r.agentName}: ${r.report}`).join(" | ")}
-اكتب تحليل جدوى تنفيذياً موجزاً (4–6 أسطر) يستشهد بالأرقام، يحدّد أهم مخاطرة وأهم شرط للنجاح، وينتهي بتوصية واضحة.`;
-    const narrative = await runAgent(prompt, {
-      agentName: "feasibility_agent",
-      system: "أنت لجنة دراسة جدوى في شركة سعودية. حلّل بأرقام الفكرة بصدق ودون مجاملة، بالعربية، ولا تذكر أنك نموذج.",
-    });
-    idea.aggregate = { ...(idea.aggregate as NonNullable<Idea["aggregate"]>), narrative };
-    idea.studyMode = "LLM";
-  } catch {
-    idea.studyMode = "HEURISTIC";
+  // Resolve current sign-offs independently of warm-instance memory.
+  if (rows.some((item) => item.approvalId)) {
+    const ids = rows.flatMap((item) => item.approvalId ? [item.approvalId] : []);
+    const statuses = new Map<string, string>();
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      const { data, error } = await client.from("company_approvals").select("id,status").eq("tenant_id", tenantId).in("id", ids.slice(offset, offset + 200));
+      if (error) throw new Error("تعذر مزامنة قرارات الأفكار: " + error.message);
+      for (const row of data || []) statuses.set(String(row.id), String(row.status));
+    }
+    for (const idea of rows) applyDecision(idea, idea.approvalId ? statuses.get(idea.approvalId) : undefined);
   }
-  persistIdea(idea);
+  return rows;
+}
+export async function hydrateIdeas() {
+  if (!getSupabaseAdmin()) return;
+  const rows = await readIdeasCritical();
+  store.splice(0, store.length, ...rows);
+}
+function applyDecision(idea: Idea, status?: string) {
+  if (!status) return;
+  idea.decisionStatus = status;
+  if (status === "APPROVED" || status === "REJECTED") idea.status = status;
+  else if (idea.approvalId && idea.aggregate?.assessment?.readyForDecision) idea.status = "PENDING_APPROVAL";
+}
+export async function getIdeaCritical(id: string, tenantId = getTenantId()): Promise<Idea | null> {
+  const { data, error } = await db().from("company_ideas").select("*").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const idea = ideaFromRow(data);
+  if (idea.approvalId) {
+    const { data: approval, error: approvalError } = await db().from("company_approvals").select("status").eq("tenant_id", tenantId).eq("id", idea.approvalId).maybeSingle();
+    if (approvalError) throw approvalError;
+    applyDecision(idea, approval?.status);
+  }
   return idea;
 }
 
-/** Extra team participation beyond the three core studies. */
-export function addRecommendation(
-  ideaId: string,
-  agentId: string,
-  verdict: Verdict,
-  note: string
-): Idea | null {
-  const idea = store.find((i) => i.id === ideaId);
-  const agent = getAgent(agentId);
-  if (!idea || !agent) return null;
-  idea.recommendations.push({
-    agentId: agent.id,
-    agentName: agent.name,
-    agentTitle: agent.title,
-    verdict,
-    confidence: 0.7,
-    report: note,
-    createdAt: new Date().toISOString(),
+function recommendationsFor(idea: Idea, assessment: IdeaAssessment): IdeaRecommendation[] {
+  const p = assessment.projections;
+  const input = assessment.input;
+  const reports: Array<[string, Verdict, string]> = [
+    ["abdulrahman", p && (p.profitSAR < 0 || p.contributionSAR <= 0) ? "REJECT" : p && p.totalCostSAR <= idea.budgetSAR ? "APPROVE" : "CONDITIONAL",
+      p ? "حسابات مبنية على الافتراضات المدخلة: إيراد " + sar.format(p.revenueSAR) + " ر.س، تكلفة " + sar.format(p.totalCostSAR) + " ر.س، نتيجة " + sar.format(p.profitSAR) + " ر.س. عند انخفاض الكمية 30% تصبح النتيجة " + sar.format(p.downsideProfitSAR) + " ر.س. هذه توقعات وليست إيراداً محققاً."
+        : "لا يمكن احتساب الجدوى المالية قبل إدخال الكمية والسعر وتكلفة الوحدة والتكلفة الثابتة. لم يُفترض عائد أو ربح."],
+    ["noura", input.demandEvidence && input.evidenceSource ? "APPROVE" : "CONDITIONAL",
+      input.demandEvidence ? "دليل الطلب المقدم: " + input.demandEvidence + ". المصدر: " + (input.evidenceSource || "غير محدد") + ". لم يتحقق النظام مستقلاً من هذا المصدر."
+        : "دليل الطلب غير متوفر. يلزم اختبار طلب موثق أو بيانات مبيعات قبل اعتبار الفرضية مثبتة."],
+    ["fahad", input.executionOwner && input.successMetric && input.risks ? "APPROVE" : "CONDITIONAL",
+      "المسؤول: " + (input.executionOwner || "لم يحدد") + ". مؤشر النجاح: " + (input.successMetric || "لم يحدد") + ". المخاطر: " + (input.risks || "لم تسجل") + "."],
+  ];
+  return reports.map(([agentId, verdict, report]) => {
+    const agent = getAgent(agentId)!;
+    return { agentId, agentName: agent.name, agentTitle: agent.title, verdict, confidence: assessment.coverage / 100, report, createdAt: assessment.assessedAt, origin: "CALCULATION" };
   });
-  persistIdea(idea);
+}
+function summarize(idea: Idea, assessment: IdeaAssessment) {
+  const votes = idea.recommendations;
+  const rejecting = votes.filter((r) => r.verdict === "REJECT").length;
+  const approving = votes.filter((r) => r.verdict === "APPROVE").length;
+  const verdict: Verdict = assessment.verdict === "REJECT" || rejecting >= 2 ? "REJECT"
+    : assessment.readyForDecision && approving > votes.length / 2 && assessment.verdict === "APPROVE" ? "APPROVE" : "CONDITIONAL";
+  const old = idea.aggregate;
+  idea.aggregate = {
+    ...old, verdict, confidence: assessment.coverage / 100, assessment,
+    summary: assessment.missing.length
+      ? "الدراسة غير مكتملة: " + assessment.missing.join("، ") + "."
+      : verdict === "REJECT" ? "المعطيات الحالية لا تسند التنفيذ؛ يلزم تعديل الفرضيات أو رفض الفكرة."
+        : verdict === "APPROVE" ? "المدخلات مكتملة والحسابات تسند تجربة ضمن الميزانية؛ يبقى الاعتماد لصاحب الصلاحية."
+          : "المدخلات مكتملة مع تحفظات تتطلب قراراً صريحاً وحدوداً للتجربة.",
+  };
+}
+function buildIdea(input: SubmitIdeaInput): Idea {
+  const proposer = input.proposedBy ? getAgent(input.proposedBy) : undefined;
+  const tier = requiredTier(input.budgetSAR);
+  const idea: Idea = {
+    id: input.id || "idea-" + randomUUID(), title: input.title.trim(), hypothesis: input.hypothesis.trim(),
+    budgetSAR: Math.max(0, Math.round(input.budgetSAR)), horizonDays: Math.max(1, Math.round(input.horizonDays)),
+    source: input.source || "OWNER", proposedBy: input.proposedBy || "owner", proposedByName: proposer?.name || "المالك",
+    status: "UNDER_STUDY", tier: tier.tier, tierLabel: tier.label, recommendations: [],
+    dayKey: input.dayKey, createdAt: new Date().toISOString(), revision: 0, studyMode: "HEURISTIC",
+  };
+  const assessment = assessIdea(idea.budgetSAR, input.study, input.source === "TEAM" ? "OPERATING_RECORDS" : "OWNER_ASSUMPTIONS");
+  idea.recommendations = recommendationsFor(idea, assessment);
+  summarize(idea, assessment);
+  idea.aggregate!.generationKey = input.generationKey;
+  if (assessment.readyForDecision) { idea.status = "PENDING_APPROVAL"; idea.approvalId = "apr-" + idea.id; }
+  return idea;
+}
+async function saveAtomic(idea: Idea, tenantId: string, actor: string, expectedRevision: number | null): Promise<Idea> {
+  const { data, error } = await db().rpc("orvanta_save_idea", { p_tenant_id: tenantId, p_idea: toRow(idea), p_actor: actor, p_expected_revision: expectedRevision });
+  if (error) throw new Error(error.message.includes("IDEA_CONFLICT") ? "تغيرت هذه الفكرة في جلسة أخرى. حدّث الصفحة قبل إعادة الحفظ." : "تعذر حفظ الفكرة وقرارها: " + error.message);
+  if (!data?.idea) throw new Error("لم تؤكد قاعدة البيانات حفظ الفكرة.");
+  if (data.approval) rememberDurableApprovalRow(data.approval);
+  return remember(ideaFromRow(data.idea));
+}
+export async function submitIdeaCritical(input: SubmitIdeaInput, tenantId = getTenantId(), actor = "المالك") {
+  return saveAtomic(buildIdea(input), tenantId, actor, null);
+}
+export async function updateIdeaStudyCritical(id: string, study: IdeaStudyInput, tenantId = getTenantId(), actor = "المالك", budgetSAR?: number, expectedRevision?: number) {
+  const idea = await getIdeaCritical(id, tenantId);
+  if (!idea) throw new Error("الفكرة غير موجودة.");
+  if (expectedRevision !== undefined && expectedRevision !== idea.revision) throw new Error("تغيرت الدراسة منذ فتحها. حدّث الصفحة ثم راجع التغييرات قبل الحفظ.");
+  if (["APPROVED", "REJECTED"].includes(idea.status)) throw new Error("لا تُعدل دراسة فكرة صدر قرارها. أنشئ فكرة جديدة للمراجعة.");
+  if (budgetSAR !== undefined) { idea.budgetSAR = budgetSAR; const tier = requiredTier(budgetSAR); idea.tier = tier.tier; idea.tierLabel = tier.label; }
+  const assessment = assessIdea(idea.budgetSAR, study, idea.aggregate?.assessment?.basis);
+  idea.recommendations = recommendationsFor(idea, assessment);
+  // A changed study invalidates the previous model commentary and recommendation notes.
+  idea.aggregate = { generationKey: idea.aggregate?.generationKey, verdict: "CONDITIONAL", confidence: 0, summary: "" };
+  summarize(idea, assessment);
+  idea.status = assessment.readyForDecision ? "PENDING_APPROVAL" : "UNDER_STUDY";
+  if (idea.status === "PENDING_APPROVAL") idea.approvalId ||= "apr-" + idea.id;
+  return saveAtomic(idea, tenantId, actor, idea.revision || 0);
+}
+
+const modelStudySchema = z.object({
+  reports: z.array(z.object({ agentId: z.enum(["abdulrahman", "noura", "fahad"]), verdict: z.enum(["APPROVE", "CONDITIONAL", "REJECT"]), reasoning: z.string().min(20).max(2000) })).length(3),
+  summary: z.string().min(20).max(2000),
+});
+export async function enrichIdea(id: string, tenantId = getTenantId(), actor = "system"): Promise<Idea | null> {
+  const idea = getSupabaseAdmin() ? await getIdeaCritical(id, tenantId) : store.find((i) => i.id === id);
+  if (!idea || ["APPROVED", "REJECTED"].includes(idea.status)) return idea || null;
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_API_KEY) {
+    idea.aggregate ||= { verdict: "CONDITIONAL", confidence: 0, summary: "الدراسة تحتاج استكمال البيانات." };
+    idea.aggregate.analysisWarning = "لم يُضبط مزود للتحليل. المعروض قراءة للمدخلات وليس تحليلاً من نموذج.";
+    return getSupabaseAdmin() ? saveAtomic(idea, tenantId, actor, idea.revision || 0) : remember(idea);
+  }
+  if (idea.studyMode === "LLM" && idea.aggregate?.assessment?.version === 2) return idea;
+  const assessment = idea.aggregate?.assessment || assessIdea(idea.budgetSAR);
+  const result = await runAgentStructured(JSON.stringify({ title: idea.title, hypothesis: idea.hypothesis, budgetSAR: idea.budgetSAR, assessment }), {
+    agentName: "feasibility_agent", schema: modelStudySchema,
+    system: "أنت لجنة جدوى. قيّم المدخلات فقط؛ لا تخترع مصادر أو أرقاماً أو ربحاً. الافتراضات ليست حقائق. لكل قسم رأي مستقل وتحفظات محددة. نقص البيانات يستلزم CONDITIONAL أو REJECT. لا تعدّل الحسابات المرفقة.",
+    schemaDescription: '{"reports":[{"agentId":"abdulrahman|noura|fahad","verdict":"APPROVE|CONDITIONAL|REJECT","reasoning":"..."}],"summary":"..."}',
+    retryOnParseError: false,
+  });
+  if (result.ok && result.data && new Set(result.data.reports.map((r) => r.agentId)).size === 3) {
+    idea.recommendations = result.data.reports.map((report) => {
+      const agent = getAgent(report.agentId)!;
+      return { agentId: agent.id, agentName: agent.name, agentTitle: agent.title, verdict: !assessment.readyForDecision && report.verdict === "APPROVE" ? "CONDITIONAL" : report.verdict, confidence: assessment.coverage / 100, report: report.reasoning, createdAt: new Date().toISOString(), origin: "MODEL" };
+    });
+    summarize(idea, assessment);
+    idea.aggregate!.narrative = result.data.summary;
+    idea.aggregate!.analysisWarning = undefined;
+    idea.studyMode = "LLM";
+  } else {
+    idea.aggregate ||= { verdict: "CONDITIONAL", confidence: 0, summary: "الدراسة تحتاج استكمال البيانات." };
+    idea.aggregate.analysisWarning = "تعذر الحصول على دراسة النموذج. الحسابات والبيانات المدخلة محفوظة؛ يمكن إعادة التحليل.";
+  }
+  return getSupabaseAdmin() ? saveAtomic(idea, tenantId, actor, idea.revision || 0) : remember(idea);
+}
+export async function addRecommendationCritical(id: string, agentId: string, verdict: Verdict, note: string, tenantId = getTenantId(), actor = "المالك") {
+  const idea = await getIdeaCritical(id, tenantId);
+  if (!idea) return null;
+  if (["APPROVED", "REJECTED"].includes(idea.status)) throw new Error("صدر القرار بالفعل؛ لا يمكن تغيير توصياته.");
+  addNote(idea, agentId, verdict, note);
+  return saveAtomic(idea, tenantId, actor, idea.revision || 0);
+}
+function addNote(idea: Idea, agentId: string, verdict: Verdict, note: string) {
+  const agent = getAgent(agentId);
+  if (!agent) throw new Error("القسم غير موجود.");
+  idea.recommendations = idea.recommendations.filter((r) => r.agentId !== agentId);
+  idea.recommendations.push({ agentId, agentName: agent.name, agentTitle: agent.title, verdict, confidence: (idea.aggregate?.assessment?.coverage || 0) / 100, report: note, createdAt: new Date().toISOString(), origin: "OWNER_NOTE" });
+  summarize(idea, idea.aggregate?.assessment || assessIdea(idea.budgetSAR));
+}
+export async function generateDailyIdeaCritical(tenantId = getTenantId(), actor = "system", now = new Date()) {
+  const existing = await readIdeasCritical(tenantId);
+  const dayKey = now.toISOString().slice(0, 10);
+  const today = existing.find((i) => i.source === "TEAM" && i.dayKey === dayKey);
+  if (today) return { idea: today, created: false, reason: "اقتراح اليوم موجود بالفعل." };
+  const client = db();
+  const [inventory, blocked] = await Promise.all([
+    client.from("inventory_items").select("id,name,on_hand,reorder_point,unit_cost").eq("tenant_id", tenantId).limit(500),
+    client.from("tasks").select("id,title").eq("tenant_id", tenantId).eq("status", "BLOCKED").order("created_at").limit(100),
+  ]);
+  if (inventory.error || blocked.error) throw new Error("تعذر قراءة البيانات اللازمة لرصد الفرص. لم يُنشأ اقتراح بديل غير مسند.");
+  const recentKeys = new Set(existing.filter((i) => Date.parse(i.createdAt) >= now.getTime() - 30 * 86_400_000).map((i) => i.aggregate?.generationKey));
+  const signals = opportunitiesFromRecords({ inventory: (inventory.data || []).map((r) => ({ ...r, on_hand: Number(r.on_hand), reorder_point: Number(r.reorder_point), unit_cost: Number(r.unit_cost) })), blockedTasks: blocked.data || [] });
+  const signal = signals.find((s) => !recentKeys.has(s.key));
+  if (!signal) return { idea: null, created: false, reason: "لا توجد إشارة تشغيلية جديدة كافية في بيانات المخزون والمهام. أضف بيانات أو قدّم فكرة لدراستها." };
+  const idea = await submitIdeaCritical(signalInput(signal, dayKey, tenantId), tenantId, actor);
+  return { idea, created: true, reason: "رُصد اقتراح من بيانات الشركة، ويحتاج استكمال الدراسة قبل الاعتماد." };
+}
+function signalInput(signal: OperatingSignal, dayKey: string, tenantId = getTenantId()): SubmitIdeaInput {
+  return { title: signal.title, hypothesis: signal.hypothesis, budgetSAR: signal.budgetSAR, horizonDays: signal.horizonDays, source: "TEAM", proposedBy: "rased", id: "idea-daily-" + tenantId + "-" + dayKey, dayKey, generationKey: signal.key, study: { demandEvidence: signal.evidence, evidenceSource: signal.source } };
+}
+export async function assertIdeaDecisionReady(id: string, tenantId = getTenantId()) {
+  const idea = await getIdeaCritical(id, tenantId);
+  if (!idea?.aggregate?.assessment?.readyForDecision || idea.aggregate.assessment.version !== 2) {
+    throw Object.assign(new Error("الدراسة غير مكتملة. استكمل بيانات الفكرة ومصادرها قبل الاعتماد."), { code: "STUDY_REQUIRED", ideaId: id });
+  }
   return idea;
 }
 
-/* ── daily team idea (one executable idea per day — راصد) ── */
-
-const DAILY_POOL: Array<Omit<SubmitIdeaInput, "source" | "proposedBy">> = [
-  { title: "إطلاق متجر إلكتروني متخصص في منتج واحد رائج", hypothesis: "التركيز على منتج واحد يخفض تكلفة التسويق ويرفع التحويل.", budgetSAR: 18_000, horizonDays: 30 },
-  { title: "إعادة تخزين المنتج الأعلى مبيعاً قبل الموسم", hypothesis: "الطلب الموسمي المتوقع يفوق المخزون الحالي بنسبة كبيرة.", budgetSAR: 42_000, horizonDays: 21 },
-  { title: "حملة إعلانية مستهدفة على شريحة عملاء مهملة", hypothesis: "شريحة قائمة لم تُستهدف — تكلفة استحواذ متوقعة أقل من المتوسط.", budgetSAR: 9_000, horizonDays: 14 },
-  { title: "برنامج ولاء بنقاط قابلة للاستبدال", hypothesis: "رفع تكرار الشراء 15% لدى العملاء الحاليين أرخص من عميل جديد.", budgetSAR: 12_000, horizonDays: 45 },
-  { title: "أتمتة الرد على استفسارات العملاء المتكررة", hypothesis: "70% من التذاكر متكررة — الأتمتة تحرر طاقة فريق المبيعات.", budgetSAR: 6_500, horizonDays: 21 },
-  { title: "فتح قناة بيع إضافية عبر منصة سلة", hypothesis: "قناة ثانية تضيف مبيعات دون تكلفة تشغيلية كبيرة.", budgetSAR: 15_000, horizonDays: 30 },
-  { title: "اختبار تسعير ديناميكي على 3 منتجات", hypothesis: "مرونة السعر تسمح برفع الهامش دون خسارة الطلب.", budgetSAR: 4_000, horizonDays: 14 },
-  { title: "باقة اشتراك شهري للمنتجات الاستهلاكية", hypothesis: "الإيراد المتكرر يرفع القيمة العمرية للعميل ويثبّت التدفق النقدي.", budgetSAR: 22_000, horizonDays: 60 },
-  { title: "شراكة توزيع مع متجر مكمّل غير منافس", hypothesis: "تبادل قواعد العملاء يوسّع الوصول بتكلفة شبه صفرية.", budgetSAR: 8_000, horizonDays: 30 },
-  { title: "تحسين صفحات المنتجات الأعلى زيارة وخفض الارتداد", hypothesis: "رفع التحويل 1% على الصفحات الأعلى زيارة يعادل حملة كاملة.", budgetSAR: 7_500, horizonDays: 21 },
-];
-
-function dayOfYear(d: Date): number {
-  return Math.floor((d.getTime() - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86_400_000);
+/** Pure compatibility helpers for domain tests. Production writes use the awaited functions above. */
+export function submitIdea(input: SubmitIdeaInput): Idea {
+  if (getSupabaseAdmin() || process.env.NODE_ENV === "production") throw new Error("Use submitIdeaCritical for durable writes.");
+  const existing = input.id ? store.find((i) => i.id === input.id) : undefined;
+  if (existing) return existing;
+  const idea = buildIdea(input);
+  if (idea.approvalId) createApproval({ id: idea.approvalId, type: "IDEA", title: "فكرة: " + idea.title, detail: idea.aggregate!.summary, amount: idea.budgetSAR, requestedRole: idea.tierLabel, metadata: { ideaId: idea.id, tier: idea.tier }, dedupeKey: "idea-" + idea.id });
+  return remember(idea);
 }
-
-/** Guarantee today's TEAM idea exists (idempotent per calendar day). */
-export function ensureDailyIdea(now: Date = new Date()): Idea {
+export function ensureDailyIdea(now = new Date(), signals: OperatingSignal[] = []): Idea | null {
   const dayKey = now.toISOString().slice(0, 10);
   const existing = store.find((i) => i.source === "TEAM" && i.dayKey === dayKey);
   if (existing) return existing;
-
-  const pick = DAILY_POOL[dayOfYear(now) % DAILY_POOL.length];
-  // Deterministic id keyed by the day so concurrent serverless cold starts all
-  // upsert the SAME row instead of creating duplicate daily ideas.
-  return submitIdea({ ...pick, source: "TEAM", proposedBy: "rased", id: `idea-daily-${dayKey}`, dayKey });
+  const signal = signals.find((s) => !store.some((i) => i.aggregate?.generationKey === s.key));
+  return signal ? submitIdea(signalInput(signal, dayKey)) : null;
 }
-
-/** Reflect inbox decisions back onto ideas (approval is the source of truth). */
-export function syncIdeasWithApprovals(): void {
-  const approvals = listApprovals();
-  for (const idea of store) {
-    if (idea.status !== "PENDING_APPROVAL" || !idea.approvalId) continue;
-    const approval = approvals.find((a) => a.id === idea.approvalId);
-    if (!approval) continue;
-    if (approval.status === "APPROVED") {
-      idea.status = "APPROVED";
-      persistIdea(idea);
-    } else if (approval.status === "REJECTED") {
-      idea.status = "REJECTED";
-      persistIdea(idea);
-    }
-  }
+export function addRecommendation(id: string, agentId: string, verdict: Verdict, note: string): Idea | null {
+  const idea = store.find((i) => i.id === id); if (!idea) return null; addNote(idea, agentId, verdict, note); return idea;
 }
-
-/** Approved ideas with their conversion state — powers the manual picker. */
-export function listApprovedIdeas(): Array<Idea & { executed: boolean }> {
-  return store
-    .filter((idea) => idea.status === "APPROVED")
-    .map((idea) => ({ ...idea, executed: Boolean(idea.executedProjectId) }));
+export function syncIdeasWithApprovals() {
+  const approvals = new Map(listApprovals().map((a) => [a.id, a.status]));
+  for (const idea of store) applyDecision(idea, idea.approvalId ? approvals.get(idea.approvalId) : undefined);
 }
-
-/** Record that an approved idea was converted into a project (idempotency). */
-export function markIdeaExecuted(ideaId: string, projectId: string): void {
-  const idea = store.find((item) => item.id === ideaId);
-  if (!idea) return;
-  idea.executedProjectId = projectId;
-  persistIdea(idea);
+export function listIdeas(): Idea[] { syncIdeasWithApprovals(); return [...store]; }
+export function listApprovedIdeas() { return listIdeas().filter((i) => i.status === "APPROVED").map((i) => ({ ...i, executed: Boolean(i.executedProjectId) })); }
+export function markIdeaExecuted(id: string, projectId: string) { const idea = store.find((i) => i.id === id); if (idea) idea.executedProjectId = projectId; }
+export function ideaStats(ideas: Idea[] = listIdeas()) {
+  return { total: ideas.length, pending: ideas.filter((i) => i.status === "PENDING_APPROVAL").length, studying: ideas.filter((i) => i.status === "UNDER_STUDY").length, approved: ideas.filter((i) => i.status === "APPROVED").length, rejected: ideas.filter((i) => i.status === "REJECTED").length, fromTeam: ideas.filter((i) => i.source === "TEAM").length };
 }
-
-export function listIdeas(): Idea[] {
-  syncIdeasWithApprovals();
-  return store.slice(0, 100);
-}
-
-export function ideaStats() {
-  return {
-    total: store.length,
-    pending: store.filter((i) => i.status === "PENDING_APPROVAL").length,
-    approved: store.filter((i) => i.status === "APPROVED").length,
-    rejected: store.filter((i) => i.status === "REJECTED").length,
-    fromTeam: store.filter((i) => i.source === "TEAM").length,
-  };
-}
-
-/** Test helper. */
-export function _clearIdeas(): void {
-  store.length = 0;
-}
+export function _clearIdeas() { store.length = 0; }

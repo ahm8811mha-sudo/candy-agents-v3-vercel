@@ -1,3 +1,4 @@
+import { completeStudy } from "./fixtures/idea-study";
 import { describe, it, expect, beforeEach } from "vitest";
 import { getCompanyPulse } from "../lib/company/pulse";
 import { submitIdea, _clearIdeas } from "../lib/company/ideas";
@@ -12,7 +13,7 @@ describe("company pulse", () => {
   });
 
   it("derives events from a submitted idea (proposer + 3 studies + summary + gate)", () => {
-    submitIdea({ title: "فكرة نبض", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "فكرة نبض", hypothesis: "ف", budgetSAR: 10_000, horizonDays: 30 });
     const pulse = getCompanyPulse();
     const kinds = pulse.events.map((e) => e.kind);
     expect(kinds).toEqual(expect.arrayContaining(["IDEA", "STUDY", "SUMMARY", "GATE"]));
@@ -20,7 +21,7 @@ describe("company pulse", () => {
   });
 
   it("marks the studying agents as WORKING right after activity", () => {
-    submitIdea({ title: "فكرة نشاط", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
+    submitIdea({ study: completeStudy, title: "فكرة نشاط", hypothesis: "ف", budgetSAR: 8_000, horizonDays: 21 });
     const pulse = getCompanyPulse();
     const cfo = pulse.agents.find((a) => a.id === "abdulrahman")!;
     const sultan = pulse.agents.find((a) => a.id === "sultan")!;
@@ -37,7 +38,7 @@ describe("company pulse", () => {
   });
 
   it("owner sign-offs appear as SIGNOFF events", () => {
-    submitIdea({ title: "فكرة توقيع", hypothesis: "ف", budgetSAR: 40_000, horizonDays: 30 });
+    submitIdea({ study: completeStudy, title: "فكرة توقيع", hypothesis: "ف", budgetSAR: 40_000, horizonDays: 30 });
     const approval = listApprovals()[0];
     decideApproval(approval.id, "APPROVED", "المالك");
     const pulse = getCompanyPulse();
@@ -57,7 +58,7 @@ describe("company pulse", () => {
   });
 
   it("events are sorted newest first", () => {
-    submitIdea({ title: "أ", hypothesis: "ف", budgetSAR: 5_000, horizonDays: 14 });
+    submitIdea({ study: completeStudy, title: "أ", hypothesis: "ف", budgetSAR: 5_000, horizonDays: 14 });
     const pulse = getCompanyPulse();
     for (let i = 1; i < pulse.events.length; i++) {
       expect(pulse.events[i - 1].createdAt >= pulse.events[i].createdAt).toBe(true);

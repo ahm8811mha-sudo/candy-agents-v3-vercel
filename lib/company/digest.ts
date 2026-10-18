@@ -4,7 +4,7 @@ import { getVatSummary } from "../accountingControls";
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
 import { getLearningSnapshot } from "./learning";
-import { ideaStats, ensureDailyIdea } from "./ideas";
+import { ideaStats } from "./ideas";
 import { ledgerTotals } from "./ledger";
 import { triggerNotification, getEnabledIntegrations } from "../integrations";
 
@@ -23,7 +23,6 @@ export type Digest = {
 const sar = (n: number) => `${Math.round(n).toLocaleString("ar-SA")} ر.س`;
 
 function composeDigestValues(now: Date, revenue: number, vatPayable: number): Digest {
-  ensureDailyIdea(now);
   const pending = listApprovals("PENDING");
   const stats = approvalStats();
   const ideas = ideaStats();

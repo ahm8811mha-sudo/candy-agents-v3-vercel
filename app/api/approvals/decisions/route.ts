@@ -26,12 +26,19 @@ import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { executeProjectInternalActions } from "@/lib/company/internalAgentExecutor";
 import { assertApprovalDecisionAllowedDuringOwnerAbsence } from "@/lib/company/ownerAbsence";
+import { requireCompanyContext } from "@/lib/company-os/context";
+import { assertIdeaDecisionReady } from "@/lib/company/ideas";
+import { getTenantId } from "@/lib/tenant";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** GET: the actionable decision queue (trades / budget / CEO items). */
 export async function GET(req: NextRequest) {
+  const auth = await requireCompanyContext(req);
+  if (!auth.ok) return auth.response;
+  if (auth.context.tenantId !== getTenantId()) return NextResponse.json({ ok: false, error: "هذه الواجهة تخص شركة النشر الحالية." }, { status: 403 });
   await hydrateCompany();
   // Deferred items whose reminder date passed come back on every queue read.
   await reviveDueDeferrals();
@@ -45,6 +52,9 @@ export async function GET(req: NextRequest) {
 
 /** POST: approve or reject an item. */
 export async function POST(req: NextRequest) {
+  const auth = await requireCompanyContext(req, "MANAGER");
+  if (!auth.ok) return auth.response;
+  if (auth.context.tenantId !== getTenantId()) return NextResponse.json({ ok: false, error: "هذه الواجهة تخص شركة النشر الحالية." }, { status: 403 });
   try {
     await hydrateCompany();
     const body = await req.json().catch(() => ({}));
@@ -62,6 +72,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "يلزم معرّف العنصر والقرار (APPROVED/REJECTED/DEFERRED)" }, { status: 400 });
     }
 
+    const target = await getApprovalCritical(id, auth.context.tenantId);
+    if (!target) return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
+    const tier = approvalTierForDecision(target.amount, target.metadata);
+    const user = auth.context.actor;
+    const access = canSignOff(user.role, tier);
+    if (!access.allowed) return NextResponse.json({ ok: false, error: access.reason }, { status: 403 });
+    if (decision === "APPROVED" && target.type === "IDEA" && target.status !== "APPROVED") {
+      await assertIdeaDecisionReady(String(target.metadata?.ideaId || ""), auth.context.tenantId);
+    }
+    if (["APPROVED", "REJECTED"].includes(target.status) && target.status !== decision) {
+      return NextResponse.json({ ok: false, error: "صدر قرار مختلف بالفعل. حدّث الصفحة." }, { status: 409 });
+    }
     // Deferral: leaves the queue with a reason + reminder date + an assignee
     // who prepares the item, then returns automatically when the date passes.
     if (decision === "DEFERRED") {
@@ -76,7 +98,7 @@ export async function POST(req: NextRequest) {
       if (!item) {
         return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
       }
-      await recordAuditCritical({
+      if (!getSupabaseAdmin()) await recordAuditCritical({
         id: `aud-approval-${item.id}-deferred-${Date.now()}`,
         actor: deferredBy,
         role: deferringUser?.role,
@@ -91,13 +113,6 @@ export async function POST(req: NextRequest) {
 
     // F2 — enforce the authority matrix in the API, not just the UI.
     // Read-through lookup: the item may live on another serverless instance.
-    const target = (await getApprovalCritical(id)) ?? listApprovals().find((a) => a.id === id);
-    const tier = approvalTierForDecision(target?.amount, target?.metadata);
-    const user = await authenticateRequest(req);
-    const access = canSignOff(user?.role ?? null, tier);
-    if (!access.allowed) {
-      return NextResponse.json({ ok: false, error: access.reason }, { status: 403 });
-    }
 
     const decidedBy = user?.name || String(body.decidedBy || "المالك");
     const note = body.note ? String(body.note) : undefined;
@@ -142,14 +157,14 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      result = await decideApprovalCritical(id, decision, decidedBy, note);
+      result = await decideApprovalCritical(id, decision, decidedBy, note, auth.context.tenantId);
       if (!result) {
         return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
       }
 
       try {
         // F1 — append-only, retry-safe audit trail for every sign-off.
-        await recordAuditCritical({
+        if (!getSupabaseAdmin()) await recordAuditCritical({
           id: `aud-approval-${result.id}-${decision.toLowerCase()}`,
           actor: decidedBy,
           role: user?.role,
@@ -174,7 +189,7 @@ export async function POST(req: NextRequest) {
           if (result.type === "TRADE") execution = await executeApprovedTrade({ ...(result.metadata || {}), approvalId: result.id });
           else if (result.type === "INCOME") execution = await recognizeIncome(result.metadata || {});
           else if (result.type === "SALES_CHANGE") execution = await applySalesChange(result.metadata || {});
-          else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy);
+          else if (result.type === "IDEA") execution = await executeApprovedIdea(result.metadata || {}, decidedBy, auth.context.tenantId);
         }
         // Funding sign-offs on money-bearing plan steps react to BOTH
         // outcomes: WAITING_FUNDING → TODO on approval, ON_HOLD on rejection.
@@ -184,6 +199,9 @@ export async function POST(req: NextRequest) {
       } catch (transitionError) {
         // Do not hide an approved-but-unexecuted item. Restore it to the queue;
         // every compatibility transition above is idempotent and safe to retry.
+        if (result.type === "IDEA") {
+          return NextResponse.json({ ok: true, item: result, execution: { ok: false, saved: false, status: "RETRY_REQUIRED", reason: "حُفظ قرار الفكرة. تعذر استكمال التحويل؛ أعد المحاولة من صفحة الأفكار دون تغيير الاعتماد." }, stats: approvalStats() });
+        }
         await reopenApprovalCritical(result.id);
         throw transitionError;
       }
@@ -194,7 +212,7 @@ export async function POST(req: NextRequest) {
     const typed = error as Error & { code?: string; decision?: unknown };
     return NextResponse.json(
       { ok: false, code: typed.code, policy: typed.decision, error: typed.message || "Approval action failed" },
-      { status: typed.code === "OWNER_ABSENCE_ESCALATION" ? 409 : 500 }
+      { status: ["OWNER_ABSENCE_ESCALATION", "STUDY_REQUIRED"].includes(typed.code || "") ? 409 : 500 }
     );
   }
 }

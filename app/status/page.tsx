@@ -189,6 +189,8 @@ export default function StatusPage() {
               <span className="status-row__name">
                 {service.name}
                 <div className="status-row__desc">{service.desc}</div>
+                {!enabled && service.key === "tenantIsolation" ? <div className="status-row__desc">يلزم اختبار ناجح وحديث لعزل البيانات؛ اتصال قاعدة البيانات وحده لا يؤكد العزل.</div> : null}
+                {!enabled && service.key === "outboxPublisher" ? <div className="status-row__desc">راجع تهيئة ناشر الأحداث ووجهة التسليم ومصادقة المجدول. الأحداث المحفوظة لا تعني أنها وصلت.</div> : null}
               </span>
               <span className={`status-pill ${enabled ? "done" : ""}`}>
                 {checking
@@ -197,7 +199,11 @@ export default function StatusPage() {
                     ? "النشر يعمل"
                     : enabled
                       ? "يعمل"
-                      : health?.deployment?.isPreview
+                      : service.key === "tenantIsolation"
+                        ? "يلزم تحقق حديث"
+                        : service.key === "outboxPublisher"
+                          ? "التسليم غير جاهز"
+                          : health?.deployment?.isPreview
                         ? "غير مهيأ للمعاينة"
                         : "غير جاهز"}
               </span>

@@ -91,6 +91,7 @@ export default function InboxCenter() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [pending, setPending] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("ALL");
   const [query, setQuery] = useState("");
@@ -113,7 +114,9 @@ export default function InboxCenter() {
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل الاعتمادات.");
       setItems(json.items || []);
       setPending(json.pending || 0);
+      setLoadError("");
     } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "تعذر تحميل الاعتمادات.");
       setExecMsg({ text: error instanceof Error ? error.message : "تعذر تحميل الاعتمادات.", ok: false });
     } finally {
       setLoading(false);
@@ -122,6 +125,7 @@ export default function InboxCenter() {
 
   useEffect(() => {
     load();
+    setSelectedId(new URLSearchParams(window.location.search).get("decision"));
   }, [load]);
 
   // Realtime-lite: refetch only when the company feed cursor changes.
@@ -187,16 +191,16 @@ export default function InboxCenter() {
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تسجيل قرار الاعتماد.");
       if (decision === "APPROVED") {
         const delivery = json.execution?.delivery;
-        const projectId = delivery?.projectId || json.execution?.entityId;
+        const projectId = delivery?.projectId || json.execution?.project?.id || json.execution?.entityId;
         const completed = Number(delivery?.completed || 0);
         const total = Number(delivery?.total || 0);
-        const attention = delivery?.status === "EXECUTION_ATTENTION";
+        const attention = delivery?.status === "EXECUTION_ATTENTION" || json.execution?.status === "RETRY_REQUIRED" || json.execution?.ok === false;
         setExecMsg({
-          text: attention
-            ? `تم الاعتماد، لكن المشروع يحتاج متابعة تنفيذية (${completed}/${total} نتائج مكتملة).`
-            : `تم الاعتماد وتشغيل الوكلاء. عادت ${completed} من ${total} نتائج إلى ملف المشروع.`,
+          text: attention ? (json.execution?.reason || "حُفظ الاعتماد؛ يلزم استكمال التنفيذ من ملفه.")
+            : total > 0 ? `حُفظ الاعتماد. اكتملت ${completed} من ${total} مخرجات داخلية.`
+              : projectId ? "حُفظ الاعتماد وملف المشروع. التنفيذ الفعلي لم يُؤكد بعد." : "حُفظ قرار الاعتماد. راجع الخطوة المرتبطة به.",
           ok: !attention,
-          href: projectId ? `/projects?project=${encodeURIComponent(projectId)}` : undefined,
+          href: projectId ? `/projects?project=${encodeURIComponent(projectId)}` : item.type === "IDEA" ? `/ideas?idea=${encodeURIComponent(String(item.metadata?.ideaId || ""))}` : undefined,
         });
       } else {
         setExecMsg({ text: "تم رفض الطلب وتسجيل القرار.", ok: true });
@@ -317,7 +321,7 @@ export default function InboxCenter() {
       <header className="page-head">
         <div>
           <span className="eyebrow"><Inbox size={16} /> مركز القرار</span>
-          <h1>صندوق القرارات الموحّد</h1>
+          <h1>كل قرار، في سياقه.</h1>
           <p className="page-sub">كل ما ينتظر اعتمادك من كل الأقسام والأنظمة، مرتّباً بالأهم: المتأخر أولاً، ثم الأعلى مبلغاً.</p>
         </div>
       </header>
@@ -345,7 +349,7 @@ export default function InboxCenter() {
         <div className="section-tabs" role="tablist" aria-label="تصفية القرارات">
           {([
             { key: "ALL", label: "الكل", icon: Filter },
-            { key: "SYSTEM", label: "التداول والنظام", icon: CircleDollarSign },
+            { key: "SYSTEM", label: "طلبات النظام", icon: CircleDollarSign },
             { key: "COMPANY", label: "إدارية", icon: Building2 },
           ] as const).map((f) => {
             const Icon = f.icon;
@@ -388,7 +392,7 @@ export default function InboxCenter() {
         </div>
       )}
 
-      {!loading && queue.length === 0 && (
+      {!loading && !loadError && queue.length === 0 && (
         <div className="empty-state" style={{ minHeight: 160 }}>
           <Inbox size={30} />
           <strong>لا توجد قرارات معلّقة</strong>
@@ -412,7 +416,7 @@ export default function InboxCenter() {
                   {item.amount !== undefined && <em>{currency.format(item.amount)}</em>}
                 </span>
                 <span className="decide-row__meta">
-                  {item.channel === "SYSTEM" ? "نظام/تداول" : "إداري"} · {item.requestedBy}
+                  {item.channel === "SYSTEM" ? "طلب نظام" : "إداري"} · {item.requestedBy}
                   {item.ageLabel ? ` · ${item.ageLabel}` : ""}
                 </span>
                 {item.stale && (
@@ -441,9 +445,10 @@ export default function InboxCenter() {
 
                 <p className="decide-detail__body">{selected.detail}</p>
 
+                {selected.type === "IDEA" && selected.metadata?.ideaId ? <Link className="secondary-btn" href={"/ideas?idea=" + encodeURIComponent(String(selected.metadata.ideaId))}>مراجعة الدراسة ومصادرها <ExternalLink size={15} /></Link> : null}
                 <p className="decide-consequence">
                   {selected.actionsVia === "approvals"
-                    ? "الاعتماد هنا يشغّل الوكلاء وينشئ ملف مشروع بمهام قابلة للمتابعة. الخطوات ذات الأثر الفعلي تبقى بانتظار تأكيدك بعد التنفيذ."
+                    ? selected.type === "IDEA" ? "اعتماد الفكرة يحفظ القرار ثم يحاول إنشاء مشروع وخطة. طلبات التمويل تبقى منفصلة، والإنجاز الفعلي يحتاج إثباتاً." : selected.type === "BUDGET" ? "اعتماد التمويل يسمح ببدء الخطوة المرتبطة. لا يعني أن المبلغ صُرف." : "راجع نوع الطلب وأثره قبل الاعتماد؛ يسجل النظام قرارك ويطبق الانتقال المسموح لهذا الطلب."
                     : "الاعتماد هنا يسجّل قراراً إدارياً موثّقاً في سجل القرارات ويعيده إلى القسم صاحب الطلب."}
                 </p>
 
@@ -451,7 +456,7 @@ export default function InboxCenter() {
                   {selected.actionsVia === "approvals" ? (
                     <>
                       <button className="primary-btn" disabled={busy === selected.id} onClick={() => decideSystem(selected, "APPROVED")}>
-                        {busy === selected.id ? <Loader2 className="spin" size={15} /> : <Check size={15} />} اعتماد وتنفيذ
+                        {busy === selected.id ? <Loader2 className="spin" size={15} /> : <Check size={15} />} اعتماد
                       </button>
                       <button className="ghost-btn danger-text" disabled={busy === selected.id} onClick={() => decideSystem(selected, "REJECTED")}>
                         <X size={15} /> رفض

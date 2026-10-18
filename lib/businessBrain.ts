@@ -413,9 +413,9 @@ function buildRecommendedActions(
 }
 
 export function buildExecutionBlueprint(request: string, intelligence: BusinessIntelligence): ExecutionBlueprint {
-  const firstBudget = intelligence.requestedBudget > 0
-    ? Math.max(1000, Math.round(intelligence.requestedBudget * 0.25))
-    : 5000;
+  const approvedCeiling = Math.max(0, intelligence.requestedBudget);
+  const firstBudget = Math.floor(approvedCeiling * 0.25);
+  const campaignBudget = Math.floor(approvedCeiling * 0.10);
 
   const tasks: ExecutionStep[] = [
     {
@@ -437,7 +437,7 @@ export function buildExecutionBlueprint(request: string, intelligence: BusinessI
       kpiName: "Budget approval",
       kpiTarget: 1,
       kpiUnit: "approval",
-      requiresFunding: true,
+      requiresFunding: firstBudget > 0,
       estimatedCostSAR: firstBudget,
     },
     {
@@ -459,8 +459,8 @@ export function buildExecutionBlueprint(request: string, intelligence: BusinessI
       kpiName: "CAC ceiling",
       kpiTarget: Math.max(50, Math.round(firstBudget / 40)),
       kpiUnit: "SAR",
-      requiresFunding: true,
-      estimatedCostSAR: Math.max(500, Math.round(firstBudget * 0.4)),
+      requiresFunding: campaignBudget > 0,
+      estimatedCostSAR: campaignBudget,
     },
     {
       title: "تجهيز الموردين والتشغيل",
