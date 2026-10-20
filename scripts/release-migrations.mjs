@@ -126,7 +126,12 @@ select
     where schemaname = 'storage' and tablename = 'objects'
       and roles && array['anon', 'authenticated', 'public']::name[]
       and (coalesce(qual, '') || coalesce(with_check, '')) like '%government-documents%'
-  ) end as document_storage_client_policies
+  ) end as document_storage_client_policies,
+  (select count(*) from objects where relkind in ('r', 'p') and not relrowsecurity) as tables_without_rls,
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prosecdef
+      and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+  ) as owner_rights_functions_clients_can_run
 `;
 
 async function posture(client, label, log) {
@@ -135,6 +140,8 @@ async function posture(client, label, log) {
   log(`[${label}] document tables or views a client role can reach: ${row.documents_reachable_by_clients || "none"}`);
   log(`[${label}] client storage policies on government documents: ${row.document_storage_client_policies}`);
   log(`[${label}] other public tables a client role can reach: ${row.other_tables_reachable_by_clients || "none"}`);
+  log(`[${label}] public tables without row level security: ${row.tables_without_rls}`);
+  log(`[${label}] owner-rights functions a client role can run: ${row.owner_rights_functions_clients_can_run}`);
   return row;
 }
 

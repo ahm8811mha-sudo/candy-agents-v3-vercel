@@ -3,10 +3,12 @@
   "migrations": [
     "20261018000100_close_anonymous_document_access.sql",
     "20261018000200_execution_proofs.sql",
-    "20261018000300_task_status_with_proof.sql"
+    "20261018000300_task_status_with_proof.sql",
+    "20261020000100_close_client_role_access.sql"
   ],
   "suites": [
     "supabase/tests/document_access_regression.sql",
-    "supabase/tests/execution_proofs_regression.sql"
+    "supabase/tests/execution_proofs_regression.sql",
+    "supabase/tests/client_access_regression.sql"
   ]
 }

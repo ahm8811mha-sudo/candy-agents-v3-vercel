@@ -91,3 +91,23 @@ create policy "app update government document objects" on storage.objects
 -- A policy on another bucket the closure must leave alone.
 insert into storage.buckets (id, name, public) values ('unrelated-public-assets', 'unrelated-public-assets', true);
 create policy "public assets" on storage.objects for select to anon using (bucket_id = 'unrelated-public-assets');
+
+-- Business tables as production holds them (release build log, 2026-10-20):
+-- a client role can reach them because row level security is off, or a
+-- permissive policy is in place, and Supabase grants every new table to the
+-- client roles by default.
+create table public.accounting_payments (id bigserial primary key, tenant_id text not null, amount numeric);
+grant select, insert, update on public.accounting_payments to anon, authenticated;
+grant usage on sequence public.accounting_payments_id_seq to anon, authenticated;
+create table public.employees_directory (id text primary key, tenant_id text not null, full_name text);
+alter table public.employees_directory enable row level security;
+create policy "tenant members read" on public.employees_directory
+  for select to authenticated using (tenant_id = (auth.jwt() -> 'app_metadata' ->> 'tenant_id'));
+create policy "open read" on public.employees_directory for select to anon using (true);
+grant select on public.employees_directory to anon, authenticated;
+grant all on public.accounting_payments, public.employees_directory to service_role;
+grant all on sequence public.accounting_payments_id_seq to service_role;
+-- A function that runs with its owner's rights, executable by everyone, as
+-- Postgres grants new functions to PUBLIC.
+create function public.orvanta_regression_definer() returns integer
+  language sql security definer set search_path = '' as $$ select 1 $$;
