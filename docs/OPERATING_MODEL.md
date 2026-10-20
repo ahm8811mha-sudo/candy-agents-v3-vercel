@@ -14,7 +14,7 @@
 |---|---------|-----------|-------------------|
 | 1 | **الاكتشاف** — رصد فرصة من السوق أو فكرة من المالك | راصد (رادار الفرص) | `opportunity-radar`, `BIForm`, `lib/trading/cfoTrader` |
 | 2 | **الفرز الأولي** — تقييم سريع (عائد/مخاطرة/ثقة) | سلطان (CEO Agent) | `lib/trading/opportunityScorer` |
-| 3 | **دراسة الجدوى** — تقارير متوازية: مالي + سوقي + تشغيلي | عبدالرحمن + نورة + فهد | `lib/aiFinanceDecision`, `lib/marketingOS`, `lib/companyExecutionSystem` |
+| 3 | **دراسة الجدوى** — تقارير متوازية: مالي + سوقي + تشغيلي | عبدالرحمن + نورة + فهد | `lib/company/ideas.ts` (`feasibility_agent`), `lib/marketingOS`, `lib/companyExecutionSystem` |
 | 4 | **الاعتماد** — حسب مصفوفة الصلاحيات (§5) | الحوكمة | `/inbox`, `lib/approvals`, `lib/company/governance` |
 | 5 | **التنفيذ** — مشروع + مهام + ميزانية مقفلة | فهد (العمليات) | `projects/tasks` في `companyExecutionSystem` |
 | 6 | **القياس** — KPIs + قيود محاسبية + تنبيهات انحراف | أمين + حارس | `accountingSystem`, `alertEngine`, `business_kpis` |
