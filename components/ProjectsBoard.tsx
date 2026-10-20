@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import type { HonestySummary, TaskExecutionState } from "@/lib/company/executionHonesty";
 import { executionStateLabels } from "@/lib/company/executionHonesty";
+import ExecutionProofForm from "./ExecutionProofForm";
+import ExecutionProofView from "./ExecutionProofView";
 
 type ProjectTask = {
   id: string;
@@ -42,6 +44,8 @@ type ProjectTask = {
   progress: number;
   executionKind: "INTERNAL" | "REAL_WORLD";
   state: TaskExecutionState;
+  /** How the owner's confirmation was proven; null until confirmed. */
+  proof: { proofId: string | null; files: number; note: string | null } | null;
 };
 
 type Project = {
@@ -76,7 +80,7 @@ export default function ProjectsBoard() {
   const [query, setQuery] = useState("");
   const [busyTask, setBusyTask] = useState<string | null>(null);
   const [confirmFor, setConfirmFor] = useState<string | null>(null);
-  const [proofNote, setProofNote] = useState("");
+  const [proofFor, setProofFor] = useState<string | null>(null);
   const [taskError, setTaskError] = useState("");
 
   const load = useCallback(async () => {
@@ -143,34 +147,6 @@ export default function ProjectsBoard() {
       await load();
     } catch {
       setTaskError("تعذر تحديث الخطوة.");
-    } finally {
-      setBusyTask(null);
-    }
-  }
-
-  async function confirmReal(task: ProjectTask) {
-    if (proofNote.trim().length < 10) {
-      setTaskError("اكتب إثباتاً لا يقل عن 10 أحرف: ماذا تم فعلياً، ومتى، وأين يمكن التحقق منه.");
-      return;
-    }
-    setBusyTask(task.id);
-    setTaskError("");
-    try {
-      const res = await fetch("/api/tasks/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: task.id, confirmReal: true, proofNote: proofNote.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        setTaskError(json.message || "تعذر تسجيل التأكيد.");
-        return;
-      }
-      setConfirmFor(null);
-      setProofNote("");
-      await load();
-    } catch {
-      setTaskError("تعذر تسجيل التأكيد.");
     } finally {
       setBusyTask(null);
     }
@@ -337,31 +313,45 @@ export default function ProjectsBoard() {
                                 <button
                                   className="primary-btn btn-sm"
                                   disabled={busyTask === task.id}
+                                  aria-expanded={confirmFor === task.id}
                                   onClick={() => {
                                     setConfirmFor(confirmFor === task.id ? null : task.id);
-                                    setProofNote("");
                                     setTaskError("");
                                   }}
                                 >
                                   <ShieldCheck size={14} /> تأكيد التنفيذ الفعلي
                                 </button>
                               )}
+                              {task.state === "REAL_DONE" && task.proof?.proofId && (
+                                <button
+                                  className="text-action"
+                                  aria-expanded={proofFor === task.id}
+                                  onClick={() => setProofFor(proofFor === task.id ? null : task.id)}
+                                >
+                                  {proofFor === task.id ? "إخفاء الإثبات" : `الإثبات: ${task.proof.files} مستند`}
+                                </button>
+                              )}
                             </div>
+
+                            {task.state === "REAL_DONE" && task.proof && !task.proof.proofId && (
+                              <small className="task-row__proof">بلا مستند{task.proof.note ? `: ${task.proof.note}` : ""}</small>
+                            )}
 
                             {confirmFor === task.id && (
                               <div className="decide-panel task-row__confirm">
-                                <label>
-                                  الإثبات: ماذا تم فعلياً، ومتى، وأين يمكن التحقق منه؟
-                                  <input
-                                    className="input"
-                                    value={proofNote}
-                                    onChange={(e) => setProofNote(e.target.value)}
-                                    placeholder="مثال: صدر السجل التجاري رقم 1010… بتاريخ 12/03 عبر منصة الأعمال."
-                                  />
-                                </label>
-                                <button className="primary-btn btn-sm" disabled={busyTask === task.id} onClick={() => confirmReal(task)}>
-                                  {busyTask === task.id ? <Loader2 className="spin" size={14} /> : <ShieldCheck size={14} />} تسجيل التأكيد
-                                </button>
+                                <ExecutionProofForm
+                                  taskId={task.id}
+                                  onConfirmed={async () => {
+                                    setConfirmFor(null);
+                                    await load();
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {proofFor === task.id && task.proof?.proofId && (
+                              <div className="decide-panel task-row__confirm">
+                                <ExecutionProofView proofId={task.proof.proofId} />
                               </div>
                             )}
                           </div>

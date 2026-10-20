@@ -2,7 +2,9 @@
  * An in-memory stand-in for the slice of the Supabase client the proof store
  * uses. It enforces what the real database enforces for these tables
  * (20261018000200_execution_proofs.sql): one open draft per step, ten files,
- * unique fingerprints per proof, sealed proofs, tenant on every file.
+ * unique fingerprints per proof, sealed proofs, tenant on every file. A file
+ * row may be deleted only while its proof is a draft; nothing else is ever
+ * updated or deleted.
  */
 
 type Row = Record<string, any>;
@@ -15,7 +17,7 @@ function readColumn(row: Row, column: string) {
 }
 
 export function createFakeProofSupabase() {
-  const tables: Record<string, Row[]> = { tasks: [], execution_proofs: [], execution_proof_files: [], company_approvals: [] };
+  const tables: Record<string, Row[]> = { tasks: [], execution_proofs: [], execution_proof_files: [], company_approvals: [], gov_document_files: [] };
   const objects = new Map<string, Uint8Array>();
   const buckets = new Map<string, { public: boolean }>();
   const calls: string[] = [];
@@ -54,12 +56,21 @@ export function createFakeProofSupabase() {
     const matches = () => (tables[table] || []).filter((row) => filters.every((f) => (f.kind === "is" ? (row[f.column] ?? null) === f.value : readColumn(row, f.column) === (f.value == null ? null : String(f.value)))));
     const run = () => {
       if (mode === "insert") return insertRow(table, payload!);
+      if (mode === "delete" && table === "execution_proof_files") {
+        calls.push(`delete:${table}`);
+        const doomed = matches();
+        if (doomed.some((file) => tables.execution_proofs.find((p) => p.id === file.proof_id)?.confirmed_at)) return { data: null, error: raised("PROOF_SEALED") };
+        tables[table] = tables[table].filter((row) => !doomed.includes(row));
+        return { data: doomed, error: null };
+      }
       if (mode === "update" || mode === "delete") {
         calls.push(`${mode}:${table}`);
         return { data: null, error: { message: `the proof store must never ${mode} ${table}` } };
       }
       const rows = matches().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
-      return countOnly ? { data: null, error: null, count: rows.length } : { data: rows, error: null };
+      // A read is a snapshot, as from a real database: later changes to the
+      // table do not reach a row already returned.
+      return countOnly ? { data: null, error: null, count: rows.length } : { data: rows.map((row) => ({ ...row })), error: null };
     };
     const builder: any = {
       select(_columns?: string, options?: { count?: string; head?: boolean }) { if (options?.head) countOnly = true; return builder; },

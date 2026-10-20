@@ -25,6 +25,7 @@ export type ProofErrorCode =
   | "DUPLICATE_FILE"
   | "TOO_LARGE"
   | "UNSUPPORTED_TYPE"
+  | "GOVERNMENT_FAILED"
   | "NOT_CONFIGURED";
 
 export class ProofError extends Error {

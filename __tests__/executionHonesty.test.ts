@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyExecutionKind,
+  confirmationProof,
   isOwnerConfirmed,
   isRealWorldTask,
   summarizeExecutionHonesty,
@@ -74,5 +75,18 @@ describe("guards", () => {
   it("isRealWorldTask and isOwnerConfirmed read metadata safely", () => {
     expect(isRealWorldTask({ status: "TODO", metadata: null })).toBe(false);
     expect(isOwnerConfirmed({ status: "TODO", metadata: undefined })).toBe(false);
+  });
+});
+
+describe("confirmationProof", () => {
+  it("names the sealed proof of a confirmation made with documents", () => {
+    expect(confirmationProof({ status: "DONE", metadata: { ownerConfirmed: true, proofVersion: 3, proofId: "p-1", proofFileSha256s: ["a", "b"], proofNote: " صدر السجل " } }))
+      .toEqual({ proofId: "p-1", files: 2, note: "صدر السجل" });
+  });
+
+  it("says a note-only or older confirmation has no document, and an unconfirmed step has no proof", () => {
+    expect(confirmationProof({ status: "DONE", metadata: { ownerConfirmed: true, proofVersion: 2, proofNote: "تم الدفع" } })).toEqual({ proofId: null, files: 0, note: "تم الدفع" });
+    expect(confirmationProof({ status: "DONE", metadata: { ownerConfirmed: "true" } })).toEqual({ proofId: null, files: 0, note: null });
+    expect(confirmationProof({ status: "DONE", metadata: { proofVersion: 3, proofId: "p-1" } })).toBeNull();
   });
 });

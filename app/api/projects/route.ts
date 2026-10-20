@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { logError } from "@/lib/logger";
 import {
+  confirmationProof,
   isRealWorldTask,
   summarizeExecutionHonesty,
   taskExecutionState,
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
         progress: Number(task.progress_percent || 0),
         executionKind: isRealWorldTask(task) ? "REAL_WORLD" : "INTERNAL",
         state: taskExecutionState(task),
+        proof: confirmationProof(task),
       }));
       return {
         id: String(project.id),

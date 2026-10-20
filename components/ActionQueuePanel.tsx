@@ -23,6 +23,7 @@ import {
   taskExecutionState,
   type TaskExecutionState,
 } from "@/lib/company/executionHonesty";
+import ExecutionProofForm from "./ExecutionProofForm";
 
 type ActionPayload = {
   confidence?: number;
@@ -156,8 +157,6 @@ export default function ActionQueuePanel() {
   const [executingId, setExecutingId] = useState<string | null>(null);
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
   const [confirmingTaskId, setConfirmingTaskId] = useState<string | null>(null);
-  const [proofNote, setProofNote] = useState("");
-  const [confirmBusy, setConfirmBusy] = useState(false);
   const initialProjectResolved = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -217,27 +216,11 @@ export default function ActionQueuePanel() {
     }
   }
 
-  async function confirmRealExecution(taskId: string) {
-    setConfirmBusy(true);
+  async function afterConfirmation() {
     setError("");
-    setMessage("");
-    try {
-      const response = await fetch("/api/tasks/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: taskId, confirmReal: true, proofNote: proofNote.trim() }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.message || "تعذر تأكيد التنفيذ الفعلي.");
-      setMessage("سُجل التنفيذ الفعلي بتأكيدك، وأصبحت المهمة مكتملة رسمياً.");
-      setConfirmingTaskId(null);
-      setProofNote("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تأكيد التنفيذ الفعلي.");
-    } finally {
-      setConfirmBusy(false);
-    }
+    setMessage("سُجل التنفيذ الفعلي بتأكيدك، وأصبحت المهمة مكتملة رسمياً.");
+    setConfirmingTaskId(null);
+    await load();
   }
 
   useEffect(() => { load(); }, []);
@@ -349,10 +332,7 @@ export default function ActionQueuePanel() {
                     execute={execute}
                     confirmingTaskId={confirmingTaskId}
                     setConfirmingTaskId={setConfirmingTaskId}
-                    proofNote={proofNote}
-                    setProofNote={setProofNote}
-                    confirmBusy={confirmBusy}
-                    confirmRealExecution={confirmRealExecution}
+                    afterConfirmation={afterConfirmation}
                   />
                 ))}
               </div>
@@ -385,7 +365,7 @@ const executionStateClass: Record<TaskExecutionState, string> = {
   BLOCKED: "running",
 };
 
-function ProjectExecutionCard({ group, open, onToggle, integrationStatus, executingId, execute, confirmingTaskId, setConfirmingTaskId, proofNote, setProofNote, confirmBusy, confirmRealExecution }: {
+function ProjectExecutionCard({ group, open, onToggle, integrationStatus, executingId, execute, confirmingTaskId, setConfirmingTaskId, afterConfirmation }: {
   group: ProjectExecutionGroup<CompanyProject, CompanyAction, CompanyTask>;
   open: boolean;
   onToggle: () => void;
@@ -394,10 +374,7 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
   execute: (action: CompanyAction) => Promise<void>;
   confirmingTaskId: string | null;
   setConfirmingTaskId: (id: string | null) => void;
-  proofNote: string;
-  setProofNote: (value: string) => void;
-  confirmBusy: boolean;
-  confirmRealExecution: (taskId: string) => Promise<void>;
+  afterConfirmation: () => Promise<void>;
 }) {
   const project = group.project;
   const hasPlan = Boolean(project.financial_snapshot?.initiativePlan);
@@ -434,28 +411,18 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
                     <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
                     <small className={`status-pill ${executionStateClass[state]}`} style={{ marginTop: 4, display: "inline-flex", width: "fit-content" }}>{executionStateLabels[state]}</small>
                     {confirmable && !confirming && (
-                      <button type="button" className="secondary-btn btn-sm" style={{ marginTop: 6, width: "fit-content" }} onClick={() => { setConfirmingTaskId(task.id); setProofNote(""); }}>
+                      <button type="button" className="secondary-btn btn-sm" style={{ marginTop: 6, width: "fit-content" }} onClick={() => setConfirmingTaskId(task.id)}>
                         تأكيد التنفيذ الفعلي
                       </button>
                     )}
-                    {confirming && (
-                      <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
-                        <input
-                          className="field"
-                          value={proofNote}
-                          onChange={(event) => setProofNote(event.target.value)}
-                          placeholder="الإثبات: رقم السجل / مرجع الدفع / رابط الوثيقة"
-                        />
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" className="primary-btn btn-sm" disabled={confirmBusy} onClick={() => void confirmRealExecution(task.id)}>
-                            {confirmBusy ? <RefreshCcw className="spin" size={14} /> : <CheckCircle2 size={14} />} تم التنفيذ فعلياً
-                          </button>
-                          <button type="button" className="secondary-btn btn-sm" disabled={confirmBusy} onClick={() => setConfirmingTaskId(null)}>إلغاء</button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                   <b>{Number(task.progress_percent || 0)}%</b>
+                  {/* A direct child of the row, so the form spans all three of its columns. */}
+                  {confirming && (
+                    <div className="decide-panel task-row__confirm">
+                      <ExecutionProofForm taskId={task.id} onConfirmed={afterConfirmation} onCancel={() => setConfirmingTaskId(null)} />
+                    </div>
+                  )}
                 </article>
               );
             })}

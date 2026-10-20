@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 const boundary = vi.hoisted(() => ({ authenticated: true, system: false, role: "OWNER" }));
-const store = vi.hoisted(() => ({ startProof: vi.fn(), createUploadSlot: vi.fn(), registerProofFile: vi.fn(), getProof: vi.fn(), openProofFile: vi.fn() }));
+const store = vi.hoisted(() => ({ startProof: vi.fn(), findOpenProof: vi.fn(), createUploadSlot: vi.fn(), registerProofFile: vi.fn(), getProof: vi.fn(), openProofFile: vi.fn(), copyProofFileToGovernment: vi.fn(), removeProofFile: vi.fn() }));
 vi.mock("../lib/company-os/context", () => ({
   requireCompanyContext: async () => boundary.authenticated
     ? { ok: true, context: { tenantId: "golden-star", actor: { id: "owner-1", role: boundary.role }, systemCall: boundary.system } }
@@ -51,6 +51,21 @@ describe("execution proof API", () => {
     expect(opened).toEqual({ ok: true, url: "https://signed", expiresInSeconds: 60 });
   });
 
+  it("takes a file out of a draft by its id and answers with the draft", async () => {
+    store.removeProofFile.mockResolvedValue({ id: PROOF, files: [] });
+    expect(await (await post({ action: "remove", fileId: PROOF })).json()).toEqual({ ok: true, proof: { id: PROOF, files: [] } });
+    expect(store.removeProofFile).toHaveBeenCalledWith(actor, PROOF);
+    store.removeProofFile.mockRejectedValue(new ProofError("SEALED", 409, "هذا الإثبات مختوم ولا تُزال ملفاته."));
+    expect((await post({ action: "remove", fileId: PROOF })).status).toBe(409);
+  });
+
+  it("hands a file to Government Relations only by its id", async () => {
+    store.copyProofFileToGovernment.mockResolvedValue({ documentId: "gov-1", alreadyTracked: false });
+    expect(await (await post({ action: "track", fileId: PROOF })).json()).toEqual({ ok: true, documentId: "gov-1", alreadyTracked: false });
+    expect(store.copyProofFileToGovernment).toHaveBeenCalledWith(actor, PROOF);
+    expect((await post({ action: "track", fileId: "../../other" })).status).toBe(400);
+  });
+
   it("passes a system key through as such; the store refuses it", async () => {
     boundary.system = true;
     store.startProof.mockRejectedValue(new ProofError("FORBIDDEN", 403, "للمالك فقط"));
@@ -81,5 +96,14 @@ describe("execution proof API", () => {
     const response = await GET(new NextRequest(`http://localhost/api/tasks/proof?proofId=${PROOF}`));
     expect(await response.json()).toEqual({ ok: true, proof: { id: PROOF, sealed: true } });
     expect((await GET(new NextRequest("http://localhost/api/tasks/proof?proofId=x"))).status).toBe(400);
+  });
+
+  it("reads a step's open draft by step, answering null when there is none", async () => {
+    store.findOpenProof.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: PROOF, sealed: false });
+    expect(await (await GET(new NextRequest("http://localhost/api/tasks/proof?taskId=t1"))).json()).toEqual({ ok: true, proof: null });
+    expect(await (await GET(new NextRequest("http://localhost/api/tasks/proof?taskId=t1"))).json()).toEqual({ ok: true, proof: { id: PROOF, sealed: false } });
+    expect(store.findOpenProof).toHaveBeenCalledWith(actor, "t1");
+    expect((await GET(new NextRequest("http://localhost/api/tasks/proof"))).status).toBe(400);
+    expect(store.startProof).not.toHaveBeenCalled();
   });
 });

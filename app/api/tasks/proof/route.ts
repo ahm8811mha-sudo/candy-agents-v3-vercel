@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { ProofError } from "@/lib/executionProofs/rules";
-import { createUploadSlot, getProof, openProofFile, registerProofFile, startProof, type ProofActor } from "@/lib/executionProofs/store";
+import { copyProofFileToGovernment, createUploadSlot, findOpenProof, getProof, openProofFile, registerProofFile, removeProofFile, startProof, type ProofActor } from "@/lib/executionProofs/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Registering a file downloads, fingerprints and may read it.
+// Registering a file downloads, fingerprints and may read it; tracking one
+// runs the Government Relations analysis.
 export const maxDuration = 300;
 
 const fileName = z.string().trim().min(1).max(200);
@@ -15,6 +16,8 @@ const inputSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("slot"), proofId: z.string().uuid(), fileName, mimeType: z.string().max(100), sizeBytes: z.number().int() }),
   z.object({ action: z.literal("register"), proofId: z.string().uuid(), path: z.string().min(1).max(400), fileName }),
   z.object({ action: z.literal("open"), fileId: z.string().uuid() }),
+  z.object({ action: z.literal("track"), fileId: z.string().uuid() }),
+  z.object({ action: z.literal("remove"), fileId: z.string().uuid() }),
 ]);
 
 type Context = { tenantId: string; actor: { id: string; role: string }; systemCall?: boolean };
@@ -51,19 +54,32 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, proof: await registerProofFile(actor, input.proofId, input.path, input.fileName) });
       case "open":
         return NextResponse.json({ ok: true, ...(await openProofFile(actor, input.fileId)) });
+      case "track":
+        return NextResponse.json({ ok: true, ...(await copyProofFileToGovernment(actor, input.fileId)) });
+      case "remove":
+        return NextResponse.json({ ok: true, proof: await removeProofFile(actor, input.fileId) });
     }
   } catch (error) {
     return failure(error);
   }
 }
 
+// ?proofId= reads one proof; ?taskId= reads the step's open draft, or null.
+const lookupSchema = z.union([
+  z.object({ proofId: z.string().uuid() }),
+  z.object({ taskId: z.string().trim().min(1).max(180) }),
+]);
+
 export async function GET(req: NextRequest) {
   const auth = await requireCompanyContext(req, "EMPLOYEE");
   if (!auth.ok) return auth.response;
-  const proofId = z.string().uuid().safeParse(req.nextUrl.searchParams.get("proofId"));
-  if (!proofId.success) return NextResponse.json({ ok: false, code: "INVALID_INPUT", message: "طلب غير صالح." }, { status: 400 });
+  const params = req.nextUrl.searchParams;
+  const lookup = lookupSchema.safeParse(params.has("proofId") ? { proofId: params.get("proofId") } : { taskId: params.get("taskId") });
+  if (!lookup.success) return NextResponse.json({ ok: false, code: "INVALID_INPUT", message: "طلب غير صالح." }, { status: 400 });
+  const actor = actorOf(auth.context);
   try {
-    return NextResponse.json({ ok: true, proof: await getProof(actorOf(auth.context), proofId.data) });
+    const proof = "proofId" in lookup.data ? await getProof(actor, lookup.data.proofId) : await findOpenProof(actor, lookup.data.taskId);
+    return NextResponse.json({ ok: true, proof });
   } catch (error) {
     return failure(error);
   }

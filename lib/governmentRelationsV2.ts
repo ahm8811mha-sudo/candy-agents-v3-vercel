@@ -73,7 +73,9 @@ type AnalysisResult = {
   error: string | null;
 };
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
+/** Government Relations' own file limit; a proof file above it is refused before any download. */
+export const GOVERNMENT_MAX_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_FILE_BYTES = GOVERNMENT_MAX_FILE_BYTES;
 const GOVERNMENT_BUCKET = "government-documents";
 const DOCUMENT_MODEL = process.env.OPENAI_DOCUMENT_MODEL || "gpt-4.1-mini";
 

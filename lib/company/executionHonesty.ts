@@ -64,6 +64,19 @@ export function isOwnerConfirmed(task: HonestyTask): boolean {
   return String(task.metadata?.ownerConfirmed || "") === "true" || task.metadata?.ownerConfirmed === true;
 }
 
+/** How an owner confirmation was proven: a sealed proof with its files, or a note alone. */
+export function confirmationProof(task: HonestyTask): { proofId: string | null; files: number; note: string | null } | null {
+  if (!isOwnerConfirmed(task)) return null;
+  const metadata = task.metadata || {};
+  const sealed = Number(metadata.proofVersion) === 3 && typeof metadata.proofId === "string";
+  const note = typeof metadata.proofNote === "string" ? metadata.proofNote.trim() : "";
+  return {
+    proofId: sealed ? String(metadata.proofId) : null,
+    files: sealed && Array.isArray(metadata.proofFileSha256s) ? metadata.proofFileSha256s.length : 0,
+    note: note || null,
+  };
+}
+
 export function taskExecutionState(task: HonestyTask): TaskExecutionState {
   const status = String(task.status || "").toUpperCase();
   if (status === "WAITING_FUNDING") return "WAITING_FUNDING";

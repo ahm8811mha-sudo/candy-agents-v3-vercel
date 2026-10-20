@@ -7,10 +7,13 @@
  * size, fingerprints it and records it. It never closes a task (only
  * orvanta_update_task_status does, with the owner's confirmation) and never
  * changes or removes anything a proof already holds: the database seals both.
+ * Handing a file to Government Relations copies its bytes; the proof keeps its own.
  */
 
 import { createHash, randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "../supabase";
+import { GOVERNMENT_MAX_FILE_BYTES, uploadAndAutomateGovernmentDocument } from "../governmentRelationsV2";
+import { isGovernmentTrackable } from "./facts";
 import {
   compareWithCompany,
   mergeReadings,
@@ -104,6 +107,12 @@ async function ensureBucket(db: Database) {
   }
 }
 
+async function openDraftOf(db: Database, tenantId: string, taskId: string): Promise<ProofRow | null> {
+  const { data, error } = await db.from("execution_proofs").select("*").eq("tenant_id", tenantId).eq("task_id", taskId).is("confirmed_at", null).maybeSingle();
+  if (error) throw storageError("reading the open draft", error);
+  return (data as ProofRow | null) ?? null;
+}
+
 async function findProof(db: Database, tenantId: string, proofId: string): Promise<ProofRow> {
   const { data, error } = await db.from("execution_proofs").select("*").eq("tenant_id", tenantId).eq("id", proofId).maybeSingle();
   if (error) throw storageError("reading the proof", error);
@@ -185,21 +194,24 @@ export async function startProof(actor: ProofActor, taskId: string): Promise<Pro
   const realWorld = metadata.executionKind === "REAL_WORLD" || metadata.requiresFunding === true || metadata.requiresFunding === "true";
   if (!realWorld) throw new ProofError("INVALID_INPUT", 400, "هذه خطوة داخلية ولا تحتاج إثبات تنفيذ فعلي.");
 
-  const openDraft = async () => {
-    const result = await db.from("execution_proofs").select("*").eq("tenant_id", actor.tenantId).eq("task_id", taskId).is("confirmed_at", null).maybeSingle();
-    if (result.error) throw storageError("reading the open draft", result.error);
-    return result.data as ProofRow | null;
-  };
-  let proof = await openDraft();
+  let proof = await openDraftOf(db, actor.tenantId, taskId);
   if (!proof) {
     const created = await db.from("execution_proofs").insert({ tenant_id: actor.tenantId, task_id: taskId, created_by: actor.actorId }).select().single();
     // Two tabs opening the same step at once: the database keeps one draft.
-    if (created.error?.code === "23505") proof = await openDraft();
+    if (created.error?.code === "23505") proof = await openDraftOf(db, actor.tenantId, taskId);
     else if (created.error) throw storageError("opening a draft", created.error);
     else proof = created.data as ProofRow;
   }
   if (!proof) throw new Error("the open draft vanished while it was being opened");
   return view(db, actor.tenantId, proof);
+}
+
+/** The step's open draft, if there is one. Opens nothing. */
+export async function findOpenProof(actor: ProofActor, taskId: string): Promise<ProofView | null> {
+  authorize(actor);
+  const db = database();
+  const proof = await openDraftOf(db, actor.tenantId, taskId);
+  return proof ? view(db, actor.tenantId, proof) : null;
 }
 
 export async function createUploadSlot(
@@ -279,6 +291,30 @@ export async function registerProofFile(actor: ProofActor, proofId: string, path
   return view(db, actor.tenantId, proof);
 }
 
+/**
+ * Takes one file out of a draft, so a wrong attachment is never sealed into
+ * the proof. The database refuses it once the proof is sealed, whatever was
+ * checked here first, and the object goes only after its row has gone.
+ */
+export async function removeProofFile(actor: ProofActor, fileId: string): Promise<ProofView> {
+  authorize(actor);
+  const db = database();
+  const { data, error } = await db.from("execution_proof_files").select("id,proof_id,storage_path").eq("tenant_id", actor.tenantId).eq("id", fileId).maybeSingle();
+  if (error) throw storageError("reading the file", error);
+  if (!data) throw new ProofError("NOT_FOUND", 404, "لم يُعثر على الملف.");
+  const sealed = () => new ProofError("SEALED", 409, "هذا الإثبات مختوم ولا تُزال ملفاته.");
+  const proof = await findProof(db, actor.tenantId, data.proof_id);
+  if (proof.confirmed_at) throw sealed();
+  const removed = await db.from("execution_proof_files").delete().eq("tenant_id", actor.tenantId).eq("id", fileId);
+  if (removed.error) {
+    if (String(removed.error.message || "").includes("PROOF_SEALED")) throw sealed();
+    throw storageError("removing the file", removed.error);
+  }
+  const gone = await db.storage.from(PROOF_BUCKET).remove([data.storage_path]);
+  if (gone.error) console.error("a removed proof file's object stayed in storage", gone.error);
+  return view(db, actor.tenantId, await findProof(db, actor.tenantId, proof.id));
+}
+
 export async function getProof(actor: ProofActor, proofId: string): Promise<ProofView> {
   authorize(actor);
   const db = database();
@@ -295,4 +331,64 @@ export async function openProofFile(actor: ProofActor, fileId: string): Promise<
   const signed = await db.storage.from(PROOF_BUCKET).createSignedUrl(data.storage_path, 60);
   if (signed.error || !signed.data) throw storageError("signing a link", signed.error);
   return { url: signed.data.signedUrl, expiresInSeconds: 60 };
+}
+
+/** A Government Relations message is shown as it is when it is the owner's to read. */
+function governmentRefusal(error: unknown): ProofError {
+  const message = error instanceof Error ? error.message : "";
+  if (/^[\u0600-\u06ff]/.test(message) && !/:\s*\S/.test(message)) return new ProofError("GOVERNMENT_FAILED", 400, message.slice(0, 300));
+  console.error("handing a proof file to Government Relations failed", error);
+  return new ProofError("GOVERNMENT_FAILED", 503, "تعذرت إضافة الملف إلى العلاقات الحكومية، وبقي الإثبات كما هو. أعد المحاولة لاحقاً.");
+}
+
+/**
+ * Hands one file of a sealed proof to Government Relations, at the owner's
+ * request, so its expiry and renewal are tracked there. Only a file read as a
+ * government document qualifies (isGovernmentTrackable), so while reading is
+ * off nothing is ever handed on. The same bytes are never handed over twice.
+ */
+export async function copyProofFileToGovernment(actor: ProofActor, fileId: string): Promise<{ documentId: string; alreadyTracked: boolean }> {
+  authorize(actor);
+  const db = database();
+  const { data, error } = await db
+    .from("execution_proof_files")
+    .select("id,proof_id,file_name,mime_type,size_bytes,sha256,reading,storage_path")
+    .eq("tenant_id", actor.tenantId)
+    .eq("id", fileId)
+    .maybeSingle();
+  if (error) throw storageError("reading the file", error);
+  if (!data) throw new ProofError("NOT_FOUND", 404, "لم يُعثر على الملف.");
+  const file = data as FileRow & { proof_id: string };
+  const proof = await findProof(db, actor.tenantId, file.proof_id);
+  if (!proof.confirmed_at) throw new ProofError("INVALID_INPUT", 400, "يُتابَع المستند في العلاقات الحكومية بعد تأكيد الخطوة وختم إثباتها.");
+  if (!isGovernmentTrackable(file.reading)) throw new ProofError("INVALID_INPUT", 400, "لم يُقرأ هذا الملف وثيقةً حكومية، فلا يُنقل إلى العلاقات الحكومية.");
+  if (Number(file.size_bytes) > GOVERNMENT_MAX_FILE_BYTES) {
+    throw new ProofError("TOO_LARGE", 413, `حد العلاقات الحكومية ${Math.round(GOVERNMENT_MAX_FILE_BYTES / (1024 * 1024))} ميجابايت للملف، وهذا الملف أكبر منه.`);
+  }
+
+  const known = await db.from("gov_document_files").select("document_id").eq("tenant_id", actor.tenantId).eq("content_hash", file.sha256).limit(1).maybeSingle();
+  if (known.error) throw storageError("checking Government Relations for the file", known.error);
+  if (known.data) return { documentId: String(known.data.document_id), alreadyTracked: true };
+
+  const downloaded = await db.storage.from(PROOF_BUCKET).download(file.storage_path);
+  if (downloaded.error || !downloaded.data) throw storageError("reading the proof file's bytes", downloaded.error);
+  const bytes = Buffer.from(await downloaded.data.arrayBuffer());
+  const attested = proof.facts_attested ?? {};
+  try {
+    const result = await uploadAndAutomateGovernmentDocument(
+      { tenantId: actor.tenantId, actorId: actor.actorId, actorRole: actor.actorRole },
+      {
+        documentType: file.reading.governmentType ?? undefined,
+        title: attested.documentKind,
+        issuer: attested.issuer,
+        notes: "من إثبات تنفيذ خطوة مؤكدة.",
+        fileName: file.file_name,
+        mimeType: file.mime_type,
+        fileBase64: bytes.toString("base64"),
+      }
+    );
+    return { documentId: String(result.document.id), alreadyTracked: false };
+  } catch (governmentError) {
+    throw governmentRefusal(governmentError);
+  }
 }

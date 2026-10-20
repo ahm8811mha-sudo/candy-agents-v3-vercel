@@ -388,6 +388,13 @@ export default function ExecutionProofForm(props: { taskId: string; onConfirmed:
 - [ ] **Step 5: Browser check.** `npm run build`, `next start` with a local owner code, confirm the server logs the expected Next.js version, then at 390×844 and 1440×900: open a real-world step, attach a PDF and a PNG. Without Supabase the start call answers 503 and the form shows its Arabic error and still allows a text-only confirmation attempt; record that as the local evidence. The full upload path is verified in Task 15.
 - [ ] **Step 6: Commit** `feat: attach and review documents before confirming`.
 
+**Delivered (2026-10-20), and where it differs from the steps above:**
+- `GET /api/tasks/proof?taskId=` (`findOpenProof`) returns the step's open draft or `null` and opens nothing, so a returning owner sees the files already attached (Review Focus 5) without a draft being created for every step someone merely opens.
+- `POST {action:"remove", fileId}` (`removeProofFile`) takes a file out of a draft. Without it a wrong attachment could only be sealed into the proof. The database already allowed it (the file trigger refuses only once the proof is sealed, under the same row lock the confirmation takes); the row goes first and the object after, and a refusal keeps the object (pinned by a race test).
+- The comparison with the company's records moved to `lib/executionProofs/facts.ts` (pure); `reading.ts` re-exports it. The browser bundle carries no server module: checked by scanning `dist/static` for the store's and the prompt's strings.
+- `uploadToProofSlot` sends no `apikey` or `Authorization` header (seen in the browser check). Production will show whether Storage accepts the signed URL alone (Task 15 Step 3).
+- Browser check at 1440x900 and 390x844 against a fresh `next build`, fixture APIs: one draft per batch, slot and register per accepted file, a `.docx` refused in the browser, Confirm disabled during upload, a warning that does not disable Confirm, removal, the confirmation carrying `proofId` and `attestedFacts`, no undersized target, no field under 16px, no unlabeled field, no overflow, no console error. The form spans the full row in the execution queue too.
+
 ### Task 12: A confirmed step shows its proof
 
 **Files:**
@@ -405,6 +412,8 @@ export default function ExecutionProofForm(props: { taskId: string; onConfirmed:
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat: show the sealed proof on a confirmed step`.
 
+**Delivered (2026-10-20):** the board shows `الإثبات: n مستند` on a step confirmed with documents and `بلا مستند` with the note on one confirmed by a note alone (owner decision Q3); `/api/projects` carries `confirmationProof(task)`. A file opens in a tab opened inside the click, before the link exists (phone browsers block a tab opened after an await), with `opener` cut; `noopener` is the fallback when no window is given.
+
 ### Task 13: Track a proof in Government Relations, by choice
 
 **Files:**
@@ -419,6 +428,8 @@ export default function ExecutionProofForm(props: { taskId: string; onConfirmed:
 - [ ] **Step 3: Implement.** Files above the government pipeline's own 8 MB limit (`governmentRelationsV2.ts:74`) are refused with that limit stated, until Task 14 raises it.
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit** `feat: copy a proof into Government Relations on request`.
+
+**Delivered (2026-10-20)** as `POST {action:"track", fileId}`. Eligibility is `isGovernmentTrackable` in `facts.ts`, so the UI and the server apply one rule; while reading is off no file qualifies, which matters because the Government Relations pipeline sends a document to the model whenever a key exists. The same bytes are never handed over twice (`gov_document_files.content_hash`); a file above Government Relations' own limit (`GOVERNMENT_MAX_FILE_BYTES`, 8 MB until Task 14) is refused before any download; a Government Relations message is shown as it is only when it is an Arabic sentence without an appended internal error, otherwise a generic one is shown and the error is logged.
 
 ### Task 14: Government Relations uploads through a signed URL
 

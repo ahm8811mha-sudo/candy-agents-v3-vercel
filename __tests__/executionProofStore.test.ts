@@ -4,8 +4,10 @@ import { createFakeProofSupabase } from "./helpers/fakeProofSupabase";
 
 const fake = vi.hoisted(() => ({ current: null as ReturnType<typeof import("./helpers/fakeProofSupabase").createFakeProofSupabase> | null }));
 vi.mock("../lib/supabase", () => ({ getSupabaseAdmin: () => fake.current?.client ?? null, persist: vi.fn() }));
+const government = vi.hoisted(() => ({ upload: vi.fn() }));
+vi.mock("../lib/governmentRelationsV2", () => ({ uploadAndAutomateGovernmentDocument: government.upload, GOVERNMENT_MAX_FILE_BYTES: 8 * 1024 * 1024 }));
 
-import { createUploadSlot, getProof, openProofFile, registerProofFile, startProof } from "@/lib/executionProofs/store";
+import { copyProofFileToGovernment, createUploadSlot, findOpenProof, getProof, openProofFile, registerProofFile, removeProofFile, startProof } from "@/lib/executionProofs/store";
 import { PROOF_BUCKET } from "@/lib/executionProofs/rules";
 
 const owner = { tenantId: "golden-star", actorId: "owner-1", actorRole: "OWNER", systemCall: false };
@@ -27,13 +29,14 @@ beforeEach(() => {
   delete process.env.ORVANTA_PROOF_READING;
   process.env.COMPANY_LEGAL_NAME = "شركة النجمة الذهبية";
 });
-afterEach(() => { process.env = { ...savedEnv }; vi.restoreAllMocks(); });
+afterEach(() => { process.env = { ...savedEnv }; vi.restoreAllMocks(); government.upload.mockReset(); });
 
 describe("who may touch a proof", () => {
   it("refuses a system key and any role but owner or admin, before touching the database", async () => {
     seedTask("t1");
     for (const actor of [{ ...owner, systemCall: true }, { ...owner, actorRole: "MANAGER" }, { ...owner, actorRole: "EMPLOYEE" }]) {
       await expect(startProof(actor, "t1")).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+      await expect(findOpenProof(actor, "t1")).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(openProofFile(actor, "any")).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
     expect(fake.current!.calls).toEqual([]);
@@ -67,6 +70,24 @@ describe("startProof", () => {
     expect(again.id).toBe(first.id);
     expect(again.files).toHaveLength(1);
     expect(fake.current!.tables.execution_proofs).toHaveLength(1);
+  });
+});
+
+describe("findOpenProof", () => {
+  // The form shows a returning owner the files already attached, without
+  // opening a draft for every step someone merely looks at.
+  it("returns the step's open draft and opens none itself", async () => {
+    seedTask("t1");
+    expect(await findOpenProof(owner, "t1")).toBeNull();
+    expect(fake.current!.tables.execution_proofs).toHaveLength(0);
+    const proof = await startProof(owner, "t1");
+    await attach(proof.id, pdfBytes("left behind"));
+    const found = await findOpenProof(owner, "t1");
+    expect(found).toMatchObject({ id: proof.id, taskId: "t1", sealed: false });
+    expect(found!.files).toHaveLength(1);
+    expect(await findOpenProof({ ...owner, tenantId: "someone-else" }, "t1")).toBeNull();
+    fake.current!.seal(proof.id);
+    expect(await findOpenProof(owner, "t1")).toBeNull();
   });
 });
 
@@ -166,6 +187,47 @@ describe("registerProofFile", () => {
   });
 });
 
+describe("removeProofFile", () => {
+  // A wrong attachment must not be sealed into the proof for want of a way out.
+  it("takes a file out of a draft, object and all, and leaves the rest", async () => {
+    seedTask("t1");
+    const proof = await startProof(owner, "t1");
+    const wrong = await attach(proof.id, pdfBytes("wrong file"), "خطأ.pdf");
+    await attach(proof.id, pdfBytes("right file"), "صحيح.pdf");
+    const after = await removeProofFile(owner, wrong.view.files[0].id);
+    expect(after.files.map((file) => file.fileName)).toEqual(["صحيح.pdf"]);
+    expect(fake.current!.hasObject(PROOF_BUCKET, wrong.slot.path)).toBe(false);
+    expect(fake.current!.tables.execution_proofs).toHaveLength(1);
+  });
+
+  it("refuses a sealed proof's file, another tenant's file, and anyone but the owner", async () => {
+    seedTask("t1");
+    const proof = await startProof(owner, "t1");
+    const { slot, view } = await attach(proof.id, pdfBytes("sealed"));
+    await expect(removeProofFile({ ...owner, actorRole: "EMPLOYEE" }, view.files[0].id)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(removeProofFile({ ...owner, tenantId: "someone-else" }, view.files[0].id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    fake.current!.seal(proof.id);
+    await expect(removeProofFile(owner, view.files[0].id)).rejects.toMatchObject({ code: "SEALED", status: 409 });
+    expect(fake.current!.tables.execution_proof_files).toHaveLength(1);
+    expect(fake.current!.hasObject(PROOF_BUCKET, slot.path)).toBe(true);
+  });
+
+  it("keeps the object when the database refuses, as when the proof is sealed meanwhile", async () => {
+    seedTask("t1");
+    const proof = await startProof(owner, "t1");
+    const { slot, view } = await attach(proof.id, pdfBytes("raced"));
+    const select = fake.current!.client.from;
+    let reads = 0;
+    // The confirmation seals the proof between this read and the delete.
+    fake.current!.client.from = ((table: string) => {
+      if (table === "execution_proofs" && ++reads === 1) queueMicrotask(() => fake.current!.seal(proof.id));
+      return select(table);
+    }) as typeof select;
+    await expect(removeProofFile(owner, view.files[0].id)).rejects.toMatchObject({ code: "SEALED" });
+    expect(fake.current!.hasObject(PROOF_BUCKET, slot.path)).toBe(true);
+  });
+});
+
 describe("getProof", () => {
   it("warns about what disagrees with the company, from the facts the owner sees", async () => {
     seedTask("t1", { executionKind: "REAL_WORLD", requiresFunding: true });
@@ -193,6 +255,97 @@ describe("openProofFile", () => {
     expect(opened.expiresInSeconds).toBe(60);
     expect(fake.current!.calls).toContain(`signedUrl:${fake.current!.tables.execution_proof_files[0].storage_path}:60`);
     await expect(openProofFile({ ...owner, tenantId: "someone-else" }, view.files[0].id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("copyProofFileToGovernment", () => {
+  const readAs = (reading: Record<string, unknown>) => {
+    process.env.ORVANTA_PROOF_READING = "openai";
+    process.env.OPENAI_API_KEY = "test-key";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ output_text: JSON.stringify(reading) }), { status: 200 }));
+  };
+  const registration = { documentKind: { value: "سجل تجاري", confidence: 0.92 }, issuer: { value: "وزارة التجارة", confidence: 0.9 }, governmentType: "COMMERCIAL_REGISTRATION" };
+
+  async function sealedProofWith(bytes: Uint8Array, attested: Record<string, string> = { issuer: "وزارة التجارة", documentKind: "سجل تجاري" }) {
+    seedTask("t1");
+    const proof = await startProof(owner, "t1");
+    const { view } = await attach(proof.id, bytes, "السجل التجاري.pdf");
+    fake.current!.seal(proof.id);
+    fake.current!.tables.execution_proofs[0].facts_attested = attested;
+    return { proof, file: view.files[0] };
+  }
+
+  it("hands a sealed proof's government document over with its own bytes and the attested issuer", async () => {
+    readAs(registration);
+    const bytes = pdfBytes("registration certificate");
+    const { file } = await sealedProofWith(bytes);
+    government.upload.mockResolvedValue({ document: { id: "gov-1" } });
+    await expect(copyProofFileToGovernment(owner, file.id)).resolves.toEqual({ documentId: "gov-1", alreadyTracked: false });
+    expect(government.upload).toHaveBeenCalledWith(
+      { tenantId: "golden-star", actorId: "owner-1", actorRole: "OWNER" },
+      expect.objectContaining({
+        documentType: "COMMERCIAL_REGISTRATION",
+        issuer: "وزارة التجارة",
+        fileName: "السجل التجاري.pdf",
+        mimeType: "application/pdf",
+        fileBase64: Buffer.from(bytes).toString("base64"),
+      })
+    );
+    const calls = fake.current!.calls;
+    expect(calls.some((call) => /^(update|delete):/.test(call))).toBe(false);
+    expect(calls.some((call) => call.startsWith("remove:"))).toBe(false);
+    expect(fake.current!.hasObject(PROOF_BUCKET, fake.current!.tables.execution_proof_files[0].storage_path)).toBe(true);
+  });
+
+  it("refuses a draft, a file nobody read, and a reading unsure of the document's kind", async () => {
+    readAs(registration);
+    seedTask("draft");
+    const draft = await startProof(owner, "draft");
+    const { view } = await attach(draft.id, pdfBytes("draft"));
+    await expect(copyProofFileToGovernment(owner, view.files[0].id)).rejects.toMatchObject({ code: "INVALID_INPUT", status: 400 });
+
+    readAs({ ...registration, documentKind: { value: "سجل تجاري", confidence: 0.5 } });
+    const unsure = await sealedProofWith(pdfBytes("unsure"));
+    await expect(copyProofFileToGovernment(owner, unsure.file.id)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+
+    delete process.env.ORVANTA_PROOF_READING;
+    fake.current = createFakeProofSupabase();
+    const unread = await sealedProofWith(pdfBytes("unread"));
+    expect(unread.file.reading.status).toBe("NOT_READ");
+    await expect(copyProofFileToGovernment(owner, unread.file.id)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(government.upload).not.toHaveBeenCalled();
+  });
+
+  it("does not hand the same document over twice", async () => {
+    readAs(registration);
+    const { file } = await sealedProofWith(pdfBytes("tracked already"));
+    fake.current!.tables.gov_document_files.push({ id: "gf-1", tenant_id: "golden-star", document_id: "gov-existing", content_hash: file.sha256 });
+    await expect(copyProofFileToGovernment(owner, file.id)).resolves.toEqual({ documentId: "gov-existing", alreadyTracked: true });
+    expect(government.upload).not.toHaveBeenCalled();
+  });
+
+  it("refuses a file above the Government Relations limit before downloading it", async () => {
+    readAs(registration);
+    const bytes = new Uint8Array(8 * 1024 * 1024 + 1);
+    bytes.set(pdfBytes("large scan"));
+    const { file } = await sealedProofWith(bytes);
+    const downloads = fake.current!.calls.filter((call) => call.startsWith("download:")).length;
+    await expect(copyProofFileToGovernment(owner, file.id)).rejects.toMatchObject({ code: "TOO_LARGE", status: 413 });
+    expect(fake.current!.calls.filter((call) => call.startsWith("download:"))).toHaveLength(downloads);
+  });
+
+  it("surfaces a Government Relations refusal in its own words, hides an internal one, and keeps the proof", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    readAs(registration);
+    const { file } = await sealedProofWith(pdfBytes("refused"));
+    government.upload.mockRejectedValueOnce(new Error("نوع الملف غير مدعوم. استخدم PDF أو صورة أو ملفاً نصياً."));
+    await expect(copyProofFileToGovernment(owner, file.id)).rejects.toMatchObject({ code: "GOVERNMENT_FAILED", message: "نوع الملف غير مدعوم. استخدم PDF أو صورة أو ملفاً نصياً." });
+    government.upload.mockRejectedValueOnce({ message: "insert or update on table gov_documents violates foreign key constraint" });
+    const hidden = await copyProofFileToGovernment(owner, file.id).catch((error) => error);
+    expect(hidden).toMatchObject({ code: "GOVERNMENT_FAILED", status: 503 });
+    expect(hidden.message).not.toContain("gov_documents");
+    expect(fake.current!.calls.some((call) => /^(update|delete):|^remove:/.test(call))).toBe(false);
+    expect(fake.current!.tables.execution_proofs[0].confirmed_at).toBeTruthy();
   });
 });
 
