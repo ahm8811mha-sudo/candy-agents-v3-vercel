@@ -69,3 +69,40 @@ jobs:
 
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
+
+  # The migrations the production build applies, applied first to a throwaway
+  # Postgres with the same tool, and their rollback-only suites run against it.
+  release-migrations:
+    name: Release migrations on a throwaway Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Apply the release migrations and run their suites
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: scripts/sql-local-check.sh

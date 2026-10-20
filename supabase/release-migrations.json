@@ -1,0 +1,12 @@
+{
+  "_comment": "Applied by scripts/release-migrations.mjs during the production build of main, in this order, each once (supabase_migrations.schema_migrations). Add a migration here only after scripts/sql-local-check.sh passes on it. Migrations older than these reached production by other means and are never re-run from here.",
+  "migrations": [
+    "20261018000100_close_anonymous_document_access.sql",
+    "20261018000200_execution_proofs.sql",
+    "20261018000300_task_status_with_proof.sql"
+  ],
+  "suites": [
+    "supabase/tests/document_access_regression.sql",
+    "supabase/tests/execution_proofs_regression.sql"
+  ]
+}
