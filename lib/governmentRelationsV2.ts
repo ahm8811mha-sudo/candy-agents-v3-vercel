@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "./supabase";
 import { createCompanyEvent } from "./company-os/events";
 import { appendCompanyEvent } from "./company-os/outboxPublisher";
 import { callOpenAIResponses, type ResponsesInput } from "./ai/openai";
+import { GOVERNMENT_DOCUMENT_TYPES } from "./governmentDocumentTypes";
 
 export type GovernmentContext = {
   tenantId: string;
@@ -76,16 +77,7 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const GOVERNMENT_BUCKET = "government-documents";
 const DOCUMENT_MODEL = process.env.OPENAI_DOCUMENT_MODEL || "gpt-4.1-mini";
 
-const DOCUMENT_TYPES = new Set([
-  "COMMERCIAL_REGISTRATION",
-  "VAT_CERTIFICATE",
-  "ZAKAT_TAX_CERTIFICATE",
-  "CHAMBER_SUBSCRIPTION",
-  "MUNICIPAL_LICENSE",
-  "WORK_PERMIT",
-  "INVESTMENT_LICENSE",
-  "OTHER_GOVERNMENT_DOCUMENT",
-]);
+const DOCUMENT_TYPES = new Set<string>(GOVERNMENT_DOCUMENT_TYPES);
 
 const REQUIRED_FIELDS: Record<string, string[]> = {
   COMMERCIAL_REGISTRATION: ["documentNumber", "issuer", "startDate", "expiryDate", "ownerName"],
