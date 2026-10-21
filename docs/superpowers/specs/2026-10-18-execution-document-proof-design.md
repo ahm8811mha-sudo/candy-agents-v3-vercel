@@ -398,3 +398,15 @@ it.
 - 4.6 — the owner can correct what the model read; both versions are kept, and
   the owner's version is what the confirmation freezes.
 - 4.9 — Government Relations gets its own copy, only when the owner chooses.
+
+## 9. As built (2026-10-21)
+
+What differs from the design above, decided while building. Details and evidence are in the plan, under each task.
+
+- **Delivery.** Migrations reach production through its own build (`scripts/release-migrations.mjs`), from an explicit list, in one transaction, followed by the rollback-only suites against production. A failure fails the build and the live version keeps serving.
+- **Access.** Besides the document tables (4.1), every table, view, sequence and owner-rights function in `public` was closed to the client roles; only the server's role reaches them. The before and after posture is printed in the private build log, never in this public repository.
+- **Storage keys are ASCII.** Storage refuses any other key, so a file's original name lives only in its row. The same rule exposed a Government Relations bug: every document named in Arabic failed to save (plan, Task 14).
+- **Drafts.** A step's open draft comes back when the form opens (`GET ?taskId=`), and a file can be taken out of a draft (`remove`) until the proof is sealed; the database refuses both afterwards.
+- **Registration takes the file name**, kept as the owner gave it; the stored object's key never carries it.
+- **Reading is off** (owner decision); with it off, no proof file qualifies for Government Relations (4.9), which matters because that pipeline sends a document for analysis whenever a key is configured.
+- **Uploads carry no key.** The signed URL's token is the only credential; production accepted the browser's PUT without the anonymous key.
