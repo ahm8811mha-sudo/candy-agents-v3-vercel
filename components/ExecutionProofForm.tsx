@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Paperclip, ShieldCheck } from "lucide-react";
 import { PROOF_FACT_KEYS, compareWithCompany, type AttestedFacts, type ProofFactKey } from "@/lib/executionProofs/facts";
 import { FACT_LABELS, READING_LABELS, confidenceText, flagMessage, formatSize } from "@/lib/executionProofs/copy";
-import { openProofFileInNewTab, uploadToProofSlot } from "@/lib/executionProofs/client";
+import { openProofFileInNewTab, uploadToSignedSlot } from "@/lib/executionProofs/client";
 import { MAX_PROOF_FILE_BYTES, MAX_PROOF_FILES, PROOF_MIME_TYPES, isProofMime } from "@/lib/executionProofs/rules";
 import type { ProofView } from "@/lib/executionProofs/store";
 
@@ -115,7 +115,7 @@ export default function ExecutionProofForm({ taskId, onConfirmed, onCancel }: {
       const slot = await proofApi({ action: "slot", proofId: current.id, fileName: item.name, mimeType: item.file.type, sizeBytes: item.file.size });
       if (!slot.ok) { fail(slot.message); continue; }
       try {
-        await uploadToProofSlot({ signedUrl: slot.signedUrl }, item.file);
+        await uploadToSignedSlot({ signedUrl: slot.signedUrl }, item.file);
       } catch (uploadError) {
         fail(uploadError instanceof Error ? uploadError.message : "تعذر رفع الملف.");
         continue;

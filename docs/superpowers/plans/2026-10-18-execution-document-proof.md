@@ -445,6 +445,14 @@ Ships separately; the proof feature does not depend on it.
 - [ ] **Step 4: Run** the tests and the full suite. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: government documents upload straight to storage`.
 
+**Delivered (2026-10-21), with one bug found on the way:**
+- **Every government document named in Arabic failed to save.** `sanitizeFileName` kept any Unicode letter in the storage key, and Supabase Storage accepts ASCII keys only (`VALID_OBJECT_KEY`, `/^[A-Za-z0-9_/!.*'() &$=@;:+,?-]*$/`, read in supabase/storage `src/storage/limits.ts`). The upload was refused as an invalid key *after* the document had been sent for analysis, and the owner saw «تعذر حفظ الوثيقة الأصلية: [object Object]». Reproduced by `__tests__/governmentUploadSlot.test.ts` against Storage's own rule (red before, green after). The key is now ASCII (`storageFileName`); the original name stays in `gov_document_files.file_name`. Production logs could not confirm past occurrences: Hobby keeps runtime logs for one hour.
+- A PDF or image goes to `government-documents` through `action: "upload-slot"` (a path under `<tenant>/incoming/`), then registers with `storagePath`; the server downloads it, decides its type from its bytes, processes it, stores the original under the document and removes the incoming copy whether processing succeeded or not. Another tenant's path, or one outside `incoming/`, is refused before any download.
+- `GOVERNMENT_MAX_FILE_BYTES` is 20 MB, and the bucket is raised to it on first use: Storage enforces the bucket's own limit, which was set to 8 MB when the bucket was created.
+- Text files keep the multipart path, limited in the browser to 3 MB because the platform caps a request body at 4.5 MB. Before this change the advertised 8 MB was never reachable for any file for the same reason.
+- `uploadToProofSlot` was renamed `uploadToSignedSlot`, since both features use it.
+- Browser check on a fresh build, both widths: a 6 MB scan uploaded through the slot while no API request exceeded 262 bytes; a 4 MB text file was refused before anything was sent.
+
 ### Task 15: Release verification
 
 Nothing here is code. Each step is evidence, recorded in the PR.

@@ -1,6 +1,7 @@
 /**
  * What an execution proof may contain, and where its files live. Pure: no I/O.
  * The database enforces the same limits (20261018000200_execution_proofs.sql).
+ * Government Relations takes documents through the same type and size rules.
  */
 
 export const PROOF_BUCKET = "execution-proofs";
@@ -37,6 +38,10 @@ export class ProofError extends Error {
     super(message);
     this.name = "ProofError";
   }
+}
+
+export function mimeExtension(mime: ProofMime): string {
+  return EXTENSION[mime];
 }
 
 export function isProofMime(value: string): value is ProofMime {

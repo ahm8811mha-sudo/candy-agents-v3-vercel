@@ -16,12 +16,14 @@ import {
 import {
   assertGovernmentEntityTenant,
   createGovernmentFilePreview,
+  createGovernmentUploadSlot,
   getGovernmentRelationsDashboard,
   reanalyzeGovernmentDocument,
   uploadAndAutomateGovernmentDocument,
   type GovernmentContext,
-  type GovernmentUploadInput,
+  type GovernmentUploadRequest,
 } from "@/lib/governmentRelationsV2";
+import { ProofError } from "@/lib/executionProofs/rules";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,7 +48,7 @@ function governmentContext(auth: Awaited<ReturnType<typeof requireCompanyContext
   };
 }
 
-async function parseRequest(req: NextRequest): Promise<{ action: string; body: JsonBody; upload?: GovernmentUploadInput }> {
+async function parseRequest(req: NextRequest): Promise<{ action: string; body: JsonBody; upload?: GovernmentUploadRequest }> {
   const contentType = req.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
@@ -74,17 +76,19 @@ async function parseRequest(req: NextRequest): Promise<{ action: string; body: J
   const body = (await req.json().catch(() => ({}))) as JsonBody;
   const action = String(body.action || "seed");
   const data = (body.data || {}) as Record<string, unknown>;
-  const upload = action === "upload-document" && data.fileBase64
-    ? {
-        documentType: String(data.documentType || ""),
-        title: String(data.title || ""),
-        issuer: String(data.issuer || ""),
-        notes: String(data.notes || ""),
-        fileName: String(data.fileName || "government-document"),
-        mimeType: String(data.mimeType || "application/octet-stream"),
-        fileBase64: String(data.fileBase64 || ""),
-      }
-    : undefined;
+  const fields = {
+    documentType: String(data.documentType || ""),
+    title: String(data.title || ""),
+    issuer: String(data.issuer || ""),
+    notes: String(data.notes || ""),
+    fileName: String(data.fileName || "government-document"),
+    mimeType: String(data.mimeType || "application/octet-stream"),
+  };
+  // A document the browser already put in storage arrives by its path.
+  const upload: GovernmentUploadRequest | undefined = action !== "upload-document" ? undefined
+    : typeof data.storagePath === "string" && data.storagePath ? { ...fields, storagePath: data.storagePath }
+      : data.fileBase64 ? { ...fields, fileBase64: String(data.fileBase64) }
+        : undefined;
   return { action, body, upload };
 }
 
@@ -119,6 +123,16 @@ export async function POST(req: NextRequest) {
       await seedGovernmentRelationsOS();
       const data = await getGovernmentRelationsDashboard(context);
       return NextResponse.json({ ok: true, ...data, requestId: auth.context.requestId });
+    }
+
+    if (action === "upload-slot") {
+      const data = (body.data || {}) as Record<string, unknown>;
+      const result = await createGovernmentUploadSlot(context, {
+        fileName: String(data.fileName || ""),
+        mimeType: String(data.mimeType || ""),
+        sizeBytes: Number(data.sizeBytes),
+      });
+      return NextResponse.json({ ok: true, result, requestId: auth.context.requestId });
     }
 
     if (action === "upload-document") {
@@ -218,7 +232,8 @@ export async function POST(req: NextRequest) {
         error: error instanceof Error ? error.message : "Government relations action failed",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      // A refused file declaration carries its own status (413, 415).
+      { status: error instanceof ProofError ? error.status : 500 }
     );
   }
 }

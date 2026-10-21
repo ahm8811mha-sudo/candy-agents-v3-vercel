@@ -4,6 +4,7 @@ import { createCompanyEvent } from "./company-os/events";
 import { appendCompanyEvent } from "./company-os/outboxPublisher";
 import { callOpenAIResponses, type ResponsesInput } from "./ai/openai";
 import { GOVERNMENT_DOCUMENT_TYPES } from "./governmentDocumentTypes";
+import { checkDeclaredFile, mimeExtension, sniffProofMime, type ProofMime } from "./executionProofs/rules";
 
 export type GovernmentContext = {
   tenantId: string;
@@ -22,6 +23,14 @@ export type GovernmentUploadInput = {
   mimeType: string;
   fileBase64: string;
 };
+
+/**
+ * A document arrives inline (small files, the multipart form) or already in
+ * storage at the path of an upload slot (createGovernmentUploadSlot), so its
+ * size is bounded by Storage and not by the 4.5 MB request body of a function.
+ */
+export type GovernmentUploadRequest = Omit<GovernmentUploadInput, "fileBase64"> &
+  ({ fileBase64: string; storagePath?: undefined } | { storagePath: string; fileBase64?: undefined });
 
 type AnalysisAction = {
   title: string;
@@ -74,9 +83,14 @@ type AnalysisResult = {
 };
 
 /** Government Relations' own file limit; a proof file above it is refused before any download. */
-export const GOVERNMENT_MAX_FILE_BYTES = 8 * 1024 * 1024;
+export const GOVERNMENT_MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_FILE_BYTES = GOVERNMENT_MAX_FILE_BYTES;
 const GOVERNMENT_BUCKET = "government-documents";
+const BUCKET_OPTIONS = {
+  public: false,
+  fileSizeLimit: GOVERNMENT_MAX_FILE_BYTES,
+  allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain", "text/csv", "application/json"],
+};
 const DOCUMENT_MODEL = process.env.OPENAI_DOCUMENT_MODEL || "gpt-4.1-mini";
 
 const DOCUMENT_TYPES = new Set<string>(GOVERNMENT_DOCUMENT_TYPES);
@@ -117,10 +131,15 @@ function safeTenantPart(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 48) || "tenant";
 }
 
-function sanitizeFileName(value: string) {
+/**
+ * The file's part of its storage key. Storage accepts ASCII keys only (its
+ * VALID_OBJECT_KEY), so an Arabic name becomes the generic one here and is kept
+ * as it was in gov_document_files.file_name.
+ */
+function storageFileName(value: string) {
   const extension = value.includes(".") ? `.${value.split(".").pop()?.replace(/[^a-z0-9]/gi, "").slice(0, 8)}` : "";
-  const base = value.replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
-  return `${base || "government-document"}${extension}`;
+  const base = value.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return `${base || "government-document"}${extension === "." ? "" : extension}`;
 }
 
 function hashFile(buffer: Buffer) {
@@ -170,7 +189,7 @@ function validateUpload(input: GovernmentUploadInput) {
   if (!allowed) throw new Error("نوع الملف غير مدعوم. استخدم PDF أو صورة أو ملفاً نصياً.");
   const buffer = Buffer.from(input.fileBase64, "base64");
   if (!buffer.length) throw new Error("الملف فارغ أو غير صالح.");
-  if (buffer.length > MAX_FILE_BYTES) throw new Error("حجم الملف أكبر من 8 ميجابايت.");
+  if (buffer.length > MAX_FILE_BYTES) throw new Error(`حجم الملف أكبر من ${MAX_FILE_BYTES / (1024 * 1024)} ميجابايت.`);
   if (/كلمة المرور|password|رمز التحقق|verification code|\botp\b/i.test(input.notes || "")) {
     throw new Error("لا تضع كلمة مرور أو رمز تحقق أو بيانات نفاذ داخل الملاحظات.");
   }
@@ -401,13 +420,49 @@ async function ensureDepartment(context: GovernmentContext) {
 async function ensureBucket() {
   const db = supabase();
   const bucket = await db.storage.getBucket(GOVERNMENT_BUCKET);
-  if (!bucket.error) return;
-  const created = await db.storage.createBucket(GOVERNMENT_BUCKET, {
-    public: false,
-    fileSizeLimit: MAX_FILE_BYTES,
-    allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain", "text/csv", "application/json"],
-  });
-  if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
+  if (bucket.error || !bucket.data) {
+    const created = await db.storage.createBucket(GOVERNMENT_BUCKET, BUCKET_OPTIONS);
+    if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
+    return;
+  }
+  // A bucket created while the limit was 8 MB keeps refusing larger files:
+  // Storage enforces the bucket's own limit, whatever this module allows.
+  const limit = Number(bucket.data.file_size_limit || 0);
+  if (bucket.data.public || (limit > 0 && limit < GOVERNMENT_MAX_FILE_BYTES)) {
+    const updated = await db.storage.updateBucket(GOVERNMENT_BUCKET, BUCKET_OPTIONS);
+    if (updated.error) throw updated.error;
+  }
+}
+
+/** A signed URL the browser uploads one document to, straight into storage. */
+export async function createGovernmentUploadSlot(context: GovernmentContext, file: { fileName: string; mimeType: string; sizeBytes: number }) {
+  checkDeclaredFile(file);
+  const db = supabase();
+  await ensureBucket();
+  const path = `${safeTenantPart(context.tenantId)}/incoming/${randomUUID()}.${mimeExtension(file.mimeType as ProofMime)}`;
+  const slot = await db.storage.from(GOVERNMENT_BUCKET).createSignedUploadUrl(path);
+  if (slot.error || !slot.data) throw new Error(`تعذر تجهيز رفع الملف: ${slot.error?.message || "unknown error"}`);
+  return { path, signedUrl: slot.data.signedUrl };
+}
+
+/** The bytes an upload slot received, checked as the inline path checks them. */
+async function takeIncomingUpload(context: GovernmentContext, storagePath: string) {
+  const prefix = `${safeTenantPart(context.tenantId)}/incoming/`;
+  if (!storagePath.startsWith(prefix) || !/^[0-9a-f-]{36}\.(pdf|jpg|png|webp)$/.test(storagePath.slice(prefix.length))) {
+    throw new Error("مسار الملف لا يتبع رفعاً لهذه الشركة.");
+  }
+  const bucket = supabase().storage.from(GOVERNMENT_BUCKET);
+  const downloaded = await bucket.download(storagePath);
+  if (downloaded.error || !downloaded.data) throw new Error("لم يصل الملف إلى المخزن. أعد رفعه.");
+  const bytes = Buffer.from(await downloaded.data.arrayBuffer());
+  const mime = bytes.length && bytes.length <= MAX_FILE_BYTES ? sniffProofMime(new Uint8Array(bytes)) : null;
+  if (!mime) {
+    await bucket.remove([storagePath]);
+    throw new Error(bytes.length > MAX_FILE_BYTES
+      ? `حجم الملف أكبر من ${MAX_FILE_BYTES / (1024 * 1024)} ميجابايت.`
+      : "محتوى الملف ليس PDF ولا صورة JPEG أو PNG أو WEBP.");
+  }
+  return { bytes, mime, release: () => bucket.remove([storagePath]) };
 }
 
 async function feeSourceFor(tenantId: string, documentType: string) {
@@ -587,7 +642,7 @@ async function createFollowUpAutomation(context: GovernmentContext, document: an
 async function storeOriginalFile(context: GovernmentContext, documentId: string, input: GovernmentUploadInput, buffer: Buffer) {
   const db = supabase();
   await ensureBucket();
-  const safeName = sanitizeFileName(input.fileName);
+  const safeName = storageFileName(input.fileName);
   const path = `${safeTenantPart(context.tenantId)}/${documentId}/${randomUUID()}-${safeName}`;
   const contentHash = hashFile(buffer);
   const uploaded = await db.storage.from(GOVERNMENT_BUCKET).upload(path, buffer, {
@@ -633,7 +688,19 @@ async function persistExtraction(context: GovernmentContext, documentId: string,
   return data;
 }
 
-export async function uploadAndAutomateGovernmentDocument(context: GovernmentContext, input: GovernmentUploadInput) {
+export async function uploadAndAutomateGovernmentDocument(context: GovernmentContext, request: GovernmentUploadRequest) {
+  if (request.storagePath === undefined) return processUpload(context, request);
+  const incoming = await takeIncomingUpload(context, request.storagePath);
+  try {
+    const { documentType, title, issuer, notes, fileName } = request;
+    return await processUpload(context, { documentType, title, issuer, notes, fileName, mimeType: incoming.mime, fileBase64: incoming.bytes.toString("base64") });
+  } finally {
+    // The original is stored under the document; the incoming copy goes either way.
+    await incoming.release();
+  }
+}
+
+async function processUpload(context: GovernmentContext, input: GovernmentUploadInput) {
   const buffer = validateUpload(input);
   const db = supabase();
   await ensureDepartment(context);

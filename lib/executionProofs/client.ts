@@ -1,5 +1,6 @@
 /**
- * The browser's part of an execution proof: one file to its signed upload URL.
+ * The browser's part of a document upload: one file to its signed upload URL.
+ * Execution proofs and Government Relations both upload this way.
  *
  * The same request uploadToSignedUrl in @supabase/storage-js sends, without a
  * Supabase client or any key in the browser: the token in the URL, handed out
@@ -12,7 +13,7 @@ const MESSAGES = {
   dropped: "انقطع الاتصال أثناء رفع الملف. أعد المحاولة.",
 };
 
-export async function uploadToProofSlot(slot: { signedUrl: string }, file: File): Promise<void> {
+export async function uploadToSignedSlot(slot: { signedUrl: string }, file: File): Promise<void> {
   const body = new FormData();
   body.append("cacheControl", "3600");
   body.append("", file);

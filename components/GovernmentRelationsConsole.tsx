@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { uploadToSignedSlot } from "@/lib/executionProofs/client";
+import { MAX_PROOF_FILE_BYTES, isProofMime } from "@/lib/executionProofs/rules";
 import {
   AlertTriangle,
   Brain,
@@ -122,6 +124,9 @@ type DashboardResponse = {
   error?: string;
 };
 
+/** A text file still rides in the request body, which the platform caps at 4.5 MB. */
+const INLINE_MAX_BYTES = 3 * 1024 * 1024;
+
 const documentTypes = [
   ["COMMERCIAL_REGISTRATION", "السجل التجاري"],
   ["VAT_CERTIFICATE", "شهادة ضريبة القيمة المضافة"],
@@ -231,20 +236,48 @@ export default function GovernmentRelationsConsole() {
       setError("اختر ملفاً أولاً.");
       return;
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setError("حجم الملف أكبر من 8 ميجابايت.");
+    // A PDF or an image goes straight to private storage, so only Storage
+    // bounds its size; anything else still rides in the request, whose body
+    // the platform caps at 4.5 MB.
+    const direct = isProofMime(file.type);
+    if (direct && file.size > MAX_PROOF_FILE_BYTES) {
+      setError("حجم الملف أكبر من 20 ميجابايت.");
+      return;
+    }
+    if (!direct && file.size > INLINE_MAX_BYTES) {
+      setError("الملف النصي حتى 3 ميجابايت. ارفع الوثيقة PDF أو صورة إن كانت أكبر.");
       return;
     }
 
     setWorking(true);
     setError("");
-    setMessage("جاري حفظ الملف الأصلي وتحليله وإنشاء مهام المتابعة...");
     const form = new FormData(formElement);
-    form.set("action", "upload-document");
-    form.set("file", file);
+    const fields = Object.fromEntries(["documentType", "title", "issuer", "notes"].map((name) => [name, String(form.get(name) || "")]));
 
     try {
-      const res = await fetch("/api/government-relations", { method: "POST", body: form });
+      let res: Response;
+      if (direct) {
+        setMessage("جاري رفع الملف إلى المساحة الخاصة بالشركة...");
+        const slotRes = await fetch("/api/government-relations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upload-slot", data: { fileName: file.name, mimeType: file.type, sizeBytes: file.size } }),
+        });
+        const slot = await slotRes.json().catch(() => ({}));
+        if (!slotRes.ok || !slot.ok) throw new Error(slot.error || "تعذر تجهيز رفع الملف.");
+        await uploadToSignedSlot({ signedUrl: slot.result.signedUrl }, file);
+        setMessage("جاري حفظ الملف الأصلي وتحليله وإنشاء مهام المتابعة...");
+        res = await fetch("/api/government-relations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upload-document", data: { ...fields, storagePath: slot.result.path, fileName: file.name, mimeType: file.type } }),
+        });
+      } else {
+        setMessage("جاري حفظ الملف الأصلي وتحليله وإنشاء مهام المتابعة...");
+        form.set("action", "upload-document");
+        form.set("file", file);
+        res = await fetch("/api/government-relations", { method: "POST", body: form });
+      }
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر رفع الوثيقة.");
       const result = json.result || {};
@@ -378,7 +411,7 @@ export default function GovernmentRelationsConsole() {
               onChange={(event) => setFile(event.target.files?.[0] || null)}
             />
           </label>
-          {file && <p className="muted" style={{ margin: 0 }}>{file.name} · {humanBytes(file.size)}</p>}
+          <p className="muted" style={{ margin: 0 }}>{file ? `${file.name} · ${humanBytes(file.size)}` : "PDF أو صورة حتى 20 ميجابايت، والملف النصي حتى 3 ميجابايت."}</p>
           <label>
             ملاحظة تشغيلية
             <textarea className="textarea compact" name="notes" placeholder="اكتب سياق المعاملة فقط، ولا تضع كلمة مرور أو رمز تحقق أو بيانات نفاذ" />
