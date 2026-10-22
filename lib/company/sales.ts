@@ -160,9 +160,9 @@ export async function proposeIncomeRecognition(): Promise<ProposeResult> {
   const approval = await createApprovalCritical({
     type: "INCOME",
     title: `اعتماد مداخيل المبيعات (${pending.length} طلب)`,
-    detail: `إجمالي ${amount.toLocaleString("ar-SA")} ${currency} من طلبات مدفوعة على «${snap.shopName}» — يعتمدها ${tier.approver} (فئة ${tier.tier}).`,
+    detail: `إجمالي ${amount.toLocaleString("ar-SA-u-nu-latn")} ${currency} من طلبات مدفوعة على «${snap.shopName}»، يعتمدها ${tier.approver} (فئة ${tier.tier}).`,
     amount,
-    requestedRole: "سارة — المبيعات",
+    requestedRole: "سارة، المبيعات",
     dedupeKey: `income-${orderIds.join(",")}`,
     metadata: { kind: "INCOME", orderIds, amount, currency },
   });
@@ -212,12 +212,12 @@ export async function recognizeIncome(metadata: Record<string, unknown>): Promis
     action: "RECOGNIZE_INCOME",
     entityType: "income",
     entityId: entryId,
-    detail: `اعتماد مداخيل ${amount.toLocaleString("ar-SA")} ${currency} · صافي ${sale.net} + ضريبة ${sale.vat} · فاتورة ${invoice.invoiceNumber}`,
+    detail: `اعتماد مداخيل ${amount.toLocaleString("ar-SA-u-nu-latn")} ${currency} · صافي ${sale.net} + ضريبة ${sale.vat} · فاتورة ${invoice.invoiceNumber}`,
   });
 
   return {
     executed: true,
-    reason: `تم اعتماد ${amount.toLocaleString("ar-SA")} ${currency}: صافي ${sale.net} + ضريبة قيمة مضافة ${sale.vat} · فاتورة ${invoice.invoiceNumber}.`,
+    reason: `تم اعتماد ${amount.toLocaleString("ar-SA-u-nu-latn")} ${currency}: صافي ${sale.net} + ضريبة قيمة مضافة ${sale.vat} · فاتورة ${invoice.invoiceNumber}.`,
   };
 }
 
@@ -264,9 +264,9 @@ export function proposeSalesChange(input: SalesChangeInput): ProposeResult {
 
   const approval = createApproval({
     type: "SALES_CHANGE",
-    title: `طلب تعديل المتجر: ${kindLabels[input.kind]} — ${input.target}`,
+    title: `طلب تعديل المتجر: ${kindLabels[input.kind]}: ${input.target}`,
     detail: `${input.detail} · يُطبَّق على المتجر بعد اعتماد الرئيس التنفيذي.`,
-    requestedRole: "سلطان — الرئيس التنفيذي",
+    requestedRole: "سلطان، الرئيس التنفيذي",
     dedupeKey: `change-${change.id}`,
     metadata: {
       kind: "SALES_CHANGE",

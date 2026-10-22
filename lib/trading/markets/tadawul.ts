@@ -70,8 +70,8 @@ export function getTadawulMarketState(now: Date = new Date()): TadawulMarketStat
 /** Simulated Saudi-market opportunities for the desk (paper). */
 export function sampleTadawulOpportunities(): MarketOpportunity[] {
   return [
-    { id: "tdwl-2222", symbol: "2222", assetClass: "TADAWUL", title: "أرامكو 2222 — استقرار وتوزيعات", expectedReturn: 0.07, risk: "LOW", confidence: 0.7, entryPrice: 28.5, horizonDays: 30, source: "tadawul-scan" },
-    { id: "tdwl-1120", symbol: "1120", assetClass: "TADAWUL", title: "الراجحي 1120 — زخم قطاع البنوك", expectedReturn: 0.12, risk: "MEDIUM", confidence: 0.68, entryPrice: 92, horizonDays: 21, source: "tadawul-scan" },
-    { id: "tdwl-2010", symbol: "2010", assetClass: "TADAWUL", title: "سابك 2010 — انتعاش البتروكيماويات", expectedReturn: 0.15, risk: "MEDIUM", confidence: 0.6, entryPrice: 72, horizonDays: 30, source: "tadawul-scan" },
+    { id: "tdwl-2222", symbol: "2222", assetClass: "TADAWUL", title: "أرامكو 2222: استقرار وتوزيعات", expectedReturn: 0.07, risk: "LOW", confidence: 0.7, entryPrice: 28.5, horizonDays: 30, source: "tadawul-scan" },
+    { id: "tdwl-1120", symbol: "1120", assetClass: "TADAWUL", title: "الراجحي 1120: زخم قطاع البنوك", expectedReturn: 0.12, risk: "MEDIUM", confidence: 0.68, entryPrice: 92, horizonDays: 21, source: "tadawul-scan" },
+    { id: "tdwl-2010", symbol: "2010", assetClass: "TADAWUL", title: "سابك 2010: انتعاش البتروكيماويات", expectedReturn: 0.15, risk: "MEDIUM", confidence: 0.6, entryPrice: 72, horizonDays: 30, source: "tadawul-scan" },
   ];
 }

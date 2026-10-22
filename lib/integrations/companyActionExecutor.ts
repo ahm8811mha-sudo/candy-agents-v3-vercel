@@ -235,7 +235,7 @@ export async function executeCompanyActionIntegration(
         const execution = await createReliableGmailDraft(resolvedTenantId, {
           actionId: claimed.id,
           to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
-          subject: payload.subject || `Orvanta — ${claimed.title}`,
+          subject: payload.subject || `Orvanta: ${claimed.title}`,
           html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
         });
         output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };
@@ -245,7 +245,7 @@ export async function executeCompanyActionIntegration(
         const execution = await sendReliableGmailMessage(resolvedTenantId, {
           actionId: claimed.id,
           to: payload.to || process.env.GOOGLE_DEFAULT_REVIEW_EMAIL,
-          subject: payload.subject || `Orvanta — ${claimed.title}`,
+          subject: payload.subject || `Orvanta: ${claimed.title}`,
           html: payload.html || (payload.body ? `<div dir="rtl"><p>${escapeHtml(payload.body)}</p></div>` : defaultEmailHtml(claimed)),
         });
         output = { ...(execution.value as unknown as Record<string, unknown>), integrationAttemptId: execution.attemptId, receiptId: execution.receiptId || null, idempotent: execution.idempotent };

@@ -35,7 +35,7 @@ describe("owner access code strength gate", () => {
     const check = gate("owner-code-strength");
     expect(check).toBeDefined();
     expect(check?.severity).toBe("WARN");
-    expect(check?.detail).toMatch(/8 characters/);
+    expect(check?.detail).toMatch(/عدد أحرف رمز المالك المضبوط 8 فقط/);
   });
 
   it("passes when the configured owner code is strong", () => {

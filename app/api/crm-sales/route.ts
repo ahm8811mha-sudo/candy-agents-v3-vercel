@@ -1,5 +1,6 @@
 import { convertLatestCampaignToLead, createActivity, createDeal, createLead, createSalesQuote, getCrmSalesOS, seedCrmSalesOS } from "@/lib/crmSales";
 import { NextResponse } from "next/server";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export async function GET() {
     const data = await getCrmSalesOS();
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "CRM failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر تحميل بيانات المبيعات." }, { status: failureStatus(error) });
   }
 }
 
@@ -30,6 +31,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: false, error: "Invalid CRM action" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "CRM action failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء المبيعات." }, { status: failureStatus(error) });
   }
 }

@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { getTenantId, isMultiTenantEnabled } from "./tenant";
 import { rememberDurableAuditRow } from "./company/audit";
 
@@ -72,7 +72,7 @@ function number(value: unknown) {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured for accounting.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured for accounting.");
   return supabase;
 }
 

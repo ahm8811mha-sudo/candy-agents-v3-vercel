@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Bot, Loader2, Play, RefreshCw, ShieldAlert } from "lucide-react";
+import { BadgeCheck, Loader2, Play, RefreshCw, ShieldAlert } from "lucide-react";
 import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type RuntimeStatus = {
@@ -124,7 +124,7 @@ export default function EmployeeRuntimeConsole() {
       const order = data.workOrder as WorkOrder | undefined;
       setMessage(
         order
-          ? `${order.workOrderNumber} — ${labels[order.status] || order.status}`
+          ? `${order.workOrderNumber} · ${labels[order.status] || order.status}`
           : "تم استلام الطلب."
       );
       await load();
@@ -151,7 +151,7 @@ export default function EmployeeRuntimeConsole() {
       minimumMarginPercent: number(form, "minimumMarginPercent") || 20,
       paymentReference: text(form, "paymentReference"),
       paymentConfirmed: true,
-      channel: text(form, "channel") || "direct",
+      channel: text(form, "channel") || "مباشر",
     });
   }
 
@@ -203,7 +203,6 @@ export default function EmployeeRuntimeConsole() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Bot size={16} /> Employee Runtime V2</span>
           <h1 className="glow-title">الموظفون الذاتيون</h1>
           <p className="page-sub">
             الموظف يخطط وينفذ ويتحقق ويسجل إيصالًا، ويصعّد لك الاعتماد أو الاستثناء فقط.
@@ -214,7 +213,7 @@ export default function EmployeeRuntimeConsole() {
             {runtime?.mode === "LIVE" ? "تنفيذ فعلي LIVE" : "محاكاة آمنة"}
           </span>
           <small>
-            قاعدة البيانات: {runtime?.databaseReady ? "جاهزة" : "غير مكتملة"} · SOP: {runtime?.sopRegistry?.missing?.length ? "ناقص" : "مكتمل"}
+            قاعدة البيانات: {runtime?.databaseReady ? "جاهزة" : "غير مكتملة"} · إجراءات التشغيل: {runtime?.sopRegistry?.missing?.length ? "ناقص" : "مكتمل"}
           </small>
         </div>
       </header>
@@ -262,14 +261,14 @@ export default function EmployeeRuntimeConsole() {
               <label className="field-label">اسم العميل<input className={fields} name="customerName" required /></label>
               <label className="field-label">بريد العميل<input className={fields} name="customerEmail" /></label>
               <label className="field-label">اسم المنتج<input className={fields} name="productName" required /></label>
-              <label className="field-label">رمز SKU<input className={fields} name="sku" required /></label>
+              <label className="field-label">رمز الصنف<input className={fields} name="sku" required /></label>
               <label className="field-label">الكمية<input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required /></label>
               <label className="field-label">قيمة البيع (ر.س)<input className={fields} name="amountSAR" type="number" min="0.01" step="0.01" required /></label>
               <label className="field-label">الضريبة (ر.س)<input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
               <label className="field-label">تكلفة الوحدة (ر.س)<input className={fields} name="unitCostSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
               <label className="field-label">أقل هامش مقبول (%)<input className={fields} name="minimumMarginPercent" type="number" min="0" step="0.01" defaultValue="20" /></label>
               <label className="field-label">مرجع الدفع<input className={fields} name="paymentReference" required /></label>
-              <label className="field-label">قناة البيع<input className={fields} name="channel" defaultValue="direct" /></label>
+              <label className="field-label">قناة البيع<input className={fields} name="channel" defaultValue="مباشر" /></label>
             </div>
             <button className="primary-btn" disabled={busy}>
               {busy ? <Loader2 className="spin" size={15} /> : <Play size={15} />} تشغيل دورة البيع
@@ -286,7 +285,7 @@ export default function EmployeeRuntimeConsole() {
               <label className="field-label">اسم المورد<input className={fields} name="supplierName" required /></label>
               <label className="field-label">بريد المورد<input className={fields} name="supplierEmail" /></label>
               <label className="field-label">الصنف<input className={fields} name="itemName" required /></label>
-              <label className="field-label">رمز SKU<input className={fields} name="sku" required /></label>
+              <label className="field-label">رمز الصنف<input className={fields} name="sku" required /></label>
               <label className="field-label">الكمية<input className={fields} name="quantity" type="number" min="1" step="1" defaultValue="1" required /></label>
               <label className="field-label">سعر الوحدة (ر.س)<input className={fields} name="unitPriceSAR" type="number" min="0.01" step="0.01" required /></label>
               <label className="field-label">الضريبة (ر.س)<input className={fields} name="taxSAR" type="number" min="0" step="0.01" defaultValue="0" /></label>
@@ -306,14 +305,14 @@ export default function EmployeeRuntimeConsole() {
             <strong>الفكرة إلى التنفيذ</strong>
             <p className="page-sub">اختر فكرة من الأفكار المعتمدة فعلياً في مركز القرار؛ العنوان والميزانية وحالة الاعتماد تُقرأ من السجل الرسمي.</p>
             {approvedIdeas.filter((idea) => !idea.executed).length === 0 ? (
-              <p className="page-sub">لا توجد أفكار معتمدة متاحة للتحويل بعد — اعتمد فكرة من مركز القرار أولاً، ثم ستظهر هنا تلقائياً.</p>
+              <p className="page-sub">لا توجد أفكار معتمدة متاحة للتحويل بعد. اعتمد فكرة من مركز القرار أولاً، ثم ستظهر هنا تلقائياً.</p>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: fluidColumns(2, 180, 10), gap: 10 }}>
                 <label className="field-label">الفكرة المعتمدة<select className={fields} name="ideaId" required defaultValue="">
                   <option value="" disabled>اختر الفكرة المعتمدة</option>
                   {approvedIdeas.filter((idea) => !idea.executed).map((idea) => (
                     <option key={idea.id} value={idea.id}>
-                      {idea.title}{Number(idea.budgetSAR || 0) > 0 ? ` — ${Number(idea.budgetSAR).toLocaleString("ar-SA-u-nu-latn")} ر.س` : ""}
+                      {idea.title}{Number(idea.budgetSAR || 0) > 0 ? ` · ${Number(idea.budgetSAR).toLocaleString("ar-SA-u-nu-latn")} ر.س` : ""}
                     </option>
                   ))}
                 </select></label>
@@ -348,7 +347,7 @@ export default function EmployeeRuntimeConsole() {
                 <div>
                   <span className="bento-kicker">{order.workOrderNumber} · {order.executionMode}</span>
                   <strong style={{ display: "block" }}>{order.title}</strong>
-                  <small>{labels[order.kind] || order.kind} · {order.projectNumber} · {order.amountSAR.toLocaleString("ar-SA")} ر.س</small>
+                  <small>{labels[order.kind] || order.kind} · {order.projectNumber} · {order.amountSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س</small>
                 </div>
                 <span className={`mini-pill ${["WAITING_APPROVAL", "ESCALATED", "FAILED"].includes(order.status) ? "high" : ""}`}>
                   {labels[order.status] || order.status}

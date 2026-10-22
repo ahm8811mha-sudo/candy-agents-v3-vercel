@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { generateExecutiveReport, formatReportAsText } from "@/lib/reportGenerator";
 import { triggerNotification } from "@/lib/integrations";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "@/lib/supabase";
 import { executeTrackedCron } from "@/lib/operations/trackedCron";
 import { raiseSystemAlert, resolveSystemAlert } from "@/lib/operations/systemAlerts";
 
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       }
 
       const supabase = getSupabaseAdmin();
-      if (!supabase) throw new Error("Supabase is required to persist executive report evidence.");
+      if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required to persist executive report evidence.");
       const { error } = await supabase.from("activity_logs").insert({
         id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         tenant_id: context.tenantId,

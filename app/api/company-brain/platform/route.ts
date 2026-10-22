@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError, failureStatus } from "@/lib/supabase";
 import { runCompanyBrainCycle } from "@/lib/company-intelligence/platform";
 import { listInstalledSkills } from "@/lib/company-intelligence/skillRuntime";
 
@@ -10,7 +10,7 @@ export const maxDuration = 300;
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for Company Brain.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for Company Brain.");
   return supabase;
 }
 
@@ -106,10 +106,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Company Brain state failed.",
+        error: error instanceof Error ? error.message : "تعذر تحميل العقل المؤسسي.",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }
@@ -162,10 +162,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Company Brain refresh failed.",
+        error: error instanceof Error ? error.message : "تعذر تحديث العقل المؤسسي.",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }

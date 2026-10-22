@@ -60,7 +60,7 @@ type Project = {
   tasks: ProjectTask[];
 };
 
-const sar = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 /** Steps are grouped by what the owner has to do about them, not by raw status. */
 const GROUPS: Array<{ key: string; label: string; states: TaskExecutionState[] }> = [
@@ -237,7 +237,7 @@ export default function ProjectsBoard() {
                   <div>
                     <span className="bento-kicker">
                       {selected.projectNumber ? `مشروع #${selected.projectNumber}` : "مشروع"} · {selected.status}
-                      {selected.createdAt ? ` · أُنشئ ${new Date(selected.createdAt).toLocaleDateString("ar-SA")}` : ""}
+                      {selected.createdAt ? ` · أُنشئ ${new Date(selected.createdAt).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}
                     </span>
                     <h2 className="decide-detail__title">{selected.name}</h2>
                   </div>

@@ -1,5 +1,6 @@
 import { getEnterpriseStatus, runOpportunityRadar, seedEnterpriseOperatingSystem } from "@/lib/enterpriseSystems";
 import { NextResponse } from "next/server";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +10,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Enterprise OS failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تحميل نظام المؤسسة." },
+      { status: failureStatus(error) }
     );
   }
 }
@@ -29,8 +30,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Enterprise OS action failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء نظام المؤسسة." },
+      { status: failureStatus(error) }
     );
   }
 }

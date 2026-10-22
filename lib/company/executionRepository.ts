@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { rememberDurableApprovalRow, type ApprovalItem } from "../approvals";
 import { rememberDurableAuditRow } from "./audit";
 import { normalizeTenantId } from "../tenant";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 
 export type ExecutionBundleTask = {
   title: string;
@@ -211,7 +211,7 @@ function asRows(value: unknown): Record<string, unknown>[] {
  */
 export async function createExecutionBundle(input: CreateExecutionBundleInput): Promise<ExecutionBundleResult> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for durable company execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for durable company execution.");
 
   const bundle = buildRpcBundle(input);
   const { data, error } = await supabase.rpc("orvanta_create_execution_bundle", { p_bundle: bundle });

@@ -45,7 +45,7 @@ export function HorizontalBar({ data, title }: { data: BarData[]; title: string 
         <div key={item.label} className="bar-item">
           <div className="bar-item-header">
             <span className="bar-item-label">{item.label}</span>
-            <span className="bar-item-value">{item.value.toLocaleString("ar-SA")}</span>
+            <span className="bar-item-value">{item.value.toLocaleString("ar-SA-u-nu-latn")}</span>
           </div>
           <div className="bar-track">
             <div
@@ -81,7 +81,7 @@ export function MiniMetric({
     <div className="mini-metric">
       <small className="mini-metric-label">{title}</small>
       <div className="mini-metric-row">
-        <strong className="mini-metric-value">{value.toLocaleString("ar-SA")}</strong>
+        <strong className="mini-metric-value">{value.toLocaleString("ar-SA-u-nu-latn")}</strong>
         {unit && <small className="mini-metric-unit">{unit}</small>}
       </div>
       {trend && (

@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   CheckCircle2,
   Clock3,
@@ -16,7 +15,6 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import OrvantaLogo from "@/components/OrvantaLogo";
 
 type CrisisSeverity = "MEDIUM" | "HIGH" | "CRITICAL";
 type CrisisStatus = "OPEN" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "CLOSED";
@@ -58,7 +56,7 @@ type CrisisCase = {
 
 type CrisisStats = { total: number; open: number; pending: number; approved: number; rejected: number; exposureSAR: number };
 
-const sar = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const severityMeta: Record<CrisisSeverity, { label: string; pill: string }> = {
   MEDIUM: { label: "متوسطة", pill: "medium" },
@@ -149,20 +147,15 @@ export default function RecoveryCenterPage() {
 
   return (
     <main className="page-wrap">
-      <section className="hero-scenic" style={{ textAlign: "start", justifyItems: "stretch" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
-          <OrvantaLogo size={54} subtitle="Crisis Room" />
-          <span className="hero-pill"><AlertTriangle size={14} /> غرفة الأزمات · من المشكلة إلى خطة خروج قابلة للاعتماد</span>
+      <header className="page-head">
+        <div>
+          <h1>غرفة الأزمات</h1>
+          <p className="page-sub">
+            المشكلة الحرجة تدخل هنا، فتتحول إلى تشخيص ووكلاء مسؤولين ومسارات إغلاق وطلب اعتماد في{" "}
+            <Link href="/inbox">مكتب القرار</Link>. أما الأفكار فمكانها <Link href="/ideas">الأفكار والدراسات</Link>.
+          </p>
         </div>
-        <h1 className="hero-title" style={{ maxWidth: "none" }}>Crisis Room<br />غرفة مستقلة لمعالجة <em>المشاكل الحرجة</em></h1>
-        <p className="hero-sub" style={{ maxWidth: 820 }}>
-          ليست قسم أفكار. هنا تدخل المشكلة، فيحوّلها Orvanta إلى تشخيص، وكلاء مسؤولين، مسارات إغلاق، Action Queue، وبند اعتماد داخل مركز القرار.
-        </p>
-        <div className="hero-actions" style={{ justifyContent: "flex-start" }}>
-          <Link className="primary-btn" href="/inbox"><Inbox size={17} /> مركز القرار</Link>
-          <Link className="secondary-btn" href="/ideas"><ArrowLeft size={17} /> الأفكار منفصلة هنا</Link>
-        </div>
-      </section>
+      </header>
 
       <section className="bento-card bento-full" style={{ gap: 12 }}>
         <span className="bento-kicker"><AlertTriangle size={15} /> إنشاء أزمة جديدة</span>
@@ -255,7 +248,7 @@ export default function RecoveryCenterPage() {
           <section className="bento-card bento-full bento-card--glow" style={{ gap: 10 }}>
             <span className="bento-kicker"><CheckCircle2 size={15} /> التوصية النهائية</span>
             <strong style={{ color: "var(--text-strong)", fontSize: "1.15rem", lineHeight: 1.8 }}>
-              الحل الصحيح ليس قرضًا جديدًا كخيار أول. الحل هو إغلاق الفجوة على أربع جبهات: تحصيل، خفض مؤقت، تفاوض موردين، وإيراد سريع — ثم اعتماد أي مسار حساس من مركز القرار.
+              الحل الصحيح ليس قرضًا جديدًا كخيار أول. الحل هو إغلاق الفجوة على أربع جبهات: تحصيل، خفض مؤقت، تفاوض موردين، وإيراد سريع، ثم اعتماد أي مسار حساس من مركز القرار.
             </strong>
           </section>
         </>

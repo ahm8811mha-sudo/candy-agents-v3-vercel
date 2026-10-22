@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, RefreshCw, Loader2, Database, ShieldCheck } from "lucide-react";
+import { RefreshCw, Loader2, Database, ShieldCheck } from "lucide-react";
 import OperationalReliabilityPanel from "@/components/OperationalReliabilityPanel";
 
 type Severity = "PASS" | "WARN" | "FAIL";
@@ -107,7 +107,7 @@ export default function StatusPage() {
       ]);
       if (h) setHealth(h);
       if (s) setDb(s);
-      setCheckedAt(new Date().toLocaleTimeString("ar-SA"));
+      setCheckedAt(new Date().toLocaleTimeString("ar-SA-u-nu-latn"));
     } finally {
       setLoading(false);
     }
@@ -147,8 +147,7 @@ export default function StatusPage() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Activity size={16} /> حالة النظام</span>
-          <h1 className="glow-title">النظام</h1>
+          <h1 className="glow-title">حالة النظام</h1>
           <p className="page-sub">
             الحالة الحقيقية للبنية، الحماية، المهام المجدولة، التنبيهات، الكتابات والتكاملات{checkedAt ? ` · آخر فحص ${checkedAt}` : ""}.
           </p>
@@ -214,7 +213,7 @@ export default function StatusPage() {
 
       {db?.configured && (
         <section className="bento-card bento-full" style={{ gap: 10 }}>
-          <span className="bento-kicker"><Database size={15} /> الديمومة — {db.projectHost}</span>
+          <span className="bento-kicker"><Database size={15} /> الديمومة: {db.projectHost}</span>
           <div className="bento-list">
             {Object.entries(db.tables || {}).map(([table, state]) => (
               <div key={table} className="bento-list__row">

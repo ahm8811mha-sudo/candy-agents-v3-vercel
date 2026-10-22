@@ -55,7 +55,7 @@ export default function ActionableMetricGrid({ metrics }: { metrics: ActionableM
 
       {activeMetric && (
         <section className="ops-card metric-drilldown">
-          <h2>{activeMetric.label} — العناصر ({activeMetric.items.length})</h2>
+          <h2>{activeMetric.label}: العناصر ({activeMetric.items.length})</h2>
           {activeMetric.items.length === 0 && (
             <div className="empty-state metric-drilldown__empty">
               <Inbox size={26} />

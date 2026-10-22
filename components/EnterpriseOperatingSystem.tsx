@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Banknote,
-  BriefcaseBusiness,
-  Building2,
   CalendarCheck,
   CheckCircle2,
   Gauge,
@@ -22,6 +20,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { riskLabel, workStatusLabel } from "@/lib/ui/statusLabels";
 
 type EnterpriseStatus = {
   ok: boolean;
@@ -76,7 +75,7 @@ type EnterpriseStatus = {
   alerts?: { metrics?: { open: number; critical: number; high: number } };
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -96,7 +95,7 @@ export default function EnterpriseOperatingSystem() {
     try {
       const res = await fetch("/api/enterprise-os", { cache: "no-store" });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل Enterprise OS.");
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل نظام المؤسسة.");
       const governanceRes = await fetch("/api/governance", { cache: "no-store" });
       const governanceJson = await governanceRes.json();
       const governmentRes = await fetch("/api/government-relations", { cache: "no-store" });
@@ -116,7 +115,7 @@ export default function EnterpriseOperatingSystem() {
         alerts: alertsJson.ok ? alertsJson : undefined,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تحميل Enterprise OS.");
+      setError(err instanceof Error ? err.message : "تعذر تحميل نظام المؤسسة.");
     } finally {
       setLoading(false);
     }
@@ -160,31 +159,25 @@ export default function EnterpriseOperatingSystem() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <Building2 size={16} /> Enterprise OS
-          </span>
-          <h1>نظام تشغيل الشركة القادم</h1>
+          <h1>نظام المؤسسة</h1>
           <p>
-            هذه الصفحة تجمع الترقية المطلوبة: نظام محاسبي احترافي، مكتب مدير تنفيذي، إدارة تسويق عالمية، رادار فرص مبادر، وتوجه تجاري واضح.
+            المرحلة التالية لتشغيل الشركة في صفحة واحدة: المحاسبة، ومكتب الرئيس التنفيذي، والتسويق، ورادار الفرص، والتوجه التجاري.
           </p>
           <div className="department-hero-actions">
             <span>
               <Gauge size={16} /> صحة الشركة {data?.intelligence?.healthScore ?? 0}/100
             </span>
             <span>
-              <ShieldCheck size={16} /> المخاطر {data?.intelligence?.riskLevel || "LOW"}
+              <ShieldCheck size={16} /> المخاطر: {riskLabel(data?.intelligence?.riskLevel)}
             </span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>Operating Model</strong>
-          <small>Next phase</small>
         </div>
       </section>
 
       <section className="enterprise-actions">
         <input
           className="input"
+          aria-label="طلب الفرصة"
           value={opportunityRequest}
           onChange={(event) => setOpportunityRequest(event.target.value)}
           placeholder="اكتب طلب الفرصة: مثال، ابحث عن فرصة تجارية قابلة للتنفيذ بميزانية محددة"
@@ -209,10 +202,7 @@ export default function EnterpriseOperatingSystem() {
         <section className="delivery-panel">
           <div className="delivery-header">
             <div>
-              <span className="eyebrow">
-                <Radar size={16} /> ملف الفرصة قبل قرار CEO
-              </span>
-              <h2>{String(latestOpportunity.title)}</h2>
+              <h2><span className="lead-in">ملف الفرصة:</span> {String(latestOpportunity.title)}</h2>
             </div>
             <span className="status-pill">{String(ceoDecision.final_decision || latestOpportunityRun?.status || "PENDING")}</span>
           </div>
@@ -236,7 +226,7 @@ export default function EnterpriseOperatingSystem() {
             </article>
             <article>
               <strong>دراسة المركز المالي</strong>
-              <p>{String(financeReview.decision || "بانتظار مراجعة CFO")}</p>
+              <p>{String(financeReview.decision || "بانتظار مراجعة المدير المالي")}</p>
               <small>المخاطر: {String(financeReview.financial_risk || latestOpportunity.risk || "-")}</small>
             </article>
             <article>
@@ -268,19 +258,19 @@ export default function EnterpriseOperatingSystem() {
         <SystemCard
           icon={CalendarCheck}
           title="مكتب المدير التنفيذي"
-          status="Executive office ready"
-          body="مكتب CEO يتابع الإيقاع التشغيلي، الاجتماعات، الموافقات، المتابعات، المخاطر، وحزم التقارير الأسبوعية والشهرية."
+          status="المكتب جاهز"
+          body="المكتب التنفيذي يتابع الإيقاع التشغيلي، الاجتماعات، الموافقات، المتابعات، المخاطر، وحزم التقارير الأسبوعية والشهرية."
           metrics={[
             ["بنود المكتب", data?.ceoItems?.length || 0],
             ["قرار اليوم", data?.intelligence?.actionToday ? 1 : 0],
-            ["مخاطر", data?.intelligence?.riskLevel || "LOW"],
+            ["مخاطر", riskLabel(data?.intelligence?.riskLevel)],
           ]}
         />
         <SystemCard
           icon={Megaphone}
           title="إدارة التسويق"
-          status="Growth operating model"
-          body="التسويق يجب أن يعمل كمسؤول نمو وابتكار: عرض، جمهور، قنوات، CAC، Funnel، محتوى، حملات، اختبارات ورسائل."
+          status="نموذج تشغيل النمو"
+          body="التسويق يجب أن يعمل كمسؤول نمو وابتكار: عرض، جمهور، قنوات، تكلفة اكتساب العميل، قمع المبيعات، محتوى، حملات، اختبارات ورسائل."
           metrics={[
             ["القنوات", data?.marketingChannels?.length || 0],
             ["الحملات", data?.marketingCampaigns?.length || 0],
@@ -290,19 +280,19 @@ export default function EnterpriseOperatingSystem() {
         <SystemCard
           icon={Radar}
           title="رادار السوق والفرص"
-          status="Proactive daily scan"
-          body="المركز لم يعد ينتظر طلبًا فقط. تم تجهيز مسار يومي يقترح فرصًا ويرفعها إلى CFO وCEO وMarketing للمراجعة."
+          status="مسح يومي مبادر"
+          body="المركز لم يعد ينتظر طلبًا فقط. تم تجهيز مسار يومي يقترح فرصًا ويرفعها إلى المدير المالي والرئيس التنفيذي والتسويق للمراجعة."
           metrics={[
             ["عمليات الرادار", data?.opportunityRuns?.length || 0],
-            ["آخر حالة", data?.opportunityRuns?.[0]?.status || "لم يعمل"],
+            ["آخر حالة", data?.opportunityRuns?.[0]?.status ? workStatusLabel(data.opportunityRuns[0].status) : "لم يعمل"],
             ["المبادرة", "يومية"],
           ]}
         />
         <SystemCard
           icon={LockKeyhole}
           title="الحوكمة والصلاحيات"
-          status="Approval gates active"
-          body="النظام يفرق بين الاقتراح والتنفيذ، ويمنع الإنفاق أو التوسع عالي المخاطر بدون اعتماد CFO أو CEO، مع سجل قرارات محفوظ."
+          status="بوابات الاعتماد مفعّلة"
+          body="النظام يفرق بين الاقتراح والتنفيذ، ويمنع الإنفاق أو التوسع عالي المخاطر بدون اعتماد المدير المالي أو الرئيس التنفيذي، مع سجل قرارات محفوظ."
           metrics={[
             ["الأدوار", data?.governance?.roles?.length || 0],
             ["سياسات الاعتماد", data?.governance?.policies?.length || 0],
@@ -312,7 +302,7 @@ export default function EnterpriseOperatingSystem() {
         <SystemCard
           icon={Landmark}
           title="العلاقات الحكومية"
-          status="Government documents control"
+          status="ضبط الوثائق الحكومية"
           body="أرشيف وثائق حكومي يقرأ السجلات والشهادات والرخص، يراقب الانتهاء، يتحقق من الرسوم من المصادر الرسمية، ويجهز مسار التجديد."
           metrics={[
             ["الوثائق", data?.government?.metrics?.totalDocuments || 0],
@@ -322,19 +312,19 @@ export default function EnterpriseOperatingSystem() {
         />
         <SystemCard
           icon={Users}
-          title="CRM والمبيعات"
-          status="Pipeline operating model"
-          body="تحويل التسويق إلى Leads وصفقات وعروض أسعار ومتابعات، حتى يعرف CEO أين تتحول الفرص إلى إيراد."
+          title="العملاء والمبيعات"
+          status="نموذج تشغيل الصفقات"
+          body="تحويل التسويق إلى عملاء محتملين وصفقات وعروض أسعار ومتابعات، حتى يعرف الرئيس التنفيذي أين تتحول الفرص إلى إيراد."
           metrics={[
-            ["Leads", data?.crm?.metrics?.leads || 0],
-            ["Pipeline", currency.format(data?.crm?.metrics?.openPipeline || 0)],
+            ["العملاء المحتملون", data?.crm?.metrics?.leads || 0],
+            ["الصفقات المفتوحة", currency.format(data?.crm?.metrics?.openPipeline || 0)],
             ["متابعات متأخرة", data?.crm?.metrics?.staleLeads || 0],
           ]}
         />
         <SystemCard
           icon={PackageSearch}
           title="المشتريات والمخزون"
-          status="Procurement and inventory"
+          status="الموردون والمخزون"
           body="إدارة الموردين وأوامر الشراء والأصناف والهامش وحدود إعادة الطلب، مرتبطة بالتنبيهات التشغيلية."
           metrics={[
             ["الموردون", data?.procurement?.metrics?.suppliers || 0],
@@ -345,7 +335,7 @@ export default function EnterpriseOperatingSystem() {
         <SystemCard
           icon={BellRing}
           title="محرك التنبيهات"
-          status="Company follow-up engine"
+          status="محرك متابعة الشركة"
           body="يراقب الوثائق والفواتير والحملات والمهام والفرص والمخزون والعملاء، ثم يرفع التنبيه للإدارة المعنية."
           metrics={[
             ["مفتوحة", data?.alerts?.metrics?.open || 0],
@@ -358,16 +348,13 @@ export default function EnterpriseOperatingSystem() {
       <section className="delivery-panel">
         <div className="delivery-header">
           <div>
-            <span className="eyebrow">
-              <BriefcaseBusiness size={16} /> التوجه التجاري والاستثماري
-            </span>
             <h2>صيغة الشركة المقترحة</h2>
           </div>
         </div>
         <div className="enterprise-thesis">
           <article>
             <strong>التركيز</strong>
-            <p>{data?.strategy?.focus || "AI-assisted commerce and lean opportunity validation."}</p>
+            <p>{data?.strategy?.focus || "تجارة مدعومة بالذكاء الاصطناعي، والتحقق من الفرص بتجارب صغيرة."}</p>
           </article>
           <article>
             <strong>أطروحة الاستثمار</strong>
@@ -375,33 +362,33 @@ export default function EnterpriseOperatingSystem() {
           </article>
           <article>
             <strong>الأسواق المستهدفة</strong>
-            <p>{(data?.strategy?.target_markets || []).join("، ") || "التجارة الإلكترونية، الهدايا، العناية، خدمات AI."}</p>
+            <p>{(data?.strategy?.target_markets || []).join("، ") || "التجارة الإلكترونية، الهدايا، العناية، خدمات الذكاء الاصطناعي."}</p>
           </article>
         </div>
       </section>
 
       <section className="enterprise-lists">
-        <ListPanel title="مكتب CEO" items={(data?.ceoItems || []).map((item) => `${item.title} - ${item.status}`)} />
-        <ListPanel title="قنوات التسويق" items={(data?.marketingChannels || []).map((item) => `${item.name} - ${item.funnel_stage}`)} />
+        <ListPanel title="المكتب التنفيذي" items={(data?.ceoItems || []).map((item) => `${item.title} - ${workStatusLabel(item.status)}`)} />
+        <ListPanel title="قنوات التسويق" items={(data?.marketingChannels || []).map((item) => `${item.name} - ${workStatusLabel(item.funnel_stage)}`)} />
         <ListPanel
           title="آخر رادار فرص"
           items={(data?.opportunityRuns || []).map((item) => {
             const opportunity = item.recommended_opportunity || {};
             const decision = opportunity.ceo_decision || item.ceo_decision || {};
-            return `${opportunity.title || item.status}: ${currency.format(
+            return `${opportunity.title || workStatusLabel(item.status)}: ${currency.format(
               Number(opportunity.allocated_budget || item.allocated_budget || 0)
-            )} - ${opportunity.opportunity_window_days || item.opportunity_window_days || 0} يوم - ${decision.final_decision || item.status}`;
+            )} - ${opportunity.opportunity_window_days || item.opportunity_window_days || 0} يوم - ${workStatusLabel(decision.final_decision || item.status)}`;
           })}
         />
         <ListPanel
           title="التكاملات والحوكمة"
-          items={(data?.governance?.integrations || []).map((item) => `${item.provider} - ${item.status}`)}
+          items={(data?.governance?.integrations || []).map((item) => `${item.provider} - ${workStatusLabel(item.status)}`)}
         />
         <ListPanel
           title="العلاقات الحكومية"
           items={[
-            ...(data?.government?.documents || []).map((item) => `${item.title} - ${item.status}`),
-            ...(data?.government?.tasks || []).map((item) => `${item.title} - ${item.status}`),
+            ...(data?.government?.documents || []).map((item) => `${item.title} - ${workStatusLabel(item.status)}`),
+            ...(data?.government?.tasks || []).map((item) => `${item.title} - ${workStatusLabel(item.status)}`),
           ]}
         />
       </section>
@@ -411,8 +398,8 @@ export default function EnterpriseOperatingSystem() {
 
 function accountingMaturity(data: EnterpriseStatus | null) {
   const accountCount = data?.accounts?.length || 0;
-  if (accountCount >= 10) return "Accounting foundation ready";
-  return "Needs professional ledger setup";
+  if (accountCount >= 10) return "أساس المحاسبة جاهز";
+  return "يحتاج إعداد دفتر الحسابات";
 }
 
 function marketingReadiness(data: EnterpriseStatus | null) {
@@ -464,7 +451,6 @@ function ListPanel({ title, items }: { title: string; items: string[] }) {
         {items.slice(0, 6).map((item) => (
           <article className="department-row" key={item}>
             <div>
-              <span className="mini-pill">ACTIVE</span>
               <strong>{item}</strong>
             </div>
           </article>

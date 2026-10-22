@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { getTenantId, isMultiTenantEnabled } from "../tenant";
 import type { ApprovalItem } from "../approvals";
 
@@ -35,7 +35,7 @@ export async function decideCompanyExecutionApprovalCritical(input: {
     throw new Error("Approval is not a company execution decision.");
   }
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for atomic execution approval.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for atomic execution approval.");
 
   const auditId = `aud-approval-${input.approval.id}-${input.decision.toLowerCase()}`;
   const { data, error } = await supabase.rpc("orvanta_decide_execution_bundle", {

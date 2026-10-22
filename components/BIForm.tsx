@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { BarChart3, BrainCircuit, Loader2, Search, Target, TrendingUp } from "lucide-react";
+import { BarChart3, Loader2, Search, Target, TrendingUp } from "lucide-react";
 
 type IntelligenceResult = {
   ok: boolean;
@@ -18,7 +18,7 @@ type IntelligenceResult = {
   plan: string;
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -61,9 +61,6 @@ export default function BIForm() {
     <section id="intelligence" className="delivery-panel intelligence-panel">
       <div className="delivery-header">
         <div>
-          <span className="eyebrow">
-            <BrainCircuit size={16} /> مركز تحليل السوق والفرص
-          </span>
           <h2>اختبر الفكرة قبل الصرف</h2>
         </div>
         <span className={`status-pill ${result ? "done" : loading ? "running" : ""}`}>
@@ -116,7 +113,7 @@ export default function BIForm() {
             <div className="empty-state">
               <BarChart3 size={34} />
               <strong>لا يوجد تحليل بعد</strong>
-              <span>أدخل السوق والميزانية وسيتم إنشاء فرص، ROI، قرار، وخطة تنفيذ تحفظ في الوارد.</span>
+              <span>أدخل السوق والميزانية، فيُنشئ النظام فرصاً وعائدها المتوقع وقراراً وخطة تنفيذ تُحفظ في الوارد.</span>
             </div>
           )}
 
@@ -144,7 +141,7 @@ export default function BIForm() {
                     <small>التكلفة: {currency.format(opportunity.cost)}</small>
                     <small>العائد المتوقع: {currency.format(opportunity.revenue)}</small>
                     <em>
-                      <TrendingUp size={15} /> ROI {opportunity.roi}%
+                      <TrendingUp size={15} /> العائد على الاستثمار {opportunity.roi}%
                     </em>
                   </article>
                 ))}

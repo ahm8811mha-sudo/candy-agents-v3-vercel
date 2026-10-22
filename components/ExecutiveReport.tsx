@@ -41,7 +41,7 @@ type ReportData = {
   }>;
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -93,7 +93,6 @@ export default function ExecutiveReport() {
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><FileText size={16} /> التقارير التنفيذية</span>
           <h2>مركز التقارير</h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

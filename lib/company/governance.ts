@@ -33,9 +33,9 @@ export const AUTHORITY_MATRIX: TierRule[] = [
   {
     tier: "T1",
     maxSAR: 25_000,
-    approver: "سلطان — الرئيس التنفيذي",
+    approver: "سلطان، الرئيس التنفيذي",
     approverAgentId: "sultan",
-    label: "اعتماد CEO Agent",
+    label: "اعتماد الرئيس التنفيذي",
     note: "يظهر للمالك للاطلاع",
   },
   {

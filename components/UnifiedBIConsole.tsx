@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  BarChart3,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -42,7 +41,7 @@ type BIData = {
   alerts?: Array<{ id: string; title: string; department: string; severity: string; message: string; action_url?: string }>;
 };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const severityPill: Record<string, string> = {
   CRITICAL: "high",
@@ -89,10 +88,9 @@ export default function UnifiedBIConsole() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><BarChart3 size={16} /> ذكاء الأعمال الموحّد</span>
           <h1 className="glow-title">لوحة قرار الشركة</h1>
           <p className="page-sub">
-            صفحة واحدة تقرأ المالية، التسويق، المبيعات، المخزون، الوثائق، والتنبيهات — وتحوّلها إلى قرارٍ قابل للتنفيذ.
+            صفحة واحدة تقرأ المالية، التسويق، المبيعات، المخزون، الوثائق، والتنبيهات، وتحوّلها إلى قرارٍ قابل للتنفيذ.
           </p>
         </div>
         {score && (
@@ -164,7 +162,7 @@ export default function UnifiedBIConsole() {
           <Link href="/departments/sales" className="bento-card">
             <span className="bento-kicker"><Users size={14} /> مبيعات محتملة</span>
             <span className="bento-value">{currency.format(score.pipeline || 0)}</span>
-            <span className="bento-label">قيمة الفرص المفتوحة في CRM</span>
+            <span className="bento-label">قيمة الفرص المفتوحة</span>
           </Link>
 
           <Link href="/departments/procurement" className="bento-card">
@@ -232,7 +230,7 @@ export default function UnifiedBIConsole() {
           <span className="bento-kicker"><ShieldAlert size={14} /> التنبيهات ({(data.alerts || []).length})</span>
           <div className="bento-list">
             {(data.alerts || []).length === 0 && (
-              <div className="bento-list__row"><small>لا تنبيهات — الشركة هادئة ✓</small></div>
+              <div className="bento-list__row"><small>لا تنبيهات.</small></div>
             )}
             {(data.alerts || []).slice(0, 12).map((alert) => (
               <div key={alert.id} className="bento-list__row" style={{ alignItems: "flex-start" }}>

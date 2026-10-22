@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Archive, Inbox, Loader2, PenLine, RefreshCcw, Send, ShieldCheck, UserCheck } from "lucide-react";
 import styles from "./MailCenterApiPanel.module.css";
+import { workStatusLabel } from "@/lib/ui/statusLabels";
 
 type Box = "INBOX" | "SENT" | "DRAFTS" | "ARCHIVED";
 
@@ -41,15 +42,15 @@ const boxes: Array<{ key: Box; label: string; description: string }> = [
 ];
 
 const employees = [
-  { id: "sultan", label: "سلطان — الرئيس التنفيذي" },
-  { id: "abdulrahman", label: "عبدالرحمن — المدير المالي" },
-  { id: "noura", label: "نورة — التسويق" },
-  { id: "fahad", label: "فهد — العمليات" },
-  { id: "sara", label: "سارة — المبيعات" },
-  { id: "khalid", label: "خالد — المشتريات" },
-  { id: "majed", label: "ماجد — العلاقات الحكومية" },
-  { id: "ameen", label: "أمين — المحاسب" },
-  { id: "hares", label: "حارس — المخاطر والحوكمة" },
+  { id: "sultan", label: "سلطان، الرئيس التنفيذي" },
+  { id: "abdulrahman", label: "عبدالرحمن، المدير المالي" },
+  { id: "noura", label: "نورة، التسويق" },
+  { id: "fahad", label: "فهد، العمليات" },
+  { id: "sara", label: "سارة، المبيعات" },
+  { id: "khalid", label: "خالد، المشتريات" },
+  { id: "majed", label: "ماجد، العلاقات الحكومية" },
+  { id: "ameen", label: "أمين، المحاسب" },
+  { id: "hares", label: "حارس، المخاطر والحوكمة" },
 ];
 
 function normalizeBox(value: string): Box {
@@ -185,8 +186,8 @@ export default function MailCenterApiPanel() {
         ))}
         <div className={`bento-card ${styles.statCard} ${ready?.realEmail ? "bento-card--green" : "bento-card--amber"}`}>
           <span className="bento-kicker"><ShieldCheck size={15} /> الجاهزية</span>
-          <span className="bento-value">{ready?.realEmail ? "Live" : "Setup"}</span>
-          <span className="bento-label">{ready?.database ? "DB جاهزة" : "شغّل SQL"} · {ready?.provider || "Provider"}{missing}</span>
+          <span className="bento-value">{ready?.realEmail ? "يعمل" : "قيد الإعداد"}</span>
+          <span className="bento-label">{ready?.database ? "قاعدة البيانات جاهزة" : "قاعدة البيانات غير مهيأة"} · {ready?.provider || "مزوّد البريد غير محدد"}{missing}</span>
         </div>
       </section>
 
@@ -219,7 +220,7 @@ export default function MailCenterApiPanel() {
                     <br />
                     <span className={styles.emailMeta}>{m.fromEmail} → {m.toEmail}</span>
                   </span>
-                  <span className="mini-pill">{count ? `${count} مهمة` : m.status}</span>
+                  <span className="mini-pill">{count ? `${count} مهمة` : workStatusLabel(m.status)}</span>
                 </button>
               );
             })}
@@ -230,7 +231,7 @@ export default function MailCenterApiPanel() {
         <div className={styles.card}>
           <div className={styles.headerRow}>
             <h2>قراءة وتحويل الرسالة</h2>
-            {selected && <span className="mini-pill">{selected.status}</span>}
+            {selected && <span className="mini-pill">{workStatusLabel(selected.status)}</span>}
           </div>
 
           {selected ? (
@@ -260,7 +261,7 @@ export default function MailCenterApiPanel() {
                   <article key={task.id} className={styles.taskCard}>
                     <div className={styles.taskHead}>
                       <b>{task.agentName} · {task.agentTitle}</b>
-                      <span className="mini-pill done">{task.status}</span>
+                      <span className="mini-pill done">{workStatusLabel(task.status)}</span>
                     </div>
                     <small className={styles.muted}>المطلوب: {task.instruction}</small>
                     <pre className={styles.outputPre}>{task.executionResult}</pre>

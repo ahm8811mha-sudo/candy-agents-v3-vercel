@@ -47,7 +47,7 @@ const DESTINATIONS: Entry[] = [
   { id: "nav-operations", title: "التشغيل", hint: "تشغيل طلب شركة كامل", href: "/operations", group: "الوجهات", icon: Send },
   { id: "nav-status", title: "حالة النظام", hint: "التكاملات والجاهزية", href: "/status", group: "الوجهات", icon: Activity },
   { id: "nav-company", title: "الهيكل الإداري", hint: "الوكلاء والصلاحيات", href: "/company", group: "الوجهات", icon: Users },
-  { id: "nav-dashboard", title: "لوحة CEO", hint: "المشاريع والمهام", href: "/dashboard", group: "الوجهات", icon: ShieldCheck },
+  { id: "nav-dashboard", title: "لوحة الرئيس التنفيذي", hint: "المشاريع والمهام", href: "/dashboard", group: "الوجهات", icon: ShieldCheck },
   { id: "nav-bi", title: "مركز الذكاء BI", hint: "قرار اليوم والتحليلات", href: "/bi-center", group: "الوجهات", icon: BarChart3 },
   { id: "nav-sales", title: "نظام المبيعات", hint: "المتجر والمداخيل", href: "/sales", group: "الوجهات", icon: ShoppingBag },
   { id: "nav-finance", title: "المالية", hint: "القيود والفواتير", href: "/departments/finance", group: "الوجهات", icon: Calculator },
@@ -194,7 +194,7 @@ export default function CommandPalette() {
               <kbd>Esc</kbd>
             </div>
             <div className="cmdk-list" role="listbox">
-              {results.length === 0 && <div className="cmdk-empty">لا نتائج — جرّب كلمة أخرى.</div>}
+              {results.length === 0 && <div className="cmdk-empty">لا نتائج. جرّب كلمة أخرى.</div>}
               {results.map((entry, i) => {
                 const Icon = entry.icon;
                 const showGroup = entry.group !== lastGroup;

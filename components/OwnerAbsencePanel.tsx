@@ -125,8 +125,8 @@ export default function OwnerAbsencePanel() {
 
   const status = form ? statusCopy[form.effectiveStatus] : statusCopy.INACTIVE;
   const authorityRows = useMemo(() => form ? [
-    { label: "تنفيذ داخلي روتيني", limit: `حتى ${form.routineAutoLimitSAR.toLocaleString("ar-SA")} ر.س`, result: "ينفذه الوكيل ويعيد الدليل" },
-    { label: "قرار تنفيذي متوسط", limit: `حتى ${form.executiveAgentLimitSAR.toLocaleString("ar-SA")} ر.س`, result: "مراجعة وكيل CEO ثم التنفيذ" },
+    { label: "تنفيذ داخلي روتيني", limit: `حتى ${form.routineAutoLimitSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س`, result: "ينفذه الوكيل ويعيد الدليل" },
+    { label: "قرار تنفيذي متوسط", limit: `حتى ${form.executiveAgentLimitSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س`, result: "مراجعة وكيل الرئيس التنفيذي ثم التنفيذ" },
     { label: "استراتيجية أو مخاطرة عالية", limit: "دون سقف ذاتي", result: "يُحفظ في صندوق المالك" },
     { label: "التزام خارجي", limit: form.allowExternalActions ? "مسموح داخل الحدود" : "متوقف", result: form.allowExternalActions ? "بتدقيق وسجل أثر" : "ينتظر المالك" },
   ] : [], [form]);
@@ -184,11 +184,10 @@ export default function OwnerAbsencePanel() {
     <section className="ops-card owner-absence-panel" id="owner-continuity" aria-labelledby="owner-continuity-title">
       <header className="owner-absence-panel__header">
         <div>
-          <span className="eyebrow"><ShieldCheck size={16} /> ميثاق استمرارية الشركة</span>
           <h2 id="owner-continuity-title">طبقة غياب المالك</h2>
           <p>يستمر الوكلاء في التشغيل داخل الحدود المعتمدة، بينما تبقى الاستراتيجية والالتزامات الجوهرية من صلاحية المالك وحده.</p>
         </div>
-        <div className={`owner-absence-status ${status.tone}`}><span /><strong>{status.label}</strong><small>{form.lastRunAt ? `آخر جولة ${new Date(form.lastRunAt).toLocaleString("ar-SA")}` : "لم تبدأ جولة غياب بعد"}</small></div>
+        <div className={`owner-absence-status ${status.tone}`}><span /><strong>{status.label}</strong><small>{form.lastRunAt ? `آخر جولة ${new Date(form.lastRunAt).toLocaleString("ar-SA-u-nu-latn")}` : "لم تبدأ جولة غياب بعد"}</small></div>
       </header>
 
       {message && <p className="notice done">{message}</p>}
@@ -227,7 +226,7 @@ export default function OwnerAbsencePanel() {
             </select>
           </label>
           <label><UserRound size={15} /> جهة الطوارئ البشرية
-            <input className="input" value={form.delegatedHumanName || ""} disabled={!canManage || saving} placeholder="الاسم — دون صلاحية استراتيجية" onChange={(event) => setForm({ ...form, delegatedHumanName: event.target.value })} />
+            <input className="input" value={form.delegatedHumanName || ""} disabled={!canManage || saving} placeholder="الاسم، دون صلاحية استراتيجية" onChange={(event) => setForm({ ...form, delegatedHumanName: event.target.value })} />
           </label>
           <label className="owner-absence-contact">وسيلة التواصل
             <input className="input" value={form.delegatedHumanContact || ""} disabled={!canManage || saving} placeholder="هاتف أو بريد للطوارئ" onChange={(event) => setForm({ ...form, delegatedHumanContact: event.target.value })} />
@@ -255,7 +254,7 @@ export default function OwnerAbsencePanel() {
 
       <div className="owner-absence-events">
         <div><strong>سجل الاستمرارية</strong><button className="secondary-btn btn-sm" type="button" disabled={loading} onClick={() => void load()}><RefreshCw size={14} /> تحديث</button></div>
-        {events.length === 0 ? <p>لا توجد أحداث غياب مسجلة بعد.</p> : events.slice(0, 6).map((event) => <article key={event.id}><span><Activity size={15} /></span><div><strong>{eventLabel(event.event_type)}</strong><small>{event.reason || event.decision}</small></div><time>{new Date(event.created_at).toLocaleString("ar-SA")}</time></article>)}
+        {events.length === 0 ? <p>لا توجد أحداث غياب مسجلة بعد.</p> : events.slice(0, 6).map((event) => <article key={event.id}><span><Activity size={15} /></span><div><strong>{eventLabel(event.event_type)}</strong><small>{event.reason || event.decision}</small></div><time>{new Date(event.created_at).toLocaleString("ar-SA-u-nu-latn")}</time></article>)}
       </div>
     </section>
   );

@@ -1,7 +1,7 @@
 import { calculateFinancials } from "./accountingSystem";
 import { seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { evaluateGovernedAction, logDecision } from "./governanceOS";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import {
   addAccountingBankTransactionAtomic,
   createAccountingInvoiceAtomic,
@@ -82,7 +82,7 @@ function nowCode(prefix: string) {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 

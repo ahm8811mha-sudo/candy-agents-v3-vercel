@@ -85,7 +85,7 @@ type DashboardData = {
   actions: unknown[];
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -93,22 +93,22 @@ const currency = new Intl.NumberFormat("ar-SA", {
 
 const stages = [
   { key: "financials", title: "البيانات المالية", role: "قراءة الإيرادات والمصروفات والربح", icon: Calculator, href: "/departments/finance" },
-  { key: "cfo", title: "المدير المالي CFO", role: "اعتماد الميزانية وتحليل المخاطر", icon: Briefcase, href: "/departments/finance" },
-  { key: "ceo", title: "الرئيس التنفيذي CEO", role: "إصدار القرار النهائي", icon: ShieldCheck, href: "/departments/executive" },
+  { key: "cfo", title: "المدير المالي", role: "اعتماد الميزانية وتحليل المخاطر", icon: Briefcase, href: "/departments/finance" },
+  { key: "ceo", title: "الرئيس التنفيذي", role: "إصدار القرار النهائي", icon: ShieldCheck, href: "/departments/executive" },
   { key: "tasks", title: "خطة التنفيذ", role: "تحويل القرار إلى مهام وأدوار وجدول", icon: ClipboardList, href: "/departments/operations" },
   { key: "project", title: "المشروع", role: "حفظ مشروع ومهمة تنفيذية للمتابعة", icon: FolderKanban, href: "/departments/executive" },
 ] as const;
 
 const quickNavItems = [
   { href: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard },
-  { href: "/enterprise-os", label: "Enterprise OS", icon: Building2 },
+  { href: "/enterprise-os", label: "نظام المؤسسة", icon: Building2 },
   { href: "/departments/finance", label: "المالية", icon: Calculator },
-  { href: "/departments/executive", label: "CEO Office", icon: ShieldCheck },
+  { href: "/departments/executive", label: "المكتب التنفيذي", icon: ShieldCheck },
   { href: "/departments/marketing", label: "التسويق", icon: Megaphone },
-  { href: "/departments/sales", label: "CRM", icon: Users },
+  { href: "/departments/sales", label: "العملاء والمبيعات", icon: Users },
   { href: "/departments/procurement", label: "المشتريات", icon: PackageSearch },
   { href: "/departments/government-relations", label: "العلاقات الحكومية", icon: Landmark },
-  { href: "/bi-center", label: "BI موحد", icon: BarChart3 },
+  { href: "/bi-center", label: "ذكاء الأعمال", icon: BarChart3 },
 ];
 
 type TabKey = "execution" | "dashboard" | "trading" | "store" | "monitoring" | "reports" | "memory" | "integrations";
@@ -190,10 +190,9 @@ export default function StrategyRunner() {
     <main className="company-app">
       <section className="request-panel">
         <div className="request-copy">
-          <span className="eyebrow"><Building2 size={16} /> شركة ذكاء اصطناعي تنفيذية</span>
           <h1>اكتب الطلب، والشركة تقرر ثم تنشئ مشروع التنفيذ</h1>
           <p>
-            يقرأ النظام الدفتر المالي، يراجع CFO وCEO القرار، ثم تتحول النتيجة إلى مشروع ومهام وAction Queue قابلة للتتبع.
+            يقرأ النظام الدفتر المالي، ويراجع المدير المالي والرئيس التنفيذي القرار، ثم تتحول النتيجة إلى مشروع ومهام وقائمة إجراءات قابلة للتتبع.
           </p>
         </div>
 
@@ -256,7 +255,6 @@ export default function StrategyRunner() {
           <section className="delivery-panel fade-in">
             <div className="delivery-header">
               <div>
-                <span className="eyebrow"><BarChart3 size={16} /> التسليم النهائي</span>
                 <h2>نتيجة الشركة</h2>
               </div>
               <span className={`status-pill ${loading ? "running" : result ? "done" : ""}`}>
@@ -268,7 +266,7 @@ export default function StrategyRunner() {
               <div className="empty-state">
                 <Building2 size={34} />
                 <strong>لا توجد نتيجة بعد</strong>
-                <span>اكتب الطلب واضغط تشغيل الشركة. ستظهر نتيجة CFO وCEO والمهام والمشروع هنا.</span>
+                <span>اكتب الطلب واضغط تشغيل الشركة. ستظهر نتيجة المدير المالي والرئيس التنفيذي والمهام والمشروع هنا.</span>
               </div>
             )}
 
@@ -285,11 +283,11 @@ export default function StrategyRunner() {
                 <article className="report-card featured">
                   <h3>المشروع الذي تم إنشاؤه</h3>
                   <pre>{`رقم المشروع: ${result.project.project_number ? `#${result.project.project_number}` : "غير محفوظ"}
-تاريخ المشروع: ${result.project.project_date ? new Date(result.project.project_date).toLocaleDateString("ar-SA") : "غير محفوظ"}
+تاريخ المشروع: ${result.project.project_date ? new Date(result.project.project_date).toLocaleDateString("ar-SA-u-nu-latn") : "غير محفوظ"}
 اسم المشروع: ${result.project.name}
 الحالة: ${result.project.status || "ACTIVE"}
 رقم المهمة: ${result.task.task_number ? `#${result.task.task_number}` : "غير محفوظ"}
-تاريخ المهمة: ${result.task.task_date ? new Date(result.task.task_date).toLocaleDateString("ar-SA") : "غير محفوظ"}
+تاريخ المهمة: ${result.task.task_date ? new Date(result.task.task_date).toLocaleDateString("ar-SA-u-nu-latn") : "غير محفوظ"}
 المهمة: ${result.task.title}
 حالة المهمة: ${result.task.status}
 مصدر المالية: ${result.financials.source === "ledger" ? "Ledger" : "Demo"}
@@ -299,8 +297,8 @@ export default function StrategyRunner() {
 الحفظ في قاعدة البيانات: ${result.saved ? "تم" : "غير متصل بقاعدة البيانات"}`}</pre>
                 </article>
 
-                <Report title="قرار الرئيس التنفيذي CEO" content={result.ceo} featured />
-                <Report title="تقرير المدير المالي CFO" content={result.cfo} />
+                <Report title="قرار الرئيس التنفيذي" content={result.ceo} featured />
+                <Report title="تقرير المدير المالي" content={result.cfo} />
                 <Report title="المهام التنفيذية" content={result.tasks} />
               </div>
             )}
@@ -315,7 +313,6 @@ export default function StrategyRunner() {
           <section className="delivery-panel fade-in">
             <div className="delivery-header">
               <div>
-                <span className="eyebrow"><FolderKanban size={16} /> CEO Dashboard</span>
                 <h2>لوحة متابعة الشركة</h2>
               </div>
               <button className="secondary-btn" onClick={loadDashboard} type="button">تحديث اللوحة</button>
@@ -377,7 +374,7 @@ function DashboardMetric({ title, value }: { title: string; value: number }) {
   return (
     <article className="metric-card green">
       <small>{title}</small>
-      <strong>{value.toLocaleString("ar-SA")}</strong>
+      <strong>{value.toLocaleString("ar-SA-u-nu-latn")}</strong>
     </article>
   );
 }

@@ -7,7 +7,6 @@ import {
   BadgePercent,
   BarChart3,
   BrainCircuit,
-  CheckCircle2,
   Loader2,
   Megaphone,
   RefreshCw,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { riskLabel } from "@/lib/ui/statusLabels";
 
 type MarketingCampaign = {
   id: string;
@@ -60,7 +60,7 @@ type MarketingData = {
   playbooks?: Array<{ title: string; owner: string; steps: string[] }>;
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -179,25 +179,18 @@ export default function MarketingOperatingConsole() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <Megaphone size={16} /> إدارة التسويق
-          </span>
-          <h1>نظام تسويق ونمو احترافي</h1>
+          <h1>النمو والتسويق</h1>
           <p>
-            إدارة تسويق مسؤولة عن المنتج، الجمهور، العرض، القنوات، CAC، ROAS، القمع التسويقي، التجارب، وربط التوسع بقرارات مالية وتنفيذية.
+            المنتج والجمهور والعرض والقنوات، وتكلفة اكتساب العميل والعائد على الإعلان ومسار التحويل والتجارب، وربط التوسع بقرار مالي وتنفيذي.
           </p>
           <div className="department-hero-actions">
             <span>
-              <Target size={16} /> Pilot budget {currency.format(brief?.pilotBudget || 0)}
+              <Target size={16} /> ميزانية التجربة: {currency.format(brief?.pilotBudget || 0)}
             </span>
             <span>
-              <BrainCircuit size={16} /> Risk {brief?.riskLevel || "LOW"}
+              <BrainCircuit size={16} /> المخاطر: {riskLabel(brief?.riskLevel)}
             </span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>Growth OS</strong>
-          <small>World-class funnel</small>
         </div>
       </section>
 
@@ -255,7 +248,7 @@ export default function MarketingOperatingConsole() {
           }
           disabled={Boolean(working) || campaigns.length === 0}
         >
-          تسجيل Funnel
+          تسجيل مسار التحويل
         </button>
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
@@ -266,16 +259,13 @@ export default function MarketingOperatingConsole() {
         <Metric icon={BadgePercent} label="ميزانية التسويق" value={currency.format(brief?.totalBudget || 0)} />
         <Metric icon={BadgePercent} label="الإنفاق الفعلي" value={currency.format(brief?.actualSpend || 0)} />
         <Metric icon={BarChart3} label="الإيراد من الحملات" value={currency.format(brief?.actualRevenue || 0)} />
-        <Metric icon={BarChart3} label="ROAS مدمج" value={`${(brief?.blendedRoas || 0).toFixed(2)}x`} />
+        <Metric icon={BarChart3} label="العائد المدمج على الإعلان" value={`${(brief?.blendedRoas || 0).toFixed(2)}x`} />
         <Metric icon={BarChart3} label="صحة النمو" value={`${brief?.healthScore || 0}/100`} />
         <Metric icon={Users} label="القنوات" value={String(channels.length)} />
       </section>
 
       <section className="ops-card executive-brief">
-        <span className="eyebrow">
-          <CheckCircle2 size={16} /> قاعدة النمو
-        </span>
-        <h2>{brief?.recommendedFocus}</h2>
+        <h2><span className="lead-in">قاعدة النمو:</span> {brief?.recommendedFocus || "لم تُحدَّد بعد."}</h2>
         <p>{brief?.growthRule}</p>
       </section>
 
@@ -354,7 +344,7 @@ export default function MarketingOperatingConsole() {
           </label>
           <button className="primary-btn" disabled={Boolean(working)}>
             {working === "campaign" ? <Loader2 className="spin" size={18} /> : <Rocket size={18} />}
-            إنشاء الحملة وربط KPIs
+            إنشاء الحملة وربط مؤشرات الأداء
           </button>
         </form>
 
@@ -454,7 +444,7 @@ export default function MarketingOperatingConsole() {
             <CampaignRow key={campaign.id} campaign={campaign} />
           ))}
         </Panel>
-        <Panel title="Playbooks التسويق">
+        <Panel title="قواعد التسويق">
           {(data?.playbooks || []).map((playbook) => (
             <div className="playbook-row" key={playbook.title}>
               <strong>{playbook.title}</strong>
@@ -487,7 +477,7 @@ export default function MarketingOperatingConsole() {
             <Statement key={item.id} label={`${item.publish_date} - ${item.topic}`} value={item.channel} />
           ))}
         </Panel>
-        <Panel title="A/B و Funnel">
+        <Panel title="اختبارات A/B وقمع المبيعات">
           {(data?.abTests || []).slice(0, 5).map((test) => (
             <Statement key={test.id} label={`${test.name}: ${test.variant_a} / ${test.variant_b}`} value={test.status} />
           ))}
@@ -538,7 +528,7 @@ function marketingMessage(action: string) {
   if (action === "offer") return "تم حفظ العرض التسويقي.";
   if (action === "content") return "تم حفظ عنصر التقويم.";
   if (action === "ab-test") return "تم إنشاء اختبار A/B.";
-  if (action === "funnel-event") return "تم تسجيل حدث Funnel.";
+  if (action === "funnel-event") return "سُجّل حدث في قمع المبيعات.";
   return "تم إنشاء الحملة وربطها بالحوكمة.";
 }
 
@@ -552,8 +542,8 @@ function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
       </div>
       <div className="campaign-kpis">
         <span>Budget {currency.format(Number(campaign.budget))}</span>
-        <span>CAC {kpis.cac_target || "-"}</span>
-        <span>ROAS {kpis.roas_target || "-"}</span>
+        <span>تكلفة اكتساب العميل: {kpis.cac_target || "-"}</span>
+        <span>العائد على الإعلان: {kpis.roas_target || "-"}</span>
         <span>{campaign.status}</span>
       </div>
     </div>

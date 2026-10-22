@@ -29,7 +29,7 @@ const typeLabels: Record<string, string> = {
 };
 
 function sar(value: number): string {
-  return new Intl.NumberFormat("ar-SA", {
+  return new Intl.NumberFormat("ar-SA-u-nu-latn", {
     style: "currency",
     currency: "SAR",
     maximumFractionDigits: 0,
@@ -57,7 +57,7 @@ function metricCard(label: string, value: string, accent: string): string {
 
 export function renderReportHtml(report: ExecutiveReport): string {
   const { financialSummary: f, operationalSummary: o, alertsSummary: a } = report;
-  const generated = new Date(report.generatedAt).toLocaleString("ar-SA");
+  const generated = new Date(report.generatedAt).toLocaleString("ar-SA-u-nu-latn");
   const hColor = healthColor(f.healthScore);
 
   const recommendations = report.recommendations.length

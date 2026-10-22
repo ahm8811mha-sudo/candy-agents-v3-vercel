@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, KeyRound, Loader2, LockKeyhole } from "lucide-react";
+import { ArrowLeft, KeyRound, Loader2 } from "lucide-react";
 import { safeInternalDestination } from "@/lib/security/navigation";
 
 export default function LoginPage() {
@@ -49,7 +49,6 @@ export default function LoginPage() {
       </aside>
       <section className="entry-access">
         <div className="entry-access-inner">
-          <p className="eyebrow"><LockKeyhole size={15} aria-hidden="true" /> مكتب المالك / دخول خاص</p>
           <h1>فتح Orvanta على هذا الجهاز</h1>
           <p className="entry-intro">مرحباً بعودتك. أدخل رمز المالك للوصول إلى ملفات الشركة وقراراتها.</p>
           {missingSetup ? (

@@ -40,7 +40,7 @@ export default function OrvantaLogo({
       className={`orvanta-lockup orvanta-lockup--full ${className}`}
       style={{ width: size }}
       role="img"
-      aria-label={subtitle ? `Orvanta — ${subtitle}` : "Orvanta"}
+      aria-label={subtitle ? `Orvanta، ${subtitle}` : "Orvanta"}
     >
       <Image
         className="orvanta-logo-image"

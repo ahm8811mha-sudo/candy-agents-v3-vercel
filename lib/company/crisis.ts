@@ -46,7 +46,7 @@ export type CrisisCase = {
 };
 
 const store: CrisisCase[] = [];
-const sar = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 0 });
+const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { maximumFractionDigits: 0 });
 
 const severityAr: Record<CrisisSeverity, string> = {
   MEDIUM: "متوسطة",
@@ -118,7 +118,7 @@ export const hydrateCrises = hydrateOnce(async () => {
 
 function agentName(id: string) {
   const agent = getAgent(id);
-  return agent ? `${agent.name} — ${agent.title}` : id;
+  return agent ? `${agent.name}، ${agent.title}` : id;
 }
 
 function buildLanes(amountSAR: number): CrisisLane[] {

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 
 export type IntegrationExecutionResult<T> = {
   value: T;
@@ -56,7 +56,7 @@ function isUniqueViolation(error: unknown) {
 
 async function loadCompletedExecution<T>(input: ExecuteIntegrationInput<T>) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for external integration execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for external integration execution.");
 
   const existing = await supabase
     .from("integration_attempts")
@@ -92,7 +92,7 @@ async function loadCompletedExecution<T>(input: ExecuteIntegrationInput<T>) {
 
 export async function executeIntegrationOnce<T>(input: ExecuteIntegrationInput<T>): Promise<IntegrationExecutionResult<T>> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for external integration execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for external integration execution.");
 
   const completed = await loadCompletedExecution(input);
   if (completed) return completed;

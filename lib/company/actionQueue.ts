@@ -1,5 +1,5 @@
 import { invalidateCache } from "../cache";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { isMultiTenantEnabled, getTenantId } from "../tenant";
 import { recordAudit } from "./audit";
 import {
@@ -98,7 +98,7 @@ export async function listCompanyActions(limit = 50, tenantId?: string): Promise
 
 export async function getCompanyAction(id: string, tenantId?: string): Promise<CompanyAction | null> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required to load a company action.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required to load a company action.");
 
   let query = supabase.from("business_actions").select("*").eq("id", id);
   const tenant = tenantFor(tenantId);
@@ -116,7 +116,7 @@ export async function getCompanyAction(id: string, tenantId?: string): Promise<C
  */
 export async function claimCompanyActionForExecution(id: string, actor = "system", tenantId?: string): Promise<CompanyAction> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required to execute a company action.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required to execute a company action.");
 
   const tenant = tenantFor(tenantId);
   const current = await getCompanyAction(id, tenant);
@@ -157,7 +157,7 @@ export async function claimCompanyActionForExecution(id: string, actor = "system
     action: "ACTION_EXECUTION_CLAIMED",
     entityType: "business_action",
     entityId: id,
-    detail: `${current.status} → RUNNING — external execution claimed`,
+    detail: `من ${current.status} إلى RUNNING: بدأ التنفيذ الخارجي`,
   });
   invalidateCache("dashboard-data");
   return data as CompanyAction;
@@ -165,7 +165,7 @@ export async function claimCompanyActionForExecution(id: string, actor = "system
 
 export async function updateCompanyActionStatus(input: ActionTransitionInput): Promise<CompanyAction> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required to update action status.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required to update action status.");
 
   const tenant = tenantFor(input.tenantId);
   let currentQuery = supabase.from("business_actions").select("*").eq("id", input.id);
@@ -213,7 +213,7 @@ export async function updateCompanyActionStatus(input: ActionTransitionInput): P
     action: "ACTION_STATUS_CHANGE",
     entityType: "business_action",
     entityId: input.id,
-    detail: `${currentStatus} → ${input.status}${input.note ? ` — ${input.note}` : ""}`,
+    detail: `من ${currentStatus} إلى ${input.status}${input.note ? `: ${input.note}` : ""}`,
   });
 
   invalidateCache("dashboard-data");

@@ -45,7 +45,7 @@ type OperationsPayload = {
 function dateTime(value: unknown) {
   if (!value) return "—";
   const date = new Date(String(value));
-  return Number.isFinite(date.getTime()) ? date.toLocaleString("ar-SA") : String(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("ar-SA-u-nu-latn") : String(value);
 }
 
 function badge(value: unknown) {
@@ -116,7 +116,6 @@ export default function OperationalReliabilityPanel() {
     <section style={{ display: "grid", gap: 18 }}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">Operational Reliability</span>
           <h2 style={{ margin: "6px 0" }}>مركز الاعتمادية والتشغيل</h2>
           <p className="page-sub" style={{ margin: 0 }}>حالة المهام المجدولة، التنبيهات، الكتابات الفاشلة، التكاملات وأدلة الجاهزية.</p>
         </div>

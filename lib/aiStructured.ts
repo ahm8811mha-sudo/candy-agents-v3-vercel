@@ -130,7 +130,7 @@ export async function runAgentStructured<T>(
       demo: true,
       data: null,
       raw: raw.text,
-      error: "وضع تجريبي — لا يوجد مزود AI مهيأ، لا يمكن إنتاج قرار منظم.",
+      error: "وضع تجريبي: لا يوجد مزود ذكاء اصطناعي مهيأ، فلا يمكن إنتاج قرار منظم.",
       provider: raw.provider,
       model: raw.model,
     };

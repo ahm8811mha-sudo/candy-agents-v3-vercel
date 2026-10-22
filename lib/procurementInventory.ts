@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 
 type SupplierInput = {
   name: string;
@@ -37,7 +37,7 @@ type MovementInput = {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 

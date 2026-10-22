@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import {
   buildCompanySnapshot,
   createExecutiveNarrative,
@@ -54,7 +54,7 @@ const SOURCES: IngestionSource[] = [
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for the company intelligence platform.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for the company intelligence platform.");
   return supabase;
 }
 

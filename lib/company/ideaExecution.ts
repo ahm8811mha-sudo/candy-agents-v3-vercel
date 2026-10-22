@@ -217,7 +217,7 @@ export async function executeApprovedIdea(
     memory: {
       eventType: "APPROVED_IDEA_EXECUTION",
       title: idea.title,
-      summary: `تم تحويل الفكرة المعتمدة إلى مشروع تنفيذي. الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA")} ريال. المهام: ${blueprint.tasks.length}. المؤشرات: ${blueprint.kpis.length}.`,
+      summary: `تم تحويل الفكرة المعتمدة إلى مشروع تنفيذي. الميزانية: ${idea.budgetSAR.toLocaleString("ar-SA-u-nu-latn")} ريال. المهام: ${blueprint.tasks.length}. المؤشرات: ${blueprint.kpis.length}.`,
       decisionQuality: intelligence.riskLevel === "LOW" ? "PROMISING" : "WATCH",
       metadata: {
         ideaId: idea.id,

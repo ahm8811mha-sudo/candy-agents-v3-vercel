@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { signWebhookBody } from "../company/webhooks";
 import { executeIntegrationOnce } from "../operations/integrationExecution";
 import { eventToOutboxRecord, nextRetryAt } from "./events";
@@ -16,7 +16,7 @@ export type OutboxDeliveryResult = {
 
 export async function appendCompanyEvent(event: CompanyEvent) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for company events.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for company events.");
 
   const record = eventToOutboxRecord(event);
   const { error: rpcError } = await supabase.rpc("orvanta_append_event", {
@@ -136,7 +136,7 @@ async function deliver(row: Record<string, unknown>) {
 
 export async function publishOutboxBatch(options: { tenantId?: string; limit?: number } = {}) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for outbox publishing.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for outbox publishing.");
   const configuration = outboxConfiguration();
   if (!configuration.ready) throw new Error(`Outbox publishing is blocked: ${configuration.missing.join(", ")}. No events were claimed.`);
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { runAgentStructured } from "../aiStructured";
 import { invalidateCache } from "../cache";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { claimCompanyActionForExecution, updateCompanyActionStatus, type CompanyAction } from "./actionQueue";
 import { REAL_WORLD_AGENT_PROGRESS_CAP } from "./executionHonesty";
 import type { InitiativeOption, ProductCandidate, SpecialistPlan } from "./initiativePlanning";
@@ -145,7 +145,7 @@ function resultDeliverable(action: CompanyAction) {
 
 export async function executeProjectInternalActions(projectId: string, actor = "executive-office", tenantId?: string): Promise<ProjectExecutionSummary> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for autonomous project execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for autonomous project execution.");
   let initialQuery = supabase.from("business_actions").select("*").eq("project_id", projectId).eq("action_type", "AGENT_DELIVERABLE").eq("execution_mode", "INTERNAL").eq("provider", "orvanta_agents").order("created_at", { ascending: true });
   if (tenantId) initialQuery = initialQuery.eq("tenant_id", tenantId);
   const { data: initial, error } = await initialQuery;
@@ -175,7 +175,7 @@ export async function executeProjectInternalActions(projectId: string, actor = "
 
 export async function recoverPendingAgentProjects(tenantId: string, projectLimit = 1) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for agent execution recovery.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for agent execution recovery.");
   const { data, error } = await supabase.from("business_actions").select("id,project_id,status,attempts,last_attempt_at").eq("tenant_id", tenantId).eq("action_type", "AGENT_DELIVERABLE").eq("execution_mode", "INTERNAL").eq("provider", "orvanta_agents").in("status", ["QUEUED", "FAILED", "RUNNING"]).lt("attempts", 3).order("created_at", { ascending: true }).limit(25);
   if (error) throw new Error(`Unable to load pending agent projects: ${error.message}`);
   const eligible = ((data || []) as Array<Pick<CompanyAction, "id" | "project_id" | "status" | "attempts" | "last_attempt_at">>).filter((action) => shouldRecoverAgentAction(action));

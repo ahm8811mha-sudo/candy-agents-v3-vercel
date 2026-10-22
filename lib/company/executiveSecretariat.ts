@@ -153,7 +153,7 @@ export async function openDecisionCommitment(
     action: "DECISION_COMMITMENT_OPENED",
     entityType: "decision_commitment",
     entityId: commitment.id,
-    detail: `التقط الديوان القرار «${commitment.title}» وأسنده إلى ${commitment.assigneeName || "بانتظار تعيين مسؤول"}، الاستحقاق ${new Date(dueAt).toLocaleDateString("ar-SA")}.`,
+    detail: `التقط الديوان القرار «${commitment.title}» وأسنده إلى ${commitment.assigneeName || "بانتظار تعيين مسؤول"}، الاستحقاق ${new Date(dueAt).toLocaleDateString("ar-SA-u-nu-latn")}.`,
   });
   return { ok: true, commitment };
 }

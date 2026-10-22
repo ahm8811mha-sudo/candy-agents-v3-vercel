@@ -90,8 +90,7 @@ export default function AgentMemoryPanel() {
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><Brain size={16} /> ذاكرة الوكلاء</span>
-          <h2>القرارات والأنماط السابقة</h2>
+          <h2>ذاكرة الوكلاء من القرارات والأنماط</h2>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button

@@ -2,7 +2,7 @@ import { calculateFinancials } from "./accountingSystem";
 import { evaluateBusiness } from "./businessBrain";
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
 import { seedGovernmentRelationsOS } from "./governmentRelations";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { toLegacyDecisionAuditRow } from "./company/audit";
 import { AUTHORITY_MATRIX } from "./company/governance";
 
@@ -39,7 +39,7 @@ const ceoCadence = [
   {
     item_type: "OPERATING_RHYTHM",
     title: "Daily executive standup",
-    owner_role: "Chief of Staff",
+    owner_role: "رئيس الديوان التنفيذي",
     priority: "HIGH",
     cadence: "DAILY",
     notes: "Review blockers, approvals, cash position, active campaigns, and supply risks.",
@@ -64,17 +64,17 @@ const ceoCadence = [
 
 const commercialStrategy = {
   id: "company_thesis",
-  focus: "AI-assisted commerce company focused on validated e-commerce opportunities, lean retail tests, and service/product experiments with measurable ROI.",
+  focus: "شركة تجارة مدعومة بالذكاء الاصطناعي، تركز على فرص تجارة إلكترونية متحقق منها، وتجارب بيع صغيرة، وتجارب منتجات وخدمات بعائد قابل للقياس.",
   investment_thesis:
-    "Invest in small validated tests first, expand only when contribution margin, customer acquisition cost, and operational capacity are proven.",
+    "ابدأ بتجارب صغيرة متحقق منها، ولا توسّع إلا بعد إثبات هامش المساهمة وتكلفة اكتساب العميل والقدرة التشغيلية.",
   capital_rules: {
     pilot_budget_ratio: 0.15,
     self_execution_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T0")!.maxSAR,
     ceo_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T1")!.maxSAR,
     owner_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T2")!.maxSAR,
-    stop_loss_rule: "Pause spend when CAC exceeds target or gross margin drops below 30%.",
+    stop_loss_rule: "أوقف الصرف إذا تجاوزت تكلفة اكتساب العميل المستهدف أو نزل الهامش الإجمالي عن 30%.",
   },
-  target_markets: ["Saudi e-commerce", "gift products", "beauty and care products", "AI-enabled services"],
+  target_markets: ["التجارة الإلكترونية في السعودية", "الهدايا", "منتجات التجميل والعناية", "خدمات الذكاء الاصطناعي"],
 };
 
 function todayIso() {
@@ -144,7 +144,7 @@ export async function getEnterpriseStatus() {
 
 export async function seedEnterpriseOperatingSystem() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   await seedGovernanceOS();
   await seedGovernmentRelationsOS();
 
@@ -180,7 +180,7 @@ export async function seedEnterpriseOperatingSystem() {
 
 export async function runOpportunityRadar(source = "MANUAL", request = "") {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   await seedEnterpriseOperatingSystem();
 
   if (source === "DAILY_CRON") {
@@ -390,7 +390,7 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     entityId: run.id,
     amount: requestedBudget,
     riskLevel: status.intelligence.riskLevel,
-    actorRole: "Opportunity Radar",
+    actorRole: "محلل الفرص",
     metadata: { actionKind: "OPPORTUNITY_RADAR_PILOT", campaignId: campaign.id, opportunity },
   });
   const campaignStatus = governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL";
@@ -435,7 +435,7 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     decisionType: "OPPORTUNITY_RADAR_CREATED",
     entityType: "marketing_campaigns",
     entityId: campaign.id,
-    actorRole: "Opportunity Radar",
+    actorRole: "محلل الفرص",
     action: `Created radar-linked campaign draft for ${opportunity.title}`,
     amount: pilotMarketingBudget,
     riskLevel: status.intelligence.riskLevel,

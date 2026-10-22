@@ -1,5 +1,6 @@
 import { generateOperationalAlerts, getOperationalAlerts, updateOperationalAlert } from "@/lib/alertEngine";
 import { NextResponse } from "next/server";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +10,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Alerts failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تحميل التنبيهات." },
+      { status: failureStatus(error) }
     );
   }
 }
@@ -33,8 +34,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid alert action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Alert action failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء التنبيه." },
+      { status: failureStatus(error) }
     );
   }
 }

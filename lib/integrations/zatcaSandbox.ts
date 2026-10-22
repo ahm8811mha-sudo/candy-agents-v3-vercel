@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { buildZatcaQr, VAT_RATE, type ZatcaInvoice } from "../company/zatca";
 import { executeIntegrationOnce } from "../operations/integrationExecution";
 
@@ -46,7 +46,7 @@ function invoiceHash(invoice: ZatcaInvoice) {
 export async function persistZatcaInvoice(tenantId: string, invoice: ZatcaInvoice) {
   assertInvoice(invoice);
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for ZATCA invoices.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for ZATCA invoices.");
   const expectedQr = buildZatcaQr({
     sellerName: invoice.sellerName,
     vatNumber: invoice.vatNumber,

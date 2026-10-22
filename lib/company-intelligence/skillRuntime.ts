@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import {
   buildCompanySnapshot,
   createAutonomousPlan,
@@ -22,7 +22,7 @@ export type SkillRunRequest = {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for skills execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for skills execution.");
   return supabase;
 }
 

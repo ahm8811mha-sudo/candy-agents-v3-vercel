@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { ShieldCheck, Loader2, Check, X, Inbox } from "lucide-react";
+import { Loader2, Check, X, Inbox } from "lucide-react";
 
 type ApprovalItem = {
   id: string;
@@ -17,7 +17,7 @@ type ApprovalItem = {
 
 type Stats = { pending: number; approved: number; rejected: number; total: number };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const statusMeta: Record<string, { label: string; pill: string }> = {
   PENDING: { label: "بانتظار القرار", pill: "medium" },
@@ -85,7 +85,6 @@ export default function ApprovalCenter() {
     <div className="delivery-panel fade-in" id="approval-center" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><ShieldCheck size={16} /> مركز الاعتماد</span>
           <h2>القرارات التي تنتظر موافقتك</h2>
         </div>
         {stats && (
