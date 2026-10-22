@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain ESM build script without type declarations
-import { RELEASE_VERIFICATION, assertRollbackOnly, connectionConfig, databaseUrl, databaseUrls, loadManifest, releaseGate, stripPsqlMeta, verifyReleaseGates } from "../scripts/release-migrations.mjs";
+import { RELEASE_VERIFICATION, assertRollbackOnly, connectionConfig, databaseUrl, databaseUrls, loadChain, loadManifest, releaseGate, stripPsqlMeta, verifyReleaseGates } from "../scripts/release-migrations.mjs";
+// @ts-expect-error -- plain ESM module without type declarations
+import { ReplayLeftChanges } from "../lib/release/migrationReplay.mjs";
 
 describe("release migrations gate", () => {
   // Preview builds read the same database as production; only a production
@@ -90,8 +92,8 @@ describe("release verification", () => {
     };
   };
   const now = new Date("2026-10-22T12:00:00Z");
-  const run = (db: ReturnType<typeof client>, checks: Array<{ key: string; suite: string }>, fileVersions = ["1", "2"]) =>
-    verifyReleaseGates(db, { commit: "abc123", log: () => {}, now, checks, fileVersions, readSuite: (path: string) => sql[path] });
+  const run = (db: ReturnType<typeof client>, checks: Array<{ key: string; suite: string }>, fileVersions = ["1", "2"], repairLedger: () => Promise<unknown> = async () => ({ recorded: [], unrecorded: [] }), log: (line: string) => void = () => {}) =>
+    verifyReleaseGates(db, { commit: "abc123", log, now, checks, fileVersions, readSuite: (path: string) => sql[path], repairLedger });
 
   it("records production evidence for a suite that passed, expiring like the weekly run", async () => {
     const db = client(["1", "2"]);
@@ -135,6 +137,32 @@ describe("release verification", () => {
     const noLedger = client(new Error('relation "supabase_migrations.schema_migrations" does not exist'));
     expect((await run(noLedger, [], ["1", "2"]))).toEqual([{ key: "migration-chain-applied", passed: false }]);
     expect(noLedger.evidence()).toHaveLength(0);
+  });
+
+  it("repairs the ledger before reading it, so a repaired chain proves itself in the same build", async () => {
+    const db = client(["1", "2"]);
+    await run(db, [], ["1", "2"], async () => {
+      db.queries.push({ text: "-- ledger repaired" });
+      return { recorded: ["2"], unrecorded: [] };
+    });
+    const texts = db.queries.map((query) => query.text);
+    expect(texts).toContain("-- ledger repaired");
+    expect(texts.indexOf("-- ledger repaired")).toBeLessThan(texts.findIndex((text) => text.includes("supabase_migrations.schema_migrations")));
+  });
+
+  it("stops the build only when the replay's rollback left changes behind", async () => {
+    const lines: string[] = [];
+    const db = client(["1", "2"]);
+    const results = await run(db, [], ["1", "2"], async () => { throw new Error("canceling statement due to lock timeout"); }, (line) => lines.push(line));
+    expect(results).toEqual([{ key: "migration-chain-applied", passed: true }]);
+    expect(lines).toContain("ledger not repaired: canceling statement due to lock timeout");
+    await expect(run(client(["1", "2"]), [], ["1", "2"], async () => { throw new ReplayLeftChanges("index public.i"); })).rejects.toThrow("index public.i");
+  });
+
+  it("replays the chain in file order, both files of a shared version included", () => {
+    const files = loadChain().map(({ file }: { file: string }) => file);
+    expect(files).toEqual([...files].sort());
+    expect(files.filter((file: string) => file.startsWith("202607150002_"))).toHaveLength(2);
   });
 
   it("verifies the same suites the weekly Production Verification workflow records", () => {

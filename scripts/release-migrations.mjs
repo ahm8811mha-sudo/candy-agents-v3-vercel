@@ -2,7 +2,9 @@
 /**
  * Applies the reviewed migrations listed in supabase/release-migrations.json to
  * the production database during the Vercel production build, then proves them
- * with the rollback-only suites against that same database.
+ * with the rollback-only suites against that same database. Migrations that
+ * reached that database by hand join its ledger once a rolled-back replay
+ * shows their schema is there (lib/release/migrationReplay.mjs).
  *
  * Why the build: production's database credentials live only in Vercel.
  * Nothing else that runs this repository can reach the database (the GitHub
@@ -23,10 +25,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { diffMigrationChain, versionFromFilename } from "../lib/release/migrationChain.mjs";
+import { ReplayLeftChanges, repairLedgerByReplay } from "../lib/release/migrationReplay.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const LOCK_KEY = "orvanta-release-migrations";
+
+/** Every migration file, in the order the chain applies them. */
+export function loadChain(directory = "supabase/migrations") {
+  return readdirSync(join(root, directory))
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((file) => ({ file, sql: read(join(directory, file)) }));
+}
 
 export function releaseGate(env) {
   if (env.VERCEL !== "1") return { run: false, reason: "not a Vercel build" };
@@ -237,8 +248,9 @@ export async function verifyReleaseGates(client, {
   log,
   now = new Date(),
   checks = RELEASE_VERIFICATION,
-  fileVersions = readdirSync(join(root, "supabase/migrations")).filter((name) => name.endsWith(".sql")).map(versionFromFilename).filter(Boolean),
+  fileVersions = loadChain().map(({ file }) => versionFromFilename(file)).filter(Boolean),
   readSuite = read,
+  repairLedger = (db) => repairLedgerByReplay(db, { files: loadChain(), log }),
 }) {
   const results = [];
   for (const { key, suite } of checks) {
@@ -258,6 +270,17 @@ export async function verifyReleaseGates(client, {
       await client.query("reset statement_timeout").catch(() => {});
     }
     results.push({ key, passed });
+  }
+
+  // A migration that reached the database by hand joins the ledger only once
+  // a rolled-back replay shows its schema is already there. A rollback that
+  // left something behind stops the build: nothing ships on top of a change
+  // nobody made on purpose.
+  try {
+    await repairLedger(client);
+  } catch (error) {
+    if (error instanceof ReplayLeftChanges) throw error;
+    log(`ledger not repaired: ${error.message}`);
   }
 
   // The chain is read off the database's own ledger, never attested.

@@ -2,6 +2,8 @@
 # Applies the release migrations to a throwaway Postgres and runs their
 # suites, exactly as the production build will (scripts/release-migrations.mjs),
 # after a bootstrap that stands in for Supabase and the earlier migrations.
+# Then proves the ledger repair on the same database
+# (scripts/migration-replay-check.mjs).
 #
 #   PGURL=postgresql://postgres:postgres@localhost:5432/postgres scripts/sql-local-check.sh
 #
@@ -12,7 +14,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -n "${PGURL:-}" ]; then
-  exec node scripts/release-migrations.mjs --local --url "$PGURL"
+  node scripts/release-migrations.mjs --local --url "$PGURL"
+  exec node scripts/migration-replay-check.mjs --url "$PGURL"
 fi
 
 bin=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)
@@ -26,4 +29,6 @@ trap cleanup EXIT
 
 as_db "$bin/initdb" -D "$dir/data" -A trust -U postgres >/dev/null
 as_db "$bin/pg_ctl" -D "$dir/data" -o "-p $port -k $dir" -l "$dir/log" start >/dev/null
-node scripts/release-migrations.mjs --local --url "postgresql://postgres@localhost:$port/postgres?host=$dir"
+url="postgresql://postgres@localhost:$port/postgres?host=$dir"
+node scripts/release-migrations.mjs --local --url "$url"
+node scripts/migration-replay-check.mjs --url "$url"

@@ -33,4 +33,6 @@
 
 The production project received the equivalent migrations during development and stores evidence in `readiness_evidence`. Before a commercial release, the same ordered chain must be applied to an isolated staging or restored database through `.github/workflows/database-security.yml`, followed by `supabase/tests/rls_regression.sql` and browser E2E.
 
+Migrations that reached production by hand are recorded in its ledger only by the production build, and only after a rolled-back replay of the whole chain shows their schema is already there (`lib/release/migrationReplay.mjs`, proven by `scripts/migration-replay-check.mjs`). Every file in this directory must therefore stay replayable: no top-level transaction control or `SET`, and every `create policy` or `create trigger` preceded by its `drop ... if exists`.
+
 `ORVANTA_MIGRATIONS_BASELINED=true` must not be set merely because files exist. The evidence-aware readiness endpoint derives this gate from an unexpired `migration-chain-applied` PASS record.
