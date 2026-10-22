@@ -16,8 +16,8 @@ test("preview distinguishes expired isolation verification from an unconfigured 
   } }));
   await page.route("**/api/health/supabase", (route) => route.fulfill({ json: { ok: true, configured: true, tables: {} } }));
   await page.goto("/status");
-  const isolation = page.locator(".status-row").filter({ hasText: "عزل البيانات وRLS" });
-  const outbox = page.locator(".status-row").filter({ hasText: "Outbox والتسليم الخارجي" });
+  const isolation = page.locator(".status-row").filter({ hasText: "عزل بيانات الشركة" });
+  const outbox = page.locator(".status-row").filter({ hasText: "صندوق الصادر والتسليم الخارجي" });
   await expect(isolation).toContainText("يلزم تحقق حديث");
   await expect(outbox).toContainText("التسليم غير جاهز");
   await expect(isolation).not.toContainText("غير مهيأ للمعاينة");

@@ -19,10 +19,10 @@
  */
 
 import pg from "pg";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { versionFromFilename } from "../lib/release/migrationChain.mjs";
+import { diffMigrationChain, versionFromFilename } from "../lib/release/migrationChain.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -208,6 +208,77 @@ export async function runSuites(client, suites, log) {
   }
 }
 
+/**
+ * The gates the weekly Production Verification workflow proves, proved again by
+ * every production build of main: the build is the one place that holds the
+ * production database credentials, so it need not wait for GitHub secrets.
+ * Each suite is one rolled-back transaction. A suite that passes records its
+ * evidence; one that fails records nothing and leaves its gate red. None of
+ * them fails the build, because they verify the database as it stands, not
+ * the code being shipped.
+ */
+export const RELEASE_VERIFICATION = [
+  { key: "rls-regression", suite: "supabase/tests/rls_regression.sql" },
+  { key: "execution-transaction-smoke", suite: "supabase/tests/execution_bundle.sql" },
+  { key: "accounting-controls-smoke", suite: "supabase/tests/accounting_controls_regression.sql" },
+];
+const EVIDENCE_HOURS = 336;
+
+async function recordEvidence(client, key, { commit, now, details = {} }) {
+  const expires = new Date(now.getTime() + EVIDENCE_HOURS * 60 * 60_000);
+  await client.query(
+    "insert into public.readiness_evidence (evidence_key, environment, status, commit_sha, details, performed_by, performed_at, expires_at) values ($1, 'production', 'PASS', $2, $3, 'orvanta-release-verifier', $4, $5)",
+    [key, commit || null, { verifiedAgainst: "production", source: "production-build", commit: commit || null, ...details }, now.toISOString(), expires.toISOString()]
+  );
+}
+
+export async function verifyReleaseGates(client, {
+  commit,
+  log,
+  now = new Date(),
+  checks = RELEASE_VERIFICATION,
+  fileVersions = readdirSync(join(root, "supabase/migrations")).filter((name) => name.endsWith(".sql")).map(versionFromFilename).filter(Boolean),
+  readSuite = read,
+}) {
+  const results = [];
+  for (const { key, suite } of checks) {
+    let passed = false;
+    try {
+      const sql = readSuite(suite);
+      assertRollbackOnly(suite, sql);
+      await client.query("set statement_timeout = '120s'");
+      await client.query(stripPsqlMeta(sql));
+      await recordEvidence(client, key, { commit, now });
+      passed = true;
+      log(`verified: ${key} (${suite}); evidence recorded`);
+    } catch (error) {
+      await client.query("rollback").catch(() => {});
+      log(`not verified: ${key} (${suite}): ${error.message}; no evidence recorded`);
+    } finally {
+      await client.query("reset statement_timeout").catch(() => {});
+    }
+    results.push({ key, passed });
+  }
+
+  // The chain is read off the database's own ledger, never attested.
+  let chainPassed = false;
+  try {
+    const { rows } = await client.query("select version from supabase_migrations.schema_migrations order by version");
+    const diff = diffMigrationChain(fileVersions, rows.map((row) => row.version));
+    if (diff.applied) {
+      await recordEvidence(client, "migration-chain-applied", { commit, now, details: { fileCount: diff.fileCount, appliedCount: diff.appliedCount } });
+      chainPassed = true;
+      log(`verified: migration-chain-applied (${diff.fileCount} migrations); evidence recorded`);
+    } else {
+      log(`not verified: migration-chain-applied: ${diff.missing.length} of ${diff.fileCount} migrations are not in the ledger; no evidence recorded`);
+    }
+  } catch (error) {
+    log(`not verified: migration-chain-applied: ${error.message}; no evidence recorded`);
+  }
+  results.push({ key: "migration-chain-applied", passed: chainPassed });
+  return results;
+}
+
 /** What a throwaway database needs before the release chain applies. */
 async function prepareLocal(client, log) {
   await client.query(read("supabase/tests/local/bootstrap.sql"));
@@ -267,6 +338,7 @@ async function main() {
     await runSuites(client, suites, log);
     await posture(client, "after", log);
     await documentStructure(client, log);
+    if (!local) await verifyReleaseGates(client, { commit: process.env.VERCEL_GIT_COMMIT_SHA, log });
   } finally {
     await client.end();
   }

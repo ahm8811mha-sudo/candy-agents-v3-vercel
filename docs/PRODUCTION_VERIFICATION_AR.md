@@ -59,6 +59,29 @@ execution-transaction · accounting-controls · capability-registry
 - تلقائياً: كل يوم اثنين. الإثبات صالح ١٤ يوماً، فإذا توقف التشغيل تعود البوابات
   حمراء من تلقاء نفسها بدل أن تستند إلى فحص قديم.
 
+## التحقق نفسه مع كل نشر للإنتاج (2026-10-22)
+
+بناء الإنتاج على Vercel هو المكان الوحيد الذي يملك بيانات اتصال قاعدة الإنتاج،
+ويطبّق فيه `scripts/release-migrations.mjs` الهجرات. بعد ذلك يشغّل الحزم نفسها التي
+يشغّلها هذا التحقق الأسبوعي، على قاعدة الإنتاج نفسها، كل واحدة في معاملة تنتهي بـ`rollback`:
+
+| مفتاح الدليل | الحزمة |
+|---|---|
+| `rls-regression` | `supabase/tests/rls_regression.sql` |
+| `execution-transaction-smoke` | `supabase/tests/execution_bundle.sql` |
+| `accounting-controls-smoke` | `supabase/tests/accounting_controls_regression.sql` |
+| `migration-chain-applied` | سجل `supabase_migrations.schema_migrations` مقارناً بملفات المستودع |
+
+- الحزمة التي تنجح تسجّل دليلها في `readiness_evidence` بـ`environment=production`
+  وصلاحية 14 يوماً، مثل التحقق الأسبوعي تماماً، مع `source: production-build`.
+- الحزمة التي تفشل لا تسجّل شيئاً وتبقى بوابتها حمراء، ويُكتب سبب الفشل في سجل البناء.
+- لا يُفشل أيٌّ منها البناء: هي تتحقق من القاعدة كما هي، لا من الكود المنشور. أما حزم
+  الهجرات في `supabase/release-migrations.json` فتبقى توقف البناء عند فشلها.
+- لكل حزمة مهلة 120 ثانية، ولا تُشغَّل حزمة لا تنتهي بـ`rollback;`.
+
+هذا لا يغني عن الأسرار أعلاه: التحقق الأسبوعي يجدد الدليل حتى لو لم يُنشر شيء،
+واختبارات المتصفح وتمرين الاستعادة لا تُسجَّل إلا من GitHub.
+
 ## القاعدة التي لا تُكسر
 
 يُسجَّل الإثبات **لكل فحص نجح وحده**. الفحص الفاشل لا يُسجّل شيئاً، وتبقى بوابته
