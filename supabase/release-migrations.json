@@ -1,5 +1,5 @@
 {
-  "_comment": "Applied by scripts/release-migrations.mjs during the production build of main, in this order, each once (supabase_migrations.schema_migrations). Add a migration here only after scripts/sql-local-check.sh passes on it. 202607170001, 20260718000200 and 20260721000100 never reached production: the replay of 2026-10-22 found what they create or change missing there. 20261022000100-300 reconcile production with three migrations it received only in part. The other migrations older than these reached production by other means, and the build records each in the ledger once a rolled-back replay proves its schema is there (lib/release/migrationReplay.mjs).",
+  "_comment": "Applied by scripts/release-migrations.mjs during the production build of main, in this order, each once (supabase_migrations.schema_migrations). Add a migration here only after scripts/sql-local-check.sh passes on it. 202607170001, 20260718000200 and 20260721000100 never reached production: the replay of 2026-10-22 found what they create or change missing there. 20261022000100-500 reconcile production with the migrations it received only in part. The other migrations older than these reached production by other means, and the build records each in the ledger once a rolled-back replay proves its schema is there (lib/release/migrationReplay.mjs).",
   "migrations": [
     "202607170001_idea_execution_link.sql",
     "20260718000200_advisor_followup_hardening.sql",
@@ -10,7 +10,9 @@
     "20261020000100_close_client_role_access.sql",
     "20261022000100_real_world_proof_rule.sql",
     "20261022000200_journal_amount_scale.sql",
-    "20261022000300_inventory_shopify_link_columns.sql"
+    "20261022000300_inventory_shopify_link_columns.sql",
+    "20261022000400_journal_entry_number_per_tenant.sql",
+    "20261022000500_inventory_movements_tenant.sql"
   ],
   "suites": [
     "supabase/tests/document_access_regression.sql",
