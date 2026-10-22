@@ -141,7 +141,8 @@ create table public.accounting_accounts (
 );
 create table public.accounting_journal_entries (
   id uuid primary key default gen_random_uuid(), tenant_id text not null default 'golden-star',
-  entry_number text, entry_date date not null default current_date, status text not null default 'DRAFT'
+  entry_number text, entry_date date not null default current_date, status text not null default 'DRAFT',
+  constraint accounting_journal_entries_entry_number_key unique (entry_number)
 );
 create table public.accounting_journal_lines (
   id uuid primary key default gen_random_uuid(), entry_id uuid, account_id uuid,
@@ -172,4 +173,9 @@ create table public.inventory_items (
   reorder_point numeric not null default 5, status text not null default 'ACTIVE',
   created_at timestamptz default now(), updated_at timestamptz default now(),
   tenant_id text not null default 'golden-star'
+);
+create table public.inventory_movements (
+  id uuid primary key default gen_random_uuid(), item_id uuid references public.inventory_items(id) on delete cascade,
+  movement_type text not null default 'ADJUSTMENT', quantity numeric not null,
+  unit_cost numeric not null default 0, note text, created_at timestamptz default now()
 );
