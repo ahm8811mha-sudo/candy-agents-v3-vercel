@@ -182,7 +182,7 @@ export async function createSyncedProduct(
     action: origin === "shopify-webhook" ? "PRODUCT_SYNCED_FROM_SHOPIFY" : "PRODUCT_CREATED",
     entityType: "inventory_item",
     entityId: product.id,
-    detail: `المنتج «${product.name}» (${product.sku}) — Shopify: ${shopifyState}، المخزون: مسجّل، المحاسبة: أصل مسجّل بتكلفة ${product.unitCost} وسعر ${product.targetPrice}.`,
+    detail: `المنتج «${product.name}» (${product.sku}). Shopify: ${shopifyState}، المخزون: مسجّل، المحاسبة: أصل مسجّل بتكلفة ${product.unitCost} وسعر ${product.targetPrice}.`,
   });
 
   invalidateCache("shopify-snapshot");
@@ -271,7 +271,7 @@ export async function pullShopifyProductsIntoInventory(
   options: { tenantId?: string; actor?: string } = {}
 ): Promise<{ ok: boolean; imported: number; failed: number; reason?: string }> {
   const snapshot = await getShopifySnapshot();
-  if (!snapshot.connected) return { ok: false, imported: 0, failed: 0, reason: "المتجر غير متصل — أضف مفاتيح Shopify أولاً." };
+  if (!snapshot.connected) return { ok: false, imported: 0, failed: 0, reason: "المتجر غير متصل. أضف مفاتيح Shopify أولاً." };
   let imported = 0;
   let failed = 0;
   for (const p of snapshot.products as ShopifyProduct[]) {

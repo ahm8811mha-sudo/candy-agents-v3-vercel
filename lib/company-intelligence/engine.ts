@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 
 export type CompanySnapshot = {
   tenantId: string;
@@ -431,7 +431,7 @@ export function createExecutiveNarrative(snapshot: CompanySnapshot, recommendati
 
 export async function persistSnapshot(snapshot: CompanySnapshot) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("company_intelligence_snapshots")
     .insert({
@@ -452,7 +452,7 @@ export async function persistSnapshot(snapshot: CompanySnapshot) {
 export async function persistRecommendations(tenantId: string, recommendations: DecisionRecommendation[]) {
   if (!recommendations.length) return [];
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("decision_recommendations")
     .insert(
@@ -476,7 +476,7 @@ export async function persistRecommendations(tenantId: string, recommendations: 
 
 export async function persistSimulation(tenantId: string, actorId: string, input: SimulationInput, result: SimulationResult) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("simulation_runs")
     .insert({
@@ -499,7 +499,7 @@ export async function persistSimulation(tenantId: string, actorId: string, input
 
 export async function persistPlan(tenantId: string, actorId: string, input: PlanInput, plan: AutonomousPlan) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("autonomous_plans")
     .insert({
@@ -523,7 +523,7 @@ export async function persistPlan(tenantId: string, actorId: string, input: Plan
 
 export async function recordLearningEvent(tenantId: string, input: LearningInput) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("company_learning_events")
     .insert({
@@ -555,7 +555,7 @@ export async function upsertKnowledgeNode(input: {
   confidence?: number;
 }) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("company_knowledge_nodes")
     .upsert(
@@ -589,7 +589,7 @@ export async function linkKnowledgeNodes(input: {
   source?: string;
 }) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   const { data, error } = await supabase
     .from("company_knowledge_edges")
     .upsert(

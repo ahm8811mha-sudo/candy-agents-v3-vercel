@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { publishOutboxBatch } from "./outboxPublisher";
 import { runWorkflowTick } from "./workflowRuntime";
 import { recoverPendingAgentProjects } from "../company/internalAgentExecutor";
@@ -31,7 +31,7 @@ function bounded(value: number | undefined, fallback: number, maximum: number) {
 
 async function loadWorkflow(tenantId: string, workflowInstanceId: string): Promise<WorkflowSnapshot> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for durable workflow execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for durable workflow execution.");
 
   const { data, error } = await supabase
     .from("workflow_instances")
@@ -48,7 +48,7 @@ async function loadWorkflow(tenantId: string, workflowInstanceId: string): Promi
 async function prioritizePendingStep(tenantId: string, workflow: WorkflowSnapshot) {
   if (workflow.status !== "PENDING" || !workflow.current_step) return;
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for durable workflow execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for durable workflow execution.");
 
   const { error } = await supabase
     .from("workflow_steps")

@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { normalizeTenantId } from "../tenant";
 import {
   OWNER_ABSENCE_POLICY_VERSION,
@@ -119,7 +119,7 @@ export async function getOwnerAbsencePolicy(tenantId: string): Promise<OwnerAbse
 export async function saveOwnerAbsencePolicy(tenantId: string, input: OwnerAbsencePolicyUpdate) {
   const tenant = normalizeTenantId(tenantId);
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required to save the owner absence policy.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required to save the owner absence policy.");
   const strategicGuidance = input.strategicGuidance.trim();
   if (["ACTIVE", "SCHEDULED"].includes(input.status) && strategicGuidance.length < 20) {
     throw new Error("أضف توجيهًا استراتيجيًا واضحًا قبل تفعيل غياب المالك.");

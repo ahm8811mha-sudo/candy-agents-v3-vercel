@@ -55,7 +55,7 @@ type InboxItem = {
   };
 };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const DEPARTMENTS = ["دراسة الجدوى", "المالية", "التسويق", "المبيعات", "العمليات", "المشتريات", "المدير المالي", "التنفيذي"];
 
@@ -69,7 +69,7 @@ const statusMeta: Record<string, { label: string; pill: string }> = {
 };
 
 const ASSIGNEES = [
-  "سلطان — الرئيس التنفيذي",
+  "سلطان، الرئيس التنفيذي",
   "المدير المالي",
   "مدير التسويق",
   "مدير العمليات",
@@ -241,7 +241,7 @@ export default function InboxCenter() {
       setDeferReason("");
       setDeferDate("");
       setDeferAssignee("");
-      setExecMsg({ text: `تم التأجيل حتى ${deferDate}${deferAssignee ? ` — يتولى التجهيز: ${deferAssignee}` : ""}.`, ok: true });
+      setExecMsg({ text: `تم التأجيل حتى ${deferDate}${deferAssignee ? `، ويتولى التجهيز ${deferAssignee}` : ""}.`, ok: true });
       await load();
     } catch {
       setDeferError("تعذر تأجيل العنصر.");
@@ -320,7 +320,6 @@ export default function InboxCenter() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Inbox size={16} /> مركز القرار</span>
           <h1>كل قرار، في سياقه.</h1>
           <p className="page-sub">كل ما ينتظر اعتمادك من كل الأقسام والأنظمة، مرتّباً بالأهم: المتأخر أولاً، ثم الأعلى مبلغاً.</p>
         </div>
@@ -333,7 +332,7 @@ export default function InboxCenter() {
         </div>
         <div className={lateCount ? "is-late" : ""}>
           <b>{lateCount}</b>
-          <small>متأخر عن SLA</small>
+          <small>متأخرة عن موعدها</small>
         </div>
         <div className={atStake > 0 ? "" : "is-text"}>
           <b>{atStake > 0 ? currency.format(atStake) : "—"}</b>
@@ -420,7 +419,7 @@ export default function InboxCenter() {
                   {item.ageLabel ? ` · ${item.ageLabel}` : ""}
                 </span>
                 {item.stale && (
-                  <span className="decide-row__late"><AlertTriangle size={13} /> متأخر عن SLA</span>
+                  <span className="decide-row__late"><AlertTriangle size={13} /> متأخر عن موعده</span>
                 )}
               </button>
             ))}
@@ -439,7 +438,7 @@ export default function InboxCenter() {
                       <span><small>المبلغ</small><b>{currency.format(selected.amount)}</b></span>
                     )}
                     <span><small>عمر الطلب</small><b>{selected.ageLabel || "—"}</b></span>
-                    <span><small>الحالة</small><b>{selected.stale ? "متأخر عن SLA" : "ضمن المهلة"}</b></span>
+                    <span><small>الحالة</small><b>{selected.stale ? "متأخر عن موعده" : "ضمن المهلة"}</b></span>
                   </div>
                 </div>
 
@@ -502,7 +501,7 @@ export default function InboxCenter() {
                       <label>
                         الموظف المسؤول عن التجهيز
                         <select className="input" value={deferAssignee} onChange={(e) => setDeferAssignee(e.target.value)}>
-                          <option value="">— بدون تعيين —</option>
+                          <option value="">بدون تعيين</option>
                           {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
                         </select>
                       </label>

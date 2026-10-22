@@ -92,7 +92,7 @@ export function evaluateScalp(
     return {
       ...base,
       signal: "FILTERED",
-      reason: `التذبذب ${(volatilityPct * 100).toFixed(2)}% يتجاوز الحد ${(config.volatilityMaxPct * 100).toFixed(2)}% — لا تداول`,
+      reason: `التذبذب ${(volatilityPct * 100).toFixed(2)}% يتجاوز الحد ${(config.volatilityMaxPct * 100).toFixed(2)}%، فلا تداول`,
     };
   }
 

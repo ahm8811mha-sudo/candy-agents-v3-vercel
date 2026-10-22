@@ -11,6 +11,7 @@ import {
   recordFunnelEvent,
 } from "@/lib/marketingOS";
 import { NextResponse } from "next/server";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Marketing OS failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تحميل بيانات التسويق." },
+      { status: failureStatus(error) }
     );
   }
 }
@@ -79,8 +80,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid marketing action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Marketing action failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء التسويق." },
+      { status: failureStatus(error) }
     );
   }
 }

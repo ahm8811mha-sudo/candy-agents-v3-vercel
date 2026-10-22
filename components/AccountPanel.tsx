@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Wallet, Loader2, ArrowDownToLine, ArrowUpFromLine, Info, ExternalLink, CheckCircle2, CircleDashed, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowDownToLine, ArrowUpFromLine, Info, ExternalLink, CheckCircle2, CircleDashed, ShieldCheck } from "lucide-react";
 
 type Account = {
   mode: "paper" | "live";
@@ -60,14 +60,13 @@ export default function AccountPanel() {
     <div className="delivery-panel fade-in trading-account-panel" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header trading-panel-header">
         <div>
-          <span className="eyebrow"><Wallet size={16} /> حساب التداول</span>
-          <h2>الرصيد وحالة الوسيط</h2>
+          <h2>رصيد حساب التداول وحالة الوسيط</h2>
         </div>
         <div className="trading-header-actions">
           {data && (
             <span className={`status-pill ${connected ? "done" : ""}`}>
               {connected ? <CheckCircle2 size={14} /> : <CircleDashed size={14} />}
-              {connected ? (isLive ? "حقيقي Live" : "ورقي Paper") : "بانتظار الربط"}
+              {connected ? (isLive ? "حقيقي" : "ورقي") : "بانتظار الربط"}
             </span>
           )}
           <button className="secondary-btn" onClick={() => load()} disabled={loading}>
@@ -87,7 +86,7 @@ export default function AccountPanel() {
           <div className="trading-setup-card__title">
             <ShieldCheck size={24} />
             <div>
-              <strong>تهيئة Alpaca Paper مطلوبة</strong>
+              <strong>تهيئة حساب Alpaca الورقي مطلوبة</strong>
               <span>الربط الورقي يستخدم أموالاً افتراضية وبيانات IEX، ولا يسمح بإيداع أو سحب حقيقي.</span>
             </div>
           </div>
@@ -98,7 +97,7 @@ export default function AccountPanel() {
             </p>
           )}
           <ol className="trading-setup-steps">
-            <li><b>1</b><span>أنشئ حساب Paper وولّد مفاتيحه من لوحة Alpaca.</span></li>
+            <li><b>1</b><span>أنشئ حساباً ورقياً وولّد مفاتيحه من لوحة Alpaca.</span></li>
             <li><b>2</b><span>أضف المتغيرين في Vercel: <code>ALPACA_API_KEY</code> و <code>ALPACA_API_SECRET</code>.</span></li>
             <li><b>3</b><span>اترك <code>ALPACA_LIVE=false</code> ثم أعد النشر واضغط تحديث.</span></li>
           </ol>
@@ -122,11 +121,11 @@ export default function AccountPanel() {
         <>
           <div className="finance-summary">
             <div className="metric-card green">
-              <small>إجمالي القيمة (Equity)</small>
+              <small>إجمالي القيمة</small>
               <strong>{usd.format(data.account.equity)}</strong>
             </div>
             <div className="metric-card">
-              <small>النقد المتاح (Cash)</small>
+              <small>النقد المتاح</small>
               <strong>{usd.format(data.account.cash)}</strong>
             </div>
             <div className="metric-card">
@@ -137,7 +136,7 @@ export default function AccountPanel() {
 
           {!isLive && (
             <p className="notice integration-notice" style={{ color: "var(--amber)" }}>
-              <Info size={14} /> هذا حساب <b>ورقي</b> — الأرقام افتراضية ولا تمثّل أموالاً حقيقية. لا إيداع/سحب حقيقي.
+              <Info size={14} /> هذا حساب <b>ورقي</b>: الأرقام افتراضية ولا تمثّل أموالاً حقيقية. لا إيداع/سحب حقيقي.
             </p>
           )}
           {(data.account.tradingBlocked || data.account.accountBlocked) && (
@@ -158,7 +157,7 @@ export default function AccountPanel() {
               <b style={{ color: "var(--text)" }}>الإيداع</b>
               <br />
               <small style={{ color: "var(--muted)" }}>
-                {isLive ? "يتم من لوحة الوسيط المرخّص فقط. التطبيق يعرض الرصيد ولا يحرّك الأموال." : "غير متاح في Paper؛ الرصيد افتراضي ويُدار من لوحة Alpaca التجريبية."}
+                {isLive ? "يتم من لوحة الوسيط المرخّص فقط. التطبيق يعرض الرصيد ولا يحرّك الأموال." : "غير متاح في الحساب الورقي؛ الرصيد افتراضي ويُدار من لوحة Alpaca التجريبية."}
               </small>
             </span>
             <ArrowDownToLine size={16} style={{ color: "var(--green)" }} />
@@ -168,7 +167,7 @@ export default function AccountPanel() {
               <b style={{ color: "var(--text)" }}>السحب</b>
               <br />
               <small style={{ color: "var(--muted)" }}>
-                {isLive ? "يُطلب من لوحة الوسيط فقط ويُحوّل إلى الحساب البنكي المسجل." : "غير متاح في Paper ولا توجد أموال حقيقية قابلة للسحب."}
+                {isLive ? "يُطلب من لوحة الوسيط فقط ويُحوّل إلى الحساب البنكي المسجل." : "غير متاح في الحساب الورقي، ولا توجد أموال حقيقية قابلة للسحب."}
               </small>
             </span>
             <ArrowUpFromLine size={16} style={{ color: "var(--amber)" }} />

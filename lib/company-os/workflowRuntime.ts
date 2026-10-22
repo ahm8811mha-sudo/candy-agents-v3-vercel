@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { isPersonalOwnerMode } from "../auth";
 import { buildDecisionPacket } from "./board";
 import { canReserveBudget } from "./finance";
@@ -105,7 +105,7 @@ export function isWorkflowRuntimeEnabled() {
 
 function requireRuntime() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for durable workflow execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for durable workflow execution.");
   if (!isWorkflowRuntimeEnabled()) {
     throw new Error("Durable workflow runtime is disabled. Set ORVANTA_WORKFLOW_RUNTIME_ENABLED=true after applying the core schema.");
   }

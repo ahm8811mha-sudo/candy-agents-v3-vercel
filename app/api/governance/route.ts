@@ -1,5 +1,6 @@
 import { evaluateGovernedAction, getGovernanceCenter, seedGovernanceOS } from "@/lib/governanceOS";
 import { NextResponse } from "next/server";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +10,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Governance center failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تحميل الحوكمة." },
+      { status: failureStatus(error) }
     );
   }
 }
@@ -30,8 +31,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...data });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Governance action failed" },
-      { status: 500 }
+      { ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء الحوكمة." },
+      { status: failureStatus(error) }
     );
   }
 }

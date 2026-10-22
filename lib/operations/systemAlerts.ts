@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { triggerNotification } from "../integrations";
 
 export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
@@ -17,7 +17,7 @@ export type RaiseAlertInput = {
 
 export async function raiseSystemAlert(input: RaiseAlertInput) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for system alerts.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for system alerts.");
 
   const { data, error } = await supabase.rpc("orvanta_raise_system_alert", {
     p_tenant_id: input.tenantId,
@@ -56,7 +56,7 @@ export async function resolveSystemAlert(tenantId: string, dedupeKey: string, no
 
 export async function acknowledgeSystemAlert(tenantId: string, id: string, actorId: string) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for system alerts.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for system alerts.");
   const { data, error } = await supabase
     .from("system_alerts")
     .update({

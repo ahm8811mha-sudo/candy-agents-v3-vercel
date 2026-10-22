@@ -24,6 +24,7 @@ import {
   type GovernmentUploadRequest,
 } from "@/lib/governmentRelationsV2";
 import { ProofError } from "@/lib/executionProofs/rules";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,10 +104,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Government relations OS failed",
+        error: error instanceof Error ? error.message : "تعذر تحميل العلاقات الحكومية.",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }
@@ -229,11 +230,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Government relations action failed",
+        error: error instanceof Error ? error.message : "تعذر تنفيذ إجراء العلاقات الحكومية.",
         requestId: auth.context.requestId,
       },
       // A refused file declaration carries its own status (413, 415).
-      { status: error instanceof ProofError ? error.status : 500 }
+      { status: error instanceof ProofError ? error.status : failureStatus(error) }
     );
   }
 }

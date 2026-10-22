@@ -132,7 +132,7 @@ function buildBaseEvidence(request: string, financials: Financials, requestedBud
     {
       source: "financials",
       type: "metric",
-      summary: `الإيرادات ${financials.income.toLocaleString("ar-SA")} ريال، المصروفات ${financials.expenses.toLocaleString("ar-SA")} ريال، صافي الربح ${financials.profit.toLocaleString("ar-SA")} ريال.`,
+      summary: `الإيرادات ${financials.income.toLocaleString("ar-SA-u-nu-latn")} ريال، المصروفات ${financials.expenses.toLocaleString("ar-SA-u-nu-latn")} ريال، صافي الربح ${financials.profit.toLocaleString("ar-SA-u-nu-latn")} ريال.`,
       metadata: financials as unknown as Record<string, unknown>,
     },
   ];
@@ -324,7 +324,7 @@ function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number)
       budget,
       gate: "CEO",
       requiredRole: "CEO",
-      reason: "الميزانية ضمن شريحة T1 وتحتاج اعتماد CEO Agent قبل الصرف.",
+      reason: "الميزانية ضمن شريحة T1 وتحتاج اعتماد الرئيس التنفيذي قبل الصرف.",
     };
   }
 
@@ -377,7 +377,7 @@ function buildRecommendedActions(
       {
         actionType: "MARKETING_CAMPAIGN_DRAFT",
         title: "تجهيز حملة تسويق تجريبية",
-        description: `إعداد حملة محدودة بميزانية لا تتجاوز ${Math.max(1000, Math.round((budget || 5000) * 0.15)).toLocaleString("ar-SA")} ريال.`,
+        description: `إعداد حملة محدودة بميزانية لا تتجاوز ${Math.max(1000, Math.round((budget || 5000) * 0.15)).toLocaleString("ar-SA-u-nu-latn")} ريال.`,
         priority: riskLevel === "HIGH" ? "MEDIUM" : "HIGH",
         provider: "Google Ads / Meta Ads",
         executionMode: "READY_FOR_INTEGRATION",
@@ -430,7 +430,7 @@ export function buildExecutionBlueprint(request: string, intelligence: BusinessI
     },
     {
       title: "اعتماد الميزانية المرحلية",
-      content: `اعتماد ميزانية مرحلة أولى بقيمة تقريبية ${firstBudget.toLocaleString("ar-SA")} ريال حسب بوابة الموافقة: ${intelligence.approval.gate}.`,
+      content: `اعتماد ميزانية مرحلة أولى بقيمة تقريبية ${firstBudget.toLocaleString("ar-SA-u-nu-latn")} ريال حسب بوابة الموافقة: ${intelligence.approval.gate}.`,
       ownerRole: intelligence.approval.requiredRole === "NONE" ? "CFO" : intelligence.approval.requiredRole,
       priority: intelligence.approval.requiredRole === "NONE" ? "HIGH" : "URGENT",
       dueDays: 1,

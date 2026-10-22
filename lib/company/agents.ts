@@ -27,7 +27,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "owner",
     name: "المالك",
-    title: "مالك الشركة — السلطة العليا",
+    title: "مالك الشركة، السلطة العليا",
     rank: "OWNER",
     department: "الملكية",
     href: "/inbox",
@@ -38,7 +38,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "sultan",
     name: "سلطان",
-    title: "الرئيس التنفيذي (CEO Agent)",
+    title: "الرئيس التنفيذي",
     rank: "CEO",
     department: "الإدارة التنفيذية",
     href: "/departments/executive",
@@ -54,7 +54,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "abdulrahman",
     name: "عبدالرحمن",
-    title: "المدير المالي (CFO)",
+    title: "المدير المالي",
     rank: "DEPARTMENT_HEAD",
     department: "المالية",
     href: "/departments/finance",
@@ -69,7 +69,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "noura",
     name: "نورة",
-    title: "مديرة التسويق (CMO)",
+    title: "مديرة التسويق",
     rank: "DEPARTMENT_HEAD",
     department: "التسويق",
     href: "/departments/marketing",
@@ -80,7 +80,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "fahad",
     name: "فهد",
-    title: "مدير العمليات (COO)",
+    title: "مدير العمليات",
     rank: "DEPARTMENT_HEAD",
     department: "العمليات",
     href: "/departments/operations",
@@ -91,7 +91,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "sara",
     name: "سارة",
-    title: "مديرة المبيعات وعلاقات العملاء (CRM)",
+    title: "مديرة المبيعات وعلاقات العملاء",
     rank: "DEPARTMENT_HEAD",
     department: "المبيعات",
     href: "/departments/sales",
@@ -124,7 +124,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "rased",
     name: "راصد",
-    title: "محلل الفرص (Opportunity Radar)",
+    title: "محلل الفرص",
     rank: "FUNCTIONAL",
     department: "الاستخبارات",
     href: "/bi-center",
@@ -157,7 +157,7 @@ export const COMPANY_AGENTS: CompanyAgent[] = [
   {
     id: "diwan",
     name: "ريّان",
-    title: "رئيس الديوان التنفيذي (Chief of Staff)",
+    title: "رئيس الديوان التنفيذي",
     rank: "FUNCTIONAL",
     department: "الديوان التنفيذي",
     href: "/decisions-followup",

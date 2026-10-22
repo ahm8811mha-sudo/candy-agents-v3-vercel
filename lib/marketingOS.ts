@@ -2,7 +2,7 @@ import { calculateFinancials } from "./accountingSystem";
 import { evaluateBusiness } from "./businessBrain";
 import { getEnterpriseStatus, seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { evaluateGovernedAction, logDecision } from "./governanceOS";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 
 type CampaignInput = {
   productName: string;
@@ -133,7 +133,7 @@ function slug(value: string, prefix: string) {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 
@@ -276,7 +276,7 @@ export async function createMarketingCampaign(input: CampaignInput) {
   await supabase.from("business_actions").insert({
     action_type: "MARKETING_CAMPAIGN_REVIEW",
     title: `Review campaign ${input.productName.trim()}`,
-    description: `Pilot campaign budget ${budget.toLocaleString("ar-SA")} SAR on ${channelId}.`,
+    description: `Pilot campaign budget ${budget.toLocaleString("ar-SA-u-nu-latn")} SAR on ${channelId}.`,
     status: status === "PENDING_APPROVAL" ? "WAITING_APPROVAL" : "QUEUED",
     execution_mode: "READY_FOR_INTEGRATION",
     provider: channelId,

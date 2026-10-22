@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, Boxes, Building2, Loader2, PackagePlus, Plus, RefreshCw, Truck } from "lucide-react";
+import { ArrowRight, Boxes, Building2, Loader2, PackagePlus, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 type ProcurementData = {
@@ -23,7 +23,7 @@ const empty: ProcurementData = {
   policy: [],
 };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 export default function ProcurementInventoryConsole() {
   const [data, setData] = useState<ProcurementData>(empty);
@@ -127,15 +127,13 @@ export default function ProcurementInventoryConsole() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow"><Truck size={16} /> المشتريات والمخزون</span>
-          <h1>نظام موردين ومخزون للشركة التجارية</h1>
+          <h1>المشتريات والمخزون</h1>
           <p>إدارة الموردين، أوامر الشراء، الأصناف، تكلفة الوحدة، الهامش، وحدود إعادة الطلب.</p>
           <div className="department-hero-actions">
-            <span>قيمة المخزون {currency.format(data.metrics.inventoryValue)}</span>
-            <span>أصناف تحت الحد {data.metrics.lowStock}</span>
+            <span>قيمة المخزون: {currency.format(data.metrics.inventoryValue)}</span>
+            <span>أصناف تحت حد إعادة الطلب: {data.metrics.lowStock}</span>
           </div>
         </div>
-        <div className="department-badge"><strong>Procurement OS</strong><small>Inventory ready</small></div>
       </section>
 
       <section className="enterprise-actions">
@@ -170,7 +168,7 @@ export default function ProcurementInventoryConsole() {
         <form className="ops-card" onSubmit={submitItem}>
           <h2>صنف مخزون</h2>
           <div className="ops-form-grid">
-            <label>SKU<input className="input" name="sku" required /></label>
+            <label>رمز الصنف<input className="input" name="sku" required /></label>
             <label>الاسم<input className="input" name="name" required /></label>
             <label>التصنيف<input className="input" name="category" defaultValue="commerce" /></label>
             <label>تكلفة الوحدة<input className="input" name="unitCost" type="number" min="0" /></label>

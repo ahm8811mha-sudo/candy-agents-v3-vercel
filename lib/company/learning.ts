@@ -100,7 +100,7 @@ export function getLearningSnapshot(): LearningSnapshot {
   threshold = Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, Math.round(threshold * 100) / 100));
 
   const recommendation = !decided.length
-    ? "لا قرارات مكتملة بعد — ستبدأ الشركة بالتعلّم بمجرد اعتماد أو رفض أول فكرة."
+    ? "لا قرارات مكتملة بعد. ستبدأ الشركة بالتعلّم بمجرد اعتماد أو رفض أول فكرة."
     : approvalRate < 0.4
       ? `نسبة الاعتماد منخفضة (${Math.round(approvalRate * 100)}%). رُفع حد الثقة إلى ${Math.round(threshold * 100)}% لعرض أفكار أقوى فقط.`
       : approvalRate > 0.75

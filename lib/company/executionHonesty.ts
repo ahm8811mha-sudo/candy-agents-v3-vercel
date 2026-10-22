@@ -92,7 +92,7 @@ export function taskExecutionState(task: HonestyTask): TaskExecutionState {
 
 export const executionStateLabels: Record<TaskExecutionState, string> = {
   REAL_DONE: "نُفذ فعلياً",
-  PLAN_READY: "الخطة جاهزة — لم يُنفذ بعد",
+  PLAN_READY: "الخطة جاهزة، ولم تُنفَّذ بعد",
   WAITING_FUNDING: "بانتظار اعتماد التمويل",
   ON_HOLD: "موقوف",
   INTERNAL_DONE: "مكتمل (عمل داخلي)",

@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, BadgeDollarSign, FileText, Loader2, Plus, RefreshCw, Send, Users } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, FileText, Loader2, Plus, RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
+import { workStatusLabel } from "@/lib/ui/statusLabels";
 
 type CrmData = {
   leads: Array<{ id: string; name: string; company?: string; source?: string; interest?: string; status: string; estimated_value: number; next_follow_up_at?: string }>;
@@ -25,7 +26,7 @@ const empty: CrmData = {
   playbook: [],
 };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 export default function CrmSalesConsole() {
   const [data, setData] = useState<CrmData>(empty);
@@ -40,10 +41,10 @@ export default function CrmSalesConsole() {
     try {
       const res = await fetch("/api/crm-sales", { cache: "no-store" });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل CRM.");
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل العملاء والمبيعات.");
       setData({ ...empty, ...json });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تحميل CRM.");
+      setError(err instanceof Error ? err.message : "تعذر تحميل العملاء والمبيعات.");
     } finally {
       setLoading(false);
     }
@@ -60,11 +61,11 @@ export default function CrmSalesConsole() {
         body: JSON.stringify({ action, data: payload }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ أمر CRM.");
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تنفيذ الأمر.");
       setMessage(messageFor(action));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر CRM.");
+      setError(err instanceof Error ? err.message : "تعذر تنفيذ الأمر.");
     } finally {
       setWorking("");
     }
@@ -118,19 +119,12 @@ export default function CrmSalesConsole() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <Users size={16} /> إدارة المبيعات و CRM
-          </span>
-          <h1>نظام تحويل التسويق إلى مبيعات</h1>
-          <p>كل حملة أو فرصة تتحول إلى Lead، ثم صفقة، ثم عرض سعر، ثم متابعة حتى الإغلاق أو الرفض.</p>
+          <h1>المبيعات وعلاقات العملاء</h1>
+          <p>كل حملة أو فرصة تصير عميلاً محتملاً، ثم صفقة، ثم عرض سعر، ثم متابعة حتى الإغلاق أو الرفض.</p>
           <div className="department-hero-actions">
-            <span>Pipeline {currency.format(data.metrics.openPipeline)}</span>
-            <span>Leads تحتاج متابعة {data.metrics.staleLeads}</span>
+            <span>الصفقات المفتوحة: {currency.format(data.metrics.openPipeline)}</span>
+            <span>عملاء محتملون بلا متابعة: {data.metrics.staleLeads}</span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>CRM OS</strong>
-          <small>Sales pipeline</small>
         </div>
       </section>
 
@@ -139,40 +133,40 @@ export default function CrmSalesConsole() {
           {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />} تحديث
         </button>
         <button className="primary-btn" onClick={() => run("campaign-lead")} disabled={Boolean(working) || data.campaigns.length === 0}>
-          {working === "campaign-lead" ? <Loader2 className="spin" size={18} /> : <Send size={18} />} تحويل آخر حملة إلى Lead
+          {working === "campaign-lead" ? <Loader2 className="spin" size={18} /> : <Send size={18} />} تحويل آخر حملة إلى عميل محتمل
         </button>
         {message && <p className="notice done">{message}</p>}
         {error && <p className="notice error">{error}</p>}
       </section>
 
       <section className="ops-metrics">
-        <Metric label="Leads" value={data.metrics.leads} />
-        <Metric label="Qualified" value={data.metrics.qualifiedLeads} />
-        <Metric label="Deals" value={data.metrics.deals} />
-        <Metric label="Pipeline" value={currency.format(data.metrics.openPipeline)} />
-        <Metric label="Won" value={currency.format(data.metrics.wonValue)} />
-        <Metric label="Quotes" value={currency.format(data.metrics.quoteValue)} />
+        <Metric label="عملاء محتملون" value={data.metrics.leads} />
+        <Metric label="مؤهلون" value={data.metrics.qualifiedLeads} />
+        <Metric label="الصفقات" value={data.metrics.deals} />
+        <Metric label="الصفقات المفتوحة" value={currency.format(data.metrics.openPipeline)} />
+        <Metric label="صفقات رابحة" value={currency.format(data.metrics.wonValue)} />
+        <Metric label="عروض الأسعار" value={currency.format(data.metrics.quoteValue)} />
       </section>
 
       <section className="ops-workbench">
         <form className="ops-card" onSubmit={submitLead}>
-          <h2>Lead جديد</h2>
+          <h2>عميل محتمل جديد</h2>
           <div className="ops-form-grid">
             <label>الاسم<input className="input" name="name" required /></label>
             <label>الشركة<input className="input" name="company" /></label>
             <label>الجوال<input className="input" name="phone" /></label>
             <label>الإيميل<input className="input" name="email" /></label>
-            <label>المصدر<input className="input" name="source" defaultValue="marketing" /></label>
+            <label>المصدر<input className="input" name="source" defaultValue="التسويق" /></label>
             <label>القيمة المتوقعة<input className="input" name="estimatedValue" type="number" min="0" /></label>
           </div>
           <label>الاهتمام<input className="input" name="interest" placeholder="ما المنتج أو العرض المطلوب؟" /></label>
-          <button className="primary-btn" disabled={Boolean(working)}><Plus size={18} /> حفظ Lead</button>
+          <button className="primary-btn" disabled={Boolean(working)}><Plus size={18} /> حفظ العميل المحتمل</button>
         </form>
 
         <form className="ops-card" onSubmit={submitDeal}>
           <h2>صفقة جديدة</h2>
           <label>
-            Lead
+            العميل المحتمل
             <select className="input" name="leadId" defaultValue="">
               <option value="">بدون ربط</option>
               {data.leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}</option>)}
@@ -180,7 +174,7 @@ export default function CrmSalesConsole() {
           </label>
           <div className="ops-form-grid">
             <label>العنوان<input className="input" name="title" required /></label>
-            <label>المرحلة<select className="input" name="stage" defaultValue="DISCOVERY"><option>DISCOVERY</option><option>PROPOSAL</option><option>NEGOTIATION</option><option>WON</option><option>LOST</option></select></label>
+            <label>المرحلة<select className="input" name="stage" defaultValue="DISCOVERY"><option value="DISCOVERY">استكشاف</option><option value="PROPOSAL">عرض</option><option value="NEGOTIATION">تفاوض</option><option value="WON">رابحة</option><option value="LOST">خاسرة</option></select></label>
             <label>القيمة<input className="input" name="value" type="number" min="0" /></label>
             <label>الاحتمال %<input className="input" name="probability" type="number" min="0" max="100" defaultValue="25" /></label>
           </div>
@@ -204,19 +198,19 @@ export default function CrmSalesConsole() {
       </section>
 
       <section className="ops-board">
-        <Panel title="Leads">
+        <Panel title="العملاء المحتملون">
           {data.leads.slice(0, 8).map((lead) => (
-            <Statement key={lead.id} label={`${lead.name} - ${lead.source || "manual"}`} value={`${lead.status} · ${currency.format(Number(lead.estimated_value || 0))}`} />
+            <Statement key={lead.id} label={`${lead.name} - ${lead.source || "يدوي"}`} value={`${workStatusLabel(lead.status)} · ${currency.format(Number(lead.estimated_value || 0))}`} />
           ))}
         </Panel>
-        <Panel title="Deals">
+        <Panel title="الصفقات">
           {data.deals.slice(0, 8).map((deal) => (
-            <Statement key={deal.id} label={deal.title} value={`${deal.stage} · ${currency.format(Number(deal.value || 0))} · ${deal.probability}%`} />
+            <Statement key={deal.id} label={deal.title} value={`${workStatusLabel(deal.stage)} · ${currency.format(Number(deal.value || 0))} · ${deal.probability}%`} />
           ))}
         </Panel>
-        <Panel title="Quotes & Playbook">
+        <Panel title="عروض الأسعار وقواعد البيع">
           {data.quotes.slice(0, 5).map((quote) => (
-            <Statement key={quote.id} label={`${quote.quote_number} - ${quote.customer_name}`} value={`${quote.status} · ${currency.format(Number(quote.total || 0))}`} />
+            <Statement key={quote.id} label={`${quote.quote_number} - ${quote.customer_name}`} value={`${workStatusLabel(quote.status)} · ${currency.format(Number(quote.total || 0))}`} />
           ))}
           {data.playbook.map((item) => <Statement key={item} label={item} value="قاعدة" />)}
         </Panel>

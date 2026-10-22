@@ -1,20 +1,16 @@
 "use client";
 
-import { Mail } from "lucide-react";
-import OrvantaLogo from "@/components/OrvantaLogo";
 import MailCenterApiPanel from "@/components/MailCenterApiPanel";
 
 export default function CorrespondenceCenterPage() {
   return (
     <main className="page-wrap">
-      <section className="hero-scenic" style={{ textAlign: "start", justifyItems: "stretch" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
-          <OrvantaLogo size={54} subtitle="Correspondence Center" />
-          <span className="hero-pill"><Mail size={14} /> مركز المخاطبات · بريد شركة</span>
+      <header className="page-head">
+        <div>
+          <h1>المخاطبات</h1>
+          <p className="page-sub">بريد الشركة الوارد والصادر والمسودات، والاعتماد الرسمي قبل أن تخرج أي رسالة.</p>
         </div>
-        <h1 className="hero-title" style={{ maxWidth: "none" }}>مركز بريد حقيقي للشركة<br />وارد وصادر ومسودات و<em>اعتماد رسمي</em></h1>
-        <p className="hero-sub" style={{ maxWidth: 820 }}>تم تجهيز المركز ليعمل عبر API وقاعدة بيانات Supabase، ويرسل عبر Resend عند إضافة المفاتيح في Vercel.</p>
-      </section>
+      </header>
       <MailCenterApiPanel />
     </main>
   );

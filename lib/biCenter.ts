@@ -53,11 +53,11 @@ export async function getUnifiedBICenter() {
       : inbox.pending > 0
         ? { text: `لديك ${inbox.pending} قراراً بانتظار اعتمادك في مركز القرار.`, actionLabel: "افتح مركز القرار", href: "/inbox" }
         : !hasFinancialData
-          ? { text: "لا توجد قيود مالية مسجّلة بعد — ابدأ بتسجيل عملياتك لتقرأ الشركة أرقامها الحقيقية.", actionLabel: "افتح المالية", href: "/departments/finance" }
+          ? { text: "لا توجد قيود مالية مسجّلة بعد. ابدأ بتسجيل عملياتك لتقرأ الشركة أرقامها الحقيقية.", actionLabel: "افتح المالية", href: "/departments/finance" }
           : losingCampaigns.length > 0
             ? { text: "أوقف أو عدّل الحملات الخاسرة قبل زيادة الميزانية.", actionLabel: "افتح التسويق", href: "/departments/marketing" }
             : profitMargin > 0.2
-              ? { text: "الشركة قادرة على تجربة توسع صغير منضبط — راجع فكرة الفريق اليوم أو قدّم فكرتك.", actionLabel: "افتح الأفكار", href: "/ideas" }
+              ? { text: "الشركة قادرة على تجربة توسع صغير منضبط. راجع فكرة الفريق اليوم أو قدّم فكرتك.", actionLabel: "افتح الأفكار", href: "/ideas" }
               : { text: "ركّز على تحسين الهامش والتحصيل قبل التوسع.", actionLabel: "افتح المالية", href: "/departments/finance" };
 
   return {

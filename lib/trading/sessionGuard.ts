@@ -45,7 +45,7 @@ export function canOpenNewPosition(
   limits: SessionLimits = DEFAULT_SESSION_LIMITS
 ): GuardResult {
   if (dailyLossLimitHit(state, limits)) {
-    return { allowed: false, reason: `تم بلوغ حد الخسارة اليومي ${(limits.maxDailyLossPct * 100).toFixed(0)}% — إيقاف التداول لليوم` };
+    return { allowed: false, reason: `تم بلوغ حد الخسارة اليومي ${(limits.maxDailyLossPct * 100).toFixed(0)}%، فتوقف التداول لليوم` };
   }
   if (state.openPositions >= limits.maxOpenPositions) {
     return { allowed: false, reason: `الحد الأقصى للمراكز المفتوحة (${limits.maxOpenPositions}) تم بلوغه` };

@@ -20,7 +20,7 @@ export type Digest = {
   text: string;
 };
 
-const sar = (n: number) => `${Math.round(n).toLocaleString("ar-SA")} ر.س`;
+const sar = (n: number) => `${Math.round(n).toLocaleString("ar-SA-u-nu-latn")} ر.س`;
 
 function composeDigestValues(now: Date, revenue: number, vatPayable: number): Digest {
   const pending = listApprovals("PENDING");
@@ -31,7 +31,7 @@ function composeDigestValues(now: Date, revenue: number, vatPayable: number): Di
   const date = now.toISOString().slice(0, 10);
   const headline = stats.pending > 0
     ? `لديك ${stats.pending} قرار بانتظار اعتمادك`
-    : "لا قرارات معلّقة — الشركة تسير";
+    : "لا قرارات معلّقة.";
 
   const text = [
     `📊 ملخص شركة النجمة الذهبية عبر Orvanta · ${date}`,

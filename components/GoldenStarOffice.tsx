@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target, ScrollText } from "lucide-react";
+import { Loader2, Activity, RefreshCw, ArrowLeft, Brain, Target, ScrollText } from "lucide-react";
 import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Presence = "WORKING" | "TODAY" | "IDLE";
@@ -125,10 +125,9 @@ export default function GoldenStarOffice() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Building2 size={16} /> غرفة التحكم</span>
           <h1 className="glow-title">مكتب النجمة الذهبية</h1>
           <p className="page-sub">
-            كل وكيل في غرفته — ومؤشر نشاطه مُشتق من سجلات النظام الفعلية (أفكار، دراسات، اعتمادات)، لا رسوم ديكورية.
+            كل وكيل في غرفته، ومؤشر نشاطه مشتق من سجلات النظام الفعلية (أفكار ودراسات واعتمادات)، لا من رسوم للزينة.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -158,7 +157,7 @@ export default function GoldenStarOffice() {
 
           <section style={{ display: "grid", gap: 10 }}>
             <strong className="shell-group" style={{ padding: 0 }}>غرف الأقسام</strong>
-            <div className="bento-grid">
+            <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(staff.length % 5 === 0 ? 5 : 4, 200, 14) }}>
               {staff.map((a) => <Room key={a.id} agent={a} />)}
             </div>
           </section>
@@ -166,7 +165,7 @@ export default function GoldenStarOffice() {
           {/* Self-improvement — the company learning from its own record */}
           {learning && (
             <section className="bento-card bento-full bento-card--glow" style={{ gap: 12 }}>
-              <span className="bento-kicker"><Brain size={15} /> التعلّم الذاتي — الشركة تتعلّم من قراراتها</span>
+              <span className="bento-kicker"><Brain size={15} /> التعلّم الذاتي: الشركة تتعلّم من قراراتها</span>
               <div className="report-kpi-grid">
                 <div className="kpi-card-inner">
                   <small>قرارات مكتملة حُلّلت</small>
@@ -201,11 +200,11 @@ export default function GoldenStarOffice() {
 
           {audit.length > 0 && (
             <section className="bento-card bento-full" style={{ gap: 10 }}>
-              <span className="bento-kicker"><ScrollText size={15} /> سجل التدقيق — غير قابل للتعديل ({audit.length})</span>
+              <span className="bento-kicker"><ScrollText size={15} /> سجل التدقيق، غير قابل للتعديل ({audit.length})</span>
               <div className="bento-list">
                 {audit.slice(0, 8).map((a) => (
                   <div key={a.id} className="bento-list__row">
-                    <span><b style={{ color: "var(--text-strong)" }}>{a.actor}</b> — {a.detail}</span>
+                    <span><b style={{ color: "var(--text-strong)" }}>{a.actor}</b>: {a.detail}</span>
                     <span style={{ display: "grid", gap: 4, justifyItems: "end", whiteSpace: "nowrap" }}>
                       <span className="mini-pill">{a.action}{a.tier ? ` · ${a.tier}` : ""}</span>
                       <small style={{ color: "var(--muted)" }}>{timeAgo(a.createdAt)}</small>
@@ -218,17 +217,17 @@ export default function GoldenStarOffice() {
 
           <section className="bento-card bento-full" style={{ gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <span className="bento-kicker"><Activity size={15} /> نبض الشركة — آخر {events.length} حدثاً</span>
+              <span className="bento-kicker"><Activity size={15} /> نبض الشركة: آخر {events.length} حدثاً</span>
               <Link href="/inbox" className="secondary-btn btn-sm">مركز القرار <ArrowLeft size={12} /></Link>
             </div>
             <div className="bento-list">
               {events.length === 0 && (
-                <div className="bento-list__row"><small>لا أحداث بعد — قدّم فكرة أو شغّل دورة لتبدأ الحركة.</small></div>
+                <div className="bento-list__row"><small>لا أحداث بعد. قدّم فكرة أو شغّل دورة لتبدأ الحركة.</small></div>
               )}
               {events.map((e) => (
                 <div key={e.id} className="bento-list__row" style={{ alignItems: "flex-start" }}>
                   <span>
-                    <b style={{ color: "var(--text-strong)" }}>{e.agentName}</b> — {e.title}
+                    <b style={{ color: "var(--text-strong)" }}>{e.agentName}</b>: {e.title}
                   </span>
                   <span style={{ display: "grid", gap: 4, justifyItems: "end", whiteSpace: "nowrap" }}>
                     <span className={`mini-pill ${kindPill[e.kind] || ""}`}>{e.kindLabel}</span>

@@ -21,6 +21,7 @@ import {
   Upload,
   UserRound,
 } from "lucide-react";
+import { formatSize } from "@/lib/executionProofs/copy";
 
 type AnalysisAction = {
   title: string;
@@ -159,10 +160,7 @@ const emptyMetrics: Metrics = {
 };
 
 function humanBytes(value?: number) {
-  const bytes = Number(value || 0);
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return formatSize(Number(value || 0));
 }
 
 function statusLabel(value?: string | null) {
@@ -352,16 +350,15 @@ export default function GovernmentRelationsConsole() {
     <main className="company-app ops-console">
       <section className="department-hero department-hero-live">
         <div>
-          <span className="eyebrow"><ShieldCheck size={15} /> Government Operations Center</span>
           <h1>العلاقات الحكومية</h1>
           <p>مركز تشغيلي يحفظ الوثائق، يحللها، يستخرج بياناتها، ينشئ المتابعات، ويراقب التجديدات والتغييرات الرسمية.</p>
-        </div>
-        <div className="mini-pill" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <UserRound size={15} /> {operator.name} · {operator.title}
+          <div className="department-hero-actions">
+            <span><UserRound size={16} /> {operator.name}، {operator.title}</span>
+          </div>
         </div>
       </section>
 
-      <section className="bento-grid">
+      <section className="ops-metrics">
         <Metric icon={<FileText size={18} />} label="الوثائق" value={metrics.totalDocuments} />
         <Metric icon={<Brain size={18} />} label="تم تحليلها" value={metrics.analyzedDocuments} />
         <Metric icon={<Database size={18} />} label="ملفات محفوظة" value={metrics.storedFiles} />
@@ -388,8 +385,7 @@ export default function GovernmentRelationsConsole() {
 
       <section className="ops-workbench">
         <form className="ops-card" onSubmit={submit}>
-          <span className="eyebrow"><Upload size={16} /> إدخال وثيقة حكومية</span>
-          <h2>حفظ وتحليل وتشغيل المتابعة</h2>
+          <h2>إدخال وثيقة حكومية</h2>
           <p className="muted">
             يدعم النظام ملفات PDF الممسوحة والصور والملفات النصية. يحفظ الملف الأصلي أولاً، ثم يسجل نتيجة التحليل وينشئ المتابعة المناسبة.
           </p>
@@ -403,15 +399,19 @@ export default function GovernmentRelationsConsole() {
           <label>اسم الوثيقة<input className="input" name="title" placeholder="يستخرجه النظام تلقائياً عند تركه فارغاً" /></label>
           <label>
             الملف
-            <input
-              className="input"
-              type="file"
-              name="file"
-              accept="image/*,.pdf,.txt,.csv,.json"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-            />
+            <span className="file-field">
+              <input
+                className="file-field__input"
+                type="file"
+                name="file"
+                accept="image/*,.pdf,.txt,.csv,.json"
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+              />
+              <span className="file-field__button" aria-hidden="true"><Upload size={15} /> اختر ملفاً</span>
+              <span className="file-field__name">{file ? `${file.name} · ${humanBytes(file.size)}` : "لم يُختر ملف بعد"}</span>
+            </span>
           </label>
-          <p className="muted" style={{ margin: 0 }}>{file ? `${file.name} · ${humanBytes(file.size)}` : "PDF أو صورة حتى 20 ميجابايت، والملف النصي حتى 3 ميجابايت."}</p>
+          <p className="muted" style={{ margin: 0 }}>PDF أو صورة حتى 20 ميجابايت، والملف النصي حتى 3 ميجابايت.</p>
           <label>
             ملاحظة تشغيلية
             <textarea className="textarea compact" name="notes" placeholder="اكتب سياق المعاملة فقط، ولا تضع كلمة مرور أو رمز تحقق أو بيانات نفاذ" />
@@ -422,7 +422,6 @@ export default function GovernmentRelationsConsole() {
         </form>
 
         <section className="ops-card">
-          <span className="eyebrow"><UserRound size={16} /> نموذج العمل</span>
           <h2>كيف يتعامل ماجد مع الوثيقة؟</h2>
           <ol style={{ display: "grid", gap: 12, paddingInlineStart: 22, lineHeight: 1.8 }}>
             <li>يحفظ الملف الأصلي في مساحة خاصة مرتبطة بالشركة.</li>
@@ -482,7 +481,7 @@ export default function GovernmentRelationsConsole() {
                     <div style={{ display: "grid", gap: 7 }}>
                       <b>المخاطر</b>
                       {analysis.risks.map((risk, index) => (
-                        <p className="muted" style={{ margin: 0 }} key={`${risk.title}-${index}`}>• {risk.level}: {risk.title}{risk.detail ? ` — ${risk.detail}` : ""}</p>
+                        <p className="muted" style={{ margin: 0 }} key={`${risk.title}-${index}`}>• {risk.level}: {risk.title}{risk.detail ? `: ${risk.detail}` : ""}</p>
                       ))}
                     </div>
                   )}
@@ -539,10 +538,11 @@ export default function GovernmentRelationsConsole() {
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
-    <section className="bento-card">
-      <span className="bento-kicker">{icon} {label}</span>
-      <span className="bento-value">{value}</span>
-    </section>
+    <article className="metric-card">
+      <span aria-hidden="true">{icon}</span>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </article>
   );
 }
 

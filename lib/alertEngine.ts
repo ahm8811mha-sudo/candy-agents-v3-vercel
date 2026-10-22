@@ -1,6 +1,6 @@
 import { seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { seedGovernmentRelationsOS } from "./governmentRelations";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 
 type AlertRow = {
   alert_key: string;
@@ -17,7 +17,7 @@ type AlertRow = {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 

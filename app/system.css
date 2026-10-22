@@ -455,7 +455,7 @@ a.bento-card:hover, .metric-card.department-link:hover { border-color: var(--pri
 }
 .readiness-item .status-dot { margin-top: 8px; }
 .readiness-item b { display: block; color: var(--text-strong); font-weight: 700; }
-.readiness-item small { display: block; color: var(--muted); font-size: 0.76rem; line-height: 1.6; direction: ltr; text-align: start; overflow-wrap: anywhere; }
+.readiness-item small { display: block; color: var(--muted); font-size: 0.76rem; line-height: 1.6; text-align: start; overflow-wrap: anywhere; }
 
 @media (max-width: 700px) {
   .readiness-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }

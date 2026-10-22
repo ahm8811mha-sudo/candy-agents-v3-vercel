@@ -1,7 +1,7 @@
 import { getDashboardData, runCompanyExecution } from "./companyExecutionSystem";
 import { getEnterpriseStatus, runOpportunityRadar, seedEnterpriseOperatingSystem } from "./enterpriseSystems";
 import { logDecision, seedGovernanceOS } from "./governanceOS";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { toLegacyDecisionAuditRow } from "./company/audit";
 
 type ExecutiveItemInput = {
@@ -38,7 +38,7 @@ function newId(prefix: string) {
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 
@@ -171,7 +171,7 @@ export async function createMeetingMinutes(input: MeetingMinutesInput) {
     decisionType: "MEETING_MINUTES",
     entityType: "executive_meeting_minutes",
     entityId: data.id,
-    actorRole: "Chief of Staff",
+    actorRole: "رئيس الديوان التنفيذي",
     action: `Meeting minutes recorded: ${input.title}`,
     approvalStatus: "RECORDED",
     metadata: { attendees: input.attendees, actionItems: input.actionItems },

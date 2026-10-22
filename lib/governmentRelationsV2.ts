@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { createCompanyEvent } from "./company-os/events";
 import { appendCompanyEvent } from "./company-os/outboxPublisher";
 import { callOpenAIResponses, type ResponsesInput } from "./ai/openai";
@@ -119,7 +119,7 @@ const TYPE_TITLES: Record<string, string> = {
 
 function supabase() {
   const client = getSupabaseAdmin();
-  if (!client) throw new Error("Supabase is required for government document processing.");
+  if (!client) throw new DatabaseNotConfiguredError("Supabase is required for government document processing.");
   return client;
 }
 

@@ -85,8 +85,8 @@ test("trading center shows an honest paper setup and demo data without mobile ov
   await page.goto("/operations");
   await page.getByRole("tab", { name: "التداول" }).click();
 
-  await expect(page.getByRole("heading", { name: "الرصيد وحالة الوسيط" })).toBeVisible();
-  await expect(page.getByText("تهيئة Alpaca Paper مطلوبة")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "رصيد حساب التداول وحالة الوسيط" })).toBeVisible();
+  await expect(page.getByText("تهيئة حساب Alpaca الورقي مطلوبة")).toBeVisible();
   await expect(page.getByText("بيانات تجريبية", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("الوسيط غير مربوط")).toBeVisible();
   await expect(page.getByRole("button", { name: "طلب تنفيذ حقيقي" })).toBeDisabled();

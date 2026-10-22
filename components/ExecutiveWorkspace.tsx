@@ -12,7 +12,7 @@ type Workspace = {
   projects: Array<{ id: string; name: string; project_number: number | null; budget: number | null }>;
   blockers: Array<{ id: string; title: string; status: string; project_id: string | null }>;
 };
-const number = new Intl.NumberFormat("ar-SA");
+const number = new Intl.NumberFormat("ar-SA-u-nu-latn");
 const money = (value: number | null) => value == null ? "لم يحدد مبلغ" : `${number.format(value)} ر.س`;
 export default function ExecutiveWorkspace() {
   const [data, setData] = useState<Workspace | null>(null);
@@ -32,7 +32,7 @@ export default function ExecutiveWorkspace() {
   const first = data?.approvals[0];
   return <main className="workspace workspace-home">
     <header className="workspace-heading">
-      <div><p className="eyebrow">مكتب القيادة / مساحة العمل</p><h1>الشركة، بوضوح.</h1><p className="workspace-intro">ما يحتاج قرارك. ما يوقف التنفيذ. وما يأتي بعده.</p></div>
+      <div><h1>الشركة، بوضوح.</h1><p className="workspace-intro">ما يحتاج قرارك. ما يوقف التنفيذ. وما يأتي بعده.</p></div>
       <Link className="primary-btn" href="/ideas?new=1"><Plus size={17} /> فتح ملف فكرة</Link>
     </header>
     <div className="workspace-dateline"><span>النجمة الذهبية <span aria-hidden> / </span> سجل العمل</span><button className="text-action" onClick={() => void load()} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />{loading ? "جارٍ القراءة" : "تحديث البيانات"}</button></div>
@@ -52,7 +52,7 @@ export default function ExecutiveWorkspace() {
             <Link href={first ? `/inbox?decision=${encodeURIComponent(first.id)}` : "/ideas"} className="primary-btn">{first ? "فتح ملف القرار" : "مراجعة الأفكار"}<ArrowLeft size={16} /></Link>
           </section>
           <section className="workspace-section"><div className="section-title"><h2>عوائق تحتاج متابعة</h2><Link href="/projects">كل المشاريع <ArrowUpLeft size={15} /></Link></div>
-            {data.blockers.length ? <div className="work-register">{data.blockers.map((task, index) => <Link href={task.project_id ? `/projects?project=${task.project_id}` : "/operations"} className="work-register-row" key={task.id}><span className="register-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{task.title}</strong><small>{task.status === "WAITING_FUNDING" ? "بانتظار اعتماد التمويل" : task.status === "ON_HOLD" ? "معلّقة وتحتاج مراجعة" : "متعطلة — افتح الخطوة لمعرفة سياقها"}</small></div><ArrowUpLeft size={18} /></Link>)}</div> : <p className="workspace-empty">لا تظهر خطوات معلّقة أو متوقفة في السجل.</p>}
+            {data.blockers.length ? <div className="work-register">{data.blockers.map((task, index) => <Link href={task.project_id ? `/projects?project=${task.project_id}` : "/operations"} className="work-register-row" key={task.id}><span className="register-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{task.title}</strong><small>{task.status === "WAITING_FUNDING" ? "بانتظار اعتماد التمويل" : task.status === "ON_HOLD" ? "معلّقة وتحتاج مراجعة" : "متعطلة، افتح الخطوة لمعرفة سياقها"}</small></div><ArrowUpLeft size={18} /></Link>)}</div> : <p className="workspace-empty">لا تظهر خطوات معلّقة أو متوقفة في السجل.</p>}
             {data.counts.blocked > data.blockers.length ? <small className="workspace-footnote">تُعرض أقدم {data.blockers.length} خطوات من {data.counts.blocked}.</small> : null}
           </section>
         </div>
@@ -63,7 +63,7 @@ export default function ExecutiveWorkspace() {
           <section className="workspace-section"><div className="section-title"><h2>مشاريع نشطة</h2><Link href="/projects" aria-label="عرض كل المشاريع"><ArrowUpLeft size={19} /></Link></div>{data.projects.length ? data.projects.map((project) => <Link className="project-brief" href={`/projects?project=${project.id}`} key={project.id}><small>ملف / {project.project_number || "—"}</small><strong>{project.name}</strong><span>{money(project.budget)} <ArrowUpLeft size={15} /></span></Link>) : <p className="workspace-empty">لا مشاريع نشطة مسجلة.</p>}</section>
         </aside>
       </div>
-      <footer className="workspace-footer">قراءة من سجلات الشركة <span>آخر تحديث: {new Intl.DateTimeFormat("ar-SA", { hour: "2-digit", minute: "2-digit" }).format(new Date(data.asOf))}</span></footer>
+      <footer className="workspace-footer">قراءة من سجلات الشركة <span>آخر تحديث: {new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit" }).format(new Date(data.asOf))}</span></footer>
     </> : null}
   </main>;
 }

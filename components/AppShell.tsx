@@ -16,9 +16,19 @@ const primary = [
   { href: "/decisions-followup", label: "المتابعة", icon: ClipboardCheck },
 ];
 const secondary = [
-  ["/departments", "الأقسام والموارد"], ["/company", "هيكل الشركة"], ["/sales", "المبيعات"],
-  ["/employee-runtime", "تشغيل الموظفين"], ["/operations", "سجل العمليات"], ["/company-brain", "المعرفة المؤسسية"],
+  ["/departments", "الأقسام"], ["/company", "هيكل الشركة"], ["/sales", "المتجر والمبيعات"],
+  ["/employee-runtime", "تشغيل الموظفين"], ["/operations", "سجل العمليات"], ["/company-brain", "العقل المؤسسي"],
   ["/correspondence-center", "المخاطبات"], ["/status", "حالة النظام"],
+];
+/** The top bar names every company tool; a nested route is listed before its parent so it wins. */
+const pageNames = [
+  ["/departments/executive", "المكتب التنفيذي"], ["/departments/finance", "المالية والمحاسبة"],
+  ["/departments/sales", "المبيعات وعلاقات العملاء"], ["/departments/marketing", "النمو والتسويق"],
+  ["/departments/operations", "إدارة العمليات"], ["/departments/procurement", "المشتريات والمخزون"],
+  ["/departments/government-relations", "العلاقات الحكومية"], ["/departments/supply-chain", "سلسلة الإمداد"],
+  ...secondary,
+  ["/bi-center", "ذكاء الأعمال"], ["/enterprise-os", "نظام المؤسسة"], ["/office", "المكتب الحي"],
+  ["/control-room", "مركز القيادة"], ["/dashboard", "لوحة الرئيس التنفيذي"], ["/recovery-center", "غرفة الأزمات"],
 ];
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -47,18 +57,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [open]);
   if (authPage) return <>{children}</>;
   const current = primary.find((item) => item.href === "/" ? pathname === "/" : pathname.startsWith(item.href));
+  const title = current?.label || pageNames.find(([href]) => pathname === href || pathname.startsWith(`${href}/`))?.[1] || "أدوات الشركة";
   return <div className="shell-root executive-shell">
     <a className="skip-link" href="#main-content">تجاوز إلى المحتوى</a>
     {open ? <button className="executive-backdrop" aria-label="إغلاق قائمة التنقل" onClick={() => setOpen(false)} /> : null}
     <aside ref={panel} className={"shell-sidebar executive-sidebar " + (open ? "open" : "")} aria-label="التنقل الرئيسي">
-      <Link className="executive-brand" href="/" onClick={() => setOpen(false)} aria-label="أورفانتا — مساحة العمل"><OrvantaLogo size={42} showWordmark={false} priority /><span><strong>أورفانتا</strong><small>مكتب إدارة الأعمال</small></span></Link>
+      <Link className="executive-brand" href="/" onClick={() => setOpen(false)} aria-label="أورفانتا، مساحة العمل"><OrvantaLogo size={42} showWordmark={false} priority /><span><strong>أورفانتا</strong><small>مكتب إدارة الأعمال</small></span></Link>
       <div className="sidebar-company"><span>الشركة</span><strong>النجمة الذهبية</strong><small>من الفكرة إلى الأثر</small></div>
       <nav aria-label="سير العمل">{primary.map(({ href, label, icon: Icon }, index) => <Link key={href} href={href} className={"shell-link " + (current?.href === href ? "is-active" : "")} aria-current={current?.href === href ? "page" : undefined} onClick={() => setOpen(false)}><Icon size={18} /><span>{label}</span><small>{String(index + 1).padStart(2, "0")}</small></Link>)}</nav>
       <div className="sidebar-tools"><button onClick={() => setMore(!more)} aria-expanded={more}>الأقسام وأدوات الشركة <span aria-hidden>{more ? "−" : "+"}</span></button>{more ? <nav aria-label="أدوات الشركة">{secondary.map(([href, label]) => <Link href={href} key={href} onClick={() => setOpen(false)}>{label}<ArrowUpLeft size={13} /></Link>)}</nav> : null}</div>
       <div className="sidebar-note"><span>القرار موثّق.</span><span>والتنفيذ قابل للتحقق.</span><Link href="/status">جاهزية النظام <ArrowUpLeft size={14} /></Link></div>
       <button className="sidebar-close" onClick={() => setOpen(false)}><X size={17} /> إغلاق القائمة</button>
     </aside>
-    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">Orvanta <span>/</span></Link><span className="shell-topbar__title">{current?.label || "أدوات الشركة"}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
+    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">Orvanta <span>/</span></Link><span className="shell-topbar__title">{title}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
     <nav className="mobile-work-nav" aria-label="تنقل سريع">{primary.slice(0, 4).map(({ href, label, icon: Icon }) => <Link href={href} key={href} aria-current={current?.href === href ? "page" : undefined}><Icon size={18} /><span>{label.split(" وال")[0]}</span></Link>)}</nav>
   </div>;
 }

@@ -3,7 +3,7 @@ import { createAccountingInvoiceAtomic } from "../accountingRepository";
 import { effectiveTier } from "../company/governance";
 import { executeApprovedIdea } from "../company/ideaExecution";
 import { authorizeActionDuringOwnerAbsence } from "../company/ownerAbsence";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { normalizeTenantId } from "../tenant";
 import {
   canExecuteCapability,
@@ -393,7 +393,7 @@ async function executeTool(workOrder: WorkOrder, step: WorkOrderStep, actor: str
       reference: input.orderId || input.requestId || input.ideaId || workOrder.id,
     });
   }
-  if (!supabase) throw new Error("Supabase is required for live execution.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for live execution.");
   if (step.tool === "record_sale") {
     const { data, error } = await supabase.from("employee_sales_orders").upsert({
       tenant_id: workOrder.tenantId,
@@ -798,7 +798,7 @@ export async function runOrderToCash(raw: OrderToCashInput) {
     tenantId,
     idempotencyKey: `order-to-cash:${tenantId}:${orderId}`,
     kind: "ORDER_TO_CASH",
-    title: `تنفيذ بيع — ${orderId}`,
+    title: `تنفيذ بيع: ${orderId}`,
     objective: `إتمام دورة البيع ${orderId} من الدفع حتى المحاسبة والمخزون والتجهيز وCRM.`,
     requestedBy: raw.requestedBy || "system",
     ownerEmployeeId: "sara",
@@ -869,7 +869,7 @@ export async function runPurchaseToPay(raw: PurchaseToPayInput) {
     tenantId,
     idempotencyKey: `purchase-to-pay:${tenantId}:${requestId}`,
     kind: "PURCHASE_TO_PAY",
-    title: `طلب شراء — ${requestId}`,
+    title: `طلب شراء: ${requestId}`,
     objective: `اختيار المورد وإصدار أمر الشراء والاستلام والفاتورة وجدولة السداد للطلب ${requestId}.`,
     requestedBy: raw.requestedBy || "system",
     ownerEmployeeId: "khalid",
@@ -917,7 +917,7 @@ export async function runIdeaToExecution(raw: IdeaToExecutionInput) {
     tenantId,
     idempotencyKey: `idea-to-execution:${tenantId}:${ideaId}`,
     kind: "IDEA_TO_EXECUTION",
-    title: `تنفيذ فكرة — ${raw.title || ideaId}`,
+    title: `تنفيذ فكرة: ${raw.title || ideaId}`,
     objective: `تحويل الفكرة المعتمدة ${ideaId} إلى مشروع ومهام وKPIs وإجراءات قابلة للتتبع.`,
     requestedBy: raw.requestedBy || "system",
     ownerEmployeeId: "fahad",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, Loader2, Play, ShieldAlert, CircleDollarSign, Activity } from "lucide-react";
+import { TrendingUp, Loader2, Play, ShieldAlert, Activity } from "lucide-react";
 
 type Opportunity = {
   id: string;
@@ -39,7 +39,7 @@ type BrokerReadiness = {
   missingEnvironmentVariables: string[];
 };
 
-const currency = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const actionPill: Record<string, string> = {
   BUY: "done",
@@ -114,13 +114,12 @@ export default function TradingDeskPanel() {
     <div className="delivery-panel fade-in trading-desk-panel" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header trading-panel-header">
         <div>
-          <span className="eyebrow"><CircleDollarSign size={16} /> مكتب التداول — تحت إدارة CFO</span>
           <h2>التداول الآلي على الفرص</h2>
         </div>
         <div className="trading-header-actions">
           <span className={`status-pill ${broker?.configured ? "done" : ""}`}>
             {broker?.configured ? <Activity size={14} /> : <ShieldAlert size={14} />}
-            {broker?.configured ? (broker.mode === "live" ? "Alpaca Live" : "Alpaca Paper جاهز") : "الوسيط غير مربوط"}
+            {broker?.configured ? (broker.mode === "live" ? "Alpaca حقيقي" : "حساب Alpaca الورقي جاهز") : "الوسيط غير مربوط"}
           </span>
           <span className={`status-pill ${liveEnabled ? "running" : "done"}`}>
             {liveEnabled ? "الحقيقي مُفعّل" : "المحاكاة آمنة"}

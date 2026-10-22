@@ -257,7 +257,6 @@ export default function ActionQueuePanel() {
     <section className="delivery-panel fade-in action-queue-panel">
       <div className="delivery-header action-queue-header">
         <div>
-          <span className="eyebrow"><Activity size={16} /> Action Queue</span>
           <h2>ماذا حدث بعد الاعتماد؟</h2>
           <p>لكل مشروع معتمد ملف مستقل يجمع الخطة والمهام والوكلاء والنتائج حتى لا يضيع أي قرار في قائمة عامة.</p>
         </div>
@@ -296,7 +295,7 @@ export default function ActionQueuePanel() {
           <div>
             <strong>الخطة مقابل الواقع: الإنجاز الحقيقي {honesty.honestProgress}%</strong>
             <p>
-              خطوات تحتاج تنفيذاً فعلياً: {honesty.realWorldTotal.toLocaleString("ar-SA-u-nu-latn")} —
+              خطوات تحتاج تنفيذاً فعلياً: {honesty.realWorldTotal.toLocaleString("ar-SA-u-nu-latn")}،
               نُفذ منها فعلياً {honesty.realWorldConfirmed.toLocaleString("ar-SA-u-nu-latn")}،
               وجاهزة بانتظارك {honesty.planReady.toLocaleString("ar-SA-u-nu-latn")}،
               وبانتظار التمويل {honesty.waitingFunding.toLocaleString("ar-SA-u-nu-latn")}.
@@ -314,7 +313,7 @@ export default function ActionQueuePanel() {
         <>
           <section className="approved-projects" id="approved-projects">
             <div className="approved-projects__heading">
-              <div><span className="eyebrow"><FolderKanban size={15} /> ملفات المشاريع</span><h3>المشاريع بعد الاعتماد ({groups.approved.length})</h3></div>
+              <div><h3>المشاريع بعد الاعتماد ({groups.approved.length})</h3></div>
               <small>افتح أي مشروع لمتابعة ما أنجزه كل وكيل والنتائج التي أعادها.</small>
             </div>
             {groups.approved.length === 0 ? (
@@ -341,13 +340,13 @@ export default function ActionQueuePanel() {
 
           {groups.pending.length > 0 && (
             <section className="pending-projects">
-              <div className="approved-projects__heading"><div><span className="eyebrow"><Clock3 size={15} /> قبل التنفيذ</span><h3>مشاريع بانتظار الاعتماد ({groups.pending.length})</h3></div><Link href="/inbox" className="secondary-btn btn-sm">فتح الاعتمادات <ArrowUpLeft size={14} /></Link></div>
-              <div className="pending-projects__list">{groups.pending.map(({ project }) => <article key={project.id}><div><strong>{project.project_number ? `مشروع #${project.project_number} — ` : ""}{project.name}</strong><small>{project.project_date ? `${new Date(project.project_date).toLocaleDateString("ar-SA")} · ` : ""}{project.request || project.strategic_direction}</small></div><span className="status-pill running">{statusLabels[project.status || ""] || "بانتظار اعتماد"}</span></article>)}</div>
+              <div className="approved-projects__heading"><div><h3>مشاريع بانتظار الاعتماد ({groups.pending.length})</h3></div><Link href="/inbox" className="secondary-btn btn-sm">فتح الاعتمادات <ArrowUpLeft size={14} /></Link></div>
+              <div className="pending-projects__list">{groups.pending.map(({ project }) => <article key={project.id}><div><strong>{project.project_number ? `مشروع #${project.project_number}: ` : ""}{project.name}</strong><small>{project.project_date ? `${new Date(project.project_date).toLocaleDateString("ar-SA-u-nu-latn")} · ` : ""}{project.request || project.strategic_direction}</small></div><span className="status-pill running">{statusLabels[project.status || ""] || "بانتظار اعتماد"}</span></article>)}</div>
             </section>
           )}
 
           {groups.unassigned.length > 0 && (
-            <section className="unassigned-actions"><div className="approved-projects__heading"><div><span className="eyebrow"><ListChecks size={15} /> إجراءات عامة</span><h3>غير مرتبطة بمشروع ({groups.unassigned.length})</h3></div></div><div className="report-stack">{groups.unassigned.map((action) => <ActionCard key={action.id} action={action} integrationStatus={integrationStatus} executingId={executingId} execute={execute} />)}</div></section>
+            <section className="unassigned-actions"><div className="approved-projects__heading"><div><h3>إجراءات غير مرتبطة بمشروع ({groups.unassigned.length})</h3></div></div><div className="report-stack">{groups.unassigned.map((action) => <ActionCard key={action.id} action={action} integrationStatus={integrationStatus} executingId={executingId} execute={execute} />)}</div></section>
           )}
         </>
       )}
@@ -382,7 +381,7 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
   return (
     <article className={`project-execution-card ${open ? "is-open" : ""}`}>
       <button type="button" className="project-execution-card__header" onClick={onToggle} aria-expanded={open}>
-        <div className="project-execution-card__identity"><span className="project-execution-card__icon"><FolderKanban size={21} /></span><div><strong>{project.project_number ? `مشروع #${project.project_number} — ` : ""}{project.name}</strong><small>{project.project_date ? `${new Date(project.project_date).toLocaleDateString("ar-SA")} · ` : ""}{project.strategic_direction || project.request || "مشروع تنفيذي معتمد"}</small></div></div>
+        <div className="project-execution-card__identity"><span className="project-execution-card__icon"><FolderKanban size={21} /></span><div><strong>{project.project_number ? `مشروع #${project.project_number}: ` : ""}{project.name}</strong><small>{project.project_date ? `${new Date(project.project_date).toLocaleDateString("ar-SA-u-nu-latn")} · ` : ""}{project.strategic_direction || project.request || "مشروع تنفيذي معتمد"}</small></div></div>
         <div className="project-execution-card__state"><span className={`status-pill ${project.status === "EXECUTION_ATTENTION" ? "high" : project.status === "RESULTS_READY" || project.status === "COMPLETED" ? "done" : "running"}`}>{statusIcon(project.status || "ACTIVE")}{statusLabels[project.status || ""] || project.status || "نشط"}</span><ChevronDown size={19} className={open ? "is-open" : ""} /></div>
       </button>
       <div className="project-execution-card__progress"><span style={{ width: `${group.progress}%` }} /></div>
@@ -407,8 +406,8 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
                 <article key={task.id}>
                   <span className={`task-state ${state === "REAL_DONE" || state === "INTERNAL_DONE" ? "done" : task.status === "BLOCKED" ? "blocked" : ""}`}>{state === "REAL_DONE" || state === "INTERNAL_DONE" ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}</span>
                   <div>
-                    <strong>{task.task_number ? `#${task.task_number} — ` : ""}{task.title}</strong>
-                    <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
+                    <strong>{task.task_number ? `#${task.task_number}: ` : ""}{task.title}</strong>
+                    <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
                     <small className={`status-pill ${executionStateClass[state]}`} style={{ marginTop: 4, display: "inline-flex", width: "fit-content" }}>{executionStateLabels[state]}</small>
                     {confirmable && !confirming && (
                       <button type="button" className="secondary-btn btn-sm" style={{ marginTop: 6, width: "fit-content" }} onClick={() => setConfirmingTaskId(task.id)}>
@@ -446,8 +445,8 @@ function ActionCard({ action, integrationStatus, executingId, execute }: { actio
   const resultUrl = integrationLink(result);
   return (
     <article className="report-card project-action-card">
-      <h3><span>{action.action_number ? `#${action.action_number} — ` : ""}{action.payload?.agentName || action.title}</span><small>{statusIcon(action.status)} {statusLabels[action.status] || action.status}</small></h3>
-      {action.action_date && <small className="project-action-card__date">تاريخ المهمة التنفيذية: {new Date(action.action_date).toLocaleDateString("ar-SA")}</small>}
+      <h3><span>{action.action_number ? `#${action.action_number}: ` : ""}{action.payload?.agentName || action.title}</span><small>{statusIcon(action.status)} {statusLabels[action.status] || action.status}</small></h3>
+      {action.action_date && <small className="project-action-card__date">تاريخ المهمة التنفيذية: {new Date(action.action_date).toLocaleDateString("ar-SA-u-nu-latn")}</small>}
       {deliverable ? (
         <div className="project-action-card__deliverable"><p>{deliverable.summary}</p>{deliverable.completedWork?.length ? <div><strong>ما تم إنجازه</strong><ul>{deliverable.completedWork.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}{deliverable.nextActions?.length ? <div><strong>الخطوة التالية</strong><ul>{deliverable.nextActions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}</div>
       ) : (

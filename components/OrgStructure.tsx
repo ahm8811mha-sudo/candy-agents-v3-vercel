@@ -39,7 +39,7 @@ type TierRule = {
   note: string;
 };
 
-const sar = new Intl.NumberFormat("ar-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
+const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const rankMeta: Record<Agent["rank"], { label: string; icon: typeof Crown }> = {
   OWNER: { label: "السلطة العليا", icon: Crown },
@@ -79,8 +79,9 @@ function AgentCard({
         <Icon size={15} /> {rankMeta[agent.rank].label} · {agent.department}
         {editable && (
           <button
-            className="secondary-btn btn-sm"
-            style={{ marginInlineStart: "auto", padding: "3px 8px" }}
+            className="icon-action"
+            style={{ marginInlineStart: "auto" }}
+            aria-expanded={editing}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -90,7 +91,7 @@ function AgentCard({
             }}
             aria-label="تخصيص الوكيل"
           >
-            <Pencil size={12} />
+            <Pencil size={15} />
           </button>
         )}
       </span>
@@ -215,12 +216,11 @@ export default function OrgStructure() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><Building2 size={16} /> شركة النجمة الذهبية</span>
           <h1 className="glow-title">الهيكل الإداري والحوكمة</h1>
           <p className="page-sub">
-            هذا ليس مخططاً توضيحياً — إنه السجل الرسمي الذي يفرضه النظام: كل وكيل باسمه ومسؤولياته
+            هذا ليس مخططاً توضيحياً، بل السجل الرسمي الذي يفرضه النظام: كل وكيل باسمه ومسؤولياته
             وحدود صلاحيته المالية، ومصفوفة الاعتماد التي لا تُتجاوز. تقدر تعيد تسمية أي وكيل أو
-            توقفه مؤقتاً (✏️) — أما الرتب والصلاحيات فمحكومة بالمصفوفة ولا تُعدَّل.
+            توقفه مؤقتاً (✏️). أما الرتب والصلاحيات فمحكومة بالمصفوفة ولا تُعدَّل.
           </p>
         </div>
       </header>
@@ -243,13 +243,13 @@ export default function OrgStructure() {
 
       <section style={{ display: "grid", gap: 10 }}>
         <strong className="shell-group" style={{ padding: 0 }}>الوحدات المساندة</strong>
-        <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(3, 240, 14) }}>
+        <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(Math.min(functional.length, 4), 220, 14) }}>
           {functional.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>
       </section>
 
       <section className="bento-card bento-full" style={{ gap: 12 }}>
-        <span className="bento-kicker"><ShieldCheck size={15} /> مصفوفة الصلاحيات المالية — مُطبَّقة برمجياً</span>
+        <span className="bento-kicker"><ShieldCheck size={15} /> مصفوفة الصلاحيات المالية، مطبّقة برمجياً</span>
         <div className="bento-list">
           {matrix.map((r) => (
             <div key={r.tier} className="bento-list__row" style={{ alignItems: "flex-start" }}>
@@ -260,7 +260,7 @@ export default function OrgStructure() {
               </span>
               <span style={{ textAlign: "start", whiteSpace: "nowrap" }}>
                 <b style={{ color: "var(--text-strong)", fontVariantNumeric: "tabular-nums" }}>
-                  {r.maxSAR === null ? "فوق 100,000 ر.س" : `حتى ${sar.format(r.maxSAR)}`}
+                  {r.maxSAR === null ? `فوق ${sar.format(Math.max(...matrix.map((m) => m.maxSAR ?? 0)))}` : `حتى ${sar.format(r.maxSAR)}`}
                 </b>
                 <br />
                 <small>{r.approver}</small>
@@ -269,7 +269,7 @@ export default function OrgStructure() {
           ))}
         </div>
         <span className="bento-foot">
-          القاعدة: لا صرف بدون قيد محاسبي مرتبط بمشروع — وكل قرار يُسجَّل في سجل التدقيق (مَن، متى، لماذا، بأي صلاحية).
+          القاعدة: لا صرف بدون قيد محاسبي مرتبط بمشروع، وكل قرار يُسجَّل في سجل التدقيق (مَن، متى، لماذا، بأي صلاحية).
         </span>
       </section>
     </main>

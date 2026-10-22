@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  Brain,
   CheckCircle2,
   Clock3,
   Database,
@@ -99,7 +98,7 @@ function score(value: unknown) {
 
 function timestamp(value?: string | null) {
   if (!value) return "لم يُنشأ بعد";
-  return new Intl.DateTimeFormat("ar-SA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ar-SA-u-nu-latn", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 async function fetchPlatformState(action: "read" | "refresh" | "bootstrap") {
@@ -243,24 +242,21 @@ export default function CompanyBrainPage() {
 
   return (
     <main className="page-wrap" style={{ display: "grid", gap: 18 }}>
-      <header className="bento-card" style={{ padding: "clamp(22px, 4vw, 36px)", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: 760 }}>
-            <span className="mini-pill"><Brain size={14} /> Company Brain</span>
-            <h1 style={{ margin: "14px 0 8px", fontSize: "clamp(2rem, 6vw, 4rem)", letterSpacing: "-.045em" }}>العقل المؤسسي</h1>
-            <p className="page-sub" style={{ margin: 0, maxWidth: 680 }}>
-              صورة موحدة للشركة تربط التنفيذ والقرارات والمالية والامتثال، ثم تحولها إلى توقعات وتوصيات ومحاكاة وخطط قابلة للاعتماد.
-            </p>
-          </div>
-          <button className="primary-btn" type="button" onClick={() => void load("refresh")} disabled={refreshing}>
-            {refreshing ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-            تحديث العقل المؤسسي
-          </button>
+      <header className="page-head workspace-heading">
+        <div>
+          <h1>العقل المؤسسي</h1>
+          <p className="page-sub">
+            صورة موحدة للشركة تربط التنفيذ والقرارات والمالية والامتثال، ثم تحولها إلى توقعات وتوصيات ومحاكاة وخطط قابلة للاعتماد.
+          </p>
+          <p className="page-facts">
+            <span><Clock3 size={13} aria-hidden="true" /> آخر توأم رقمي: {timestamp(state.freshness?.twin)}</span>
+            <span><Database size={13} aria-hidden="true" /> آخر تحميل: {timestamp(state.freshness?.ingestion)}</span>
+          </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18, color: "var(--muted)", fontSize: ".82rem" }}>
-          <span className="mini-pill"><Clock3 size={12} /> آخر توأم رقمي: {timestamp(state.freshness?.twin)}</span>
-          <span className="mini-pill"><Database size={12} /> آخر تحميل: {timestamp(state.freshness?.ingestion)}</span>
-        </div>
+        <button className="primary-btn" type="button" onClick={() => void load("refresh")} disabled={refreshing}>
+          {refreshing ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+          تحديث العقل المؤسسي
+        </button>
       </header>
 
       {error && <div className="notice" style={{ color: "var(--red)" }}><ShieldAlert size={17} /> {error}</div>}

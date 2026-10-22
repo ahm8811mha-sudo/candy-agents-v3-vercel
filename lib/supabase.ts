@@ -123,6 +123,26 @@ export function requireSupabaseForWrite() {
   }
 }
 
+/**
+ * Thrown where a feature cannot run without the database. The message is the
+ * one the owner reads; `detail` names the feature for the server log. Routes
+ * answer it as 503 through `failureStatus`, since the request can succeed once
+ * the database is configured.
+ */
+export class DatabaseNotConfiguredError extends Error {
+  readonly detail: string;
+  constructor(detail = "") {
+    super("قاعدة البيانات غير مهيأة على هذه النسخة، فلا يمكن عرض هذه البيانات أو حفظها.");
+    this.name = "DatabaseNotConfiguredError";
+    this.detail = detail;
+  }
+}
+
+/** 503 when the database is not configured, 500 for any other failure. */
+export function failureStatus(error: unknown) {
+  return error instanceof DatabaseNotConfiguredError ? 503 : 500;
+}
+
 export function getSupabaseAdmin() {
   const url = supabaseUrl();
   const key = supabaseServerKey();
@@ -295,7 +315,7 @@ async function recordFailedWrite(input: {
 
 async function executePersist(table: string, row: Record<string, unknown>, onConflict = "id") {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured for durable writes.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured for durable writes.");
 
   const durableRow = withTenant(row);
   try {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 
 const REPLAYABLE_TABLES = new Set([
   "tasks",
@@ -70,7 +70,7 @@ async function sendToDeadLetter(row: Record<string, unknown>, message: string, a
 
 async function replayRow(row: Record<string, unknown>) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is unavailable.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is unavailable.");
 
   const table = String(row.table_name || "");
   const operation = String(row.operation || "UPSERT").toUpperCase();
@@ -94,7 +94,7 @@ async function replayRow(row: Record<string, unknown>) {
 
 export async function processFailedWrites(input: { tenantId: string; limit?: number }) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for failed-write recovery.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for failed-write recovery.");
   const workerId = `failed-write-worker:${randomUUID()}`;
   const { data, error } = await supabase.rpc("orvanta_claim_failed_writes", {
     p_tenant_id: input.tenantId,

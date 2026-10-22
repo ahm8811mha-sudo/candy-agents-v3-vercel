@@ -36,11 +36,11 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
   const connection = await probeSupabaseConnection();
   if (!connection.ready) {
     const details: Record<Exclude<SupabaseConnectionStatus, "READY">, string> = {
-      NOT_CONFIGURED: "Supabase server persistence is not configured for this deployment.",
-      PROJECT_MISMATCH: "The Supabase URL and server key belong to different projects. Server writes remain blocked.",
-      AUTH_REJECTED: "Supabase rejected the configured server key. Replace SUPABASE_SECRET_KEY with a valid Secret key for the linked project.",
-      SCHEMA_UNAVAILABLE: "The Supabase server key is accepted, but the authoritative schema probe is unavailable.",
-      UNAVAILABLE: "Supabase could not be reached. Evidence queries were skipped to avoid repeated failed requests.",
+      NOT_CONFIGURED: "الحفظ على الخادم عبر Supabase غير مهيأ لهذا النشر.",
+      PROJECT_MISMATCH: "رابط Supabase ومفتاح الخادم من مشروعين مختلفين، فتبقى الكتابة من الخادم موقوفة.",
+      AUTH_REJECTED: "رفض Supabase مفتاح الخادم المضبوط. استبدل SUPABASE_SECRET_KEY بمفتاح Secret صالح للمشروع المرتبط.",
+      SCHEMA_UNAVAILABLE: "قُبل مفتاح خادم Supabase، لكن فحص المخطط المعتمد غير متاح.",
+      UNAVAILABLE: "تعذّر الوصول إلى Supabase، فتُركت استعلامات الأدلة لتجنب تكرار طلبات فاشلة.",
     };
     replaceCheck(readiness, "supabase-service-role", false, details[connection.status]);
     readiness.okForProduction = readiness.checks.every((item) => item.severity !== "FAIL");
@@ -89,56 +89,56 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     "core-schema-ready",
     coreProbes.every((probe) => !probe.error),
     coreProbes.every((probe) => !probe.error)
-      ? "The tenant-scoped workflow, outbox, reconciliation, and accounting tables are reachable through the service role."
-      : "One or more required Company OS tables are unavailable; apply the ordered migration chain."
+      ? "جداول سير العمل والصندوق الصادر والتسوية والمحاسبة ضمن حدود المستأجر متاحة لدور الخادم."
+      : "جدول أو أكثر من جداول نظام الشركة المطلوبة غير متاح؛ طبّق سلسلة الهجرات المرتبة."
   );
   replaceCheck(
     readiness,
     "migration-baseline",
     passingEvidence("migration-chain-applied"),
     passingEvidence("migration-chain-applied")
-      ? "The ordered migration chain is recorded as applied and verified."
-      : "No current migration-chain evidence is stored."
+      ? "سلسلة الهجرات المرتبة مسجلة مطبّقة ومتحققاً منها."
+      : "لا دليل حالياً على سلسلة الهجرات."
   );
   replaceCheck(
     readiness,
     "execution-transaction",
     passingEvidence("execution-transaction-smoke"),
     passingEvidence("execution-transaction-smoke")
-      ? "The canonical execution RPC passed rollback-safe atomicity, idempotency, workflow, audit, and outbox checks."
-      : "No current execution transaction smoke evidence is stored."
+      ? "نجحت دالة التنفيذ المعتمدة في فحوص الذرية القابلة للتراجع وعدم التكرار وسير العمل والتدقيق والصندوق الصادر."
+      : "لا دليل حالياً من فحص حزمة التنفيذ."
   );
   replaceCheck(
     readiness,
     "rls-regression-tested",
     passingEvidence("rls-regression"),
     passingEvidence("rls-regression")
-      ? "The recorded RLS regression checks passed and remain within their evidence window."
-      : "No current passing RLS regression evidence is stored."
+      ? "نجحت فحوص انحدار RLS المسجلة، وما زالت ضمن مدة صلاحية دليلها."
+      : "لا دليل ناجح حالياً على انحدار RLS."
   );
   replaceCheck(
     readiness,
     "tenant-rls-ready",
     Boolean(tenantId) && passingEvidence("rls-regression"),
     Boolean(tenantId) && passingEvidence("rls-regression")
-      ? `Tenant ${tenantId} is explicit and the current RLS regression evidence is passing.`
-      : "An explicit tenant and current RLS regression evidence are required."
+      ? `المستأجر ${tenantId} صريح، ودليل انحدار RLS الحالي ناجح.`
+      : "يلزم مستأجر صريح ودليل حالي على انحدار RLS."
   );
   replaceCheck(
     readiness,
     "accounting-controls",
     passingEvidence("accounting-controls-smoke"),
     passingEvidence("accounting-controls-smoke")
-      ? "Balanced posting, posted-entry immutability, and reversal were verified in a rollback-only smoke transaction."
-      : "Accounting control smoke evidence is missing or expired."
+      ? "تُحقِّق من توازن الترحيل وثبات القيود المرحّلة والعكس في معاملة فحص تُلغى بعدها."
+      : "دليل فحص ضوابط المحاسبة غير موجود أو منتهٍ."
   );
   replaceCheck(
     readiness,
     "browser-e2e",
     passingEvidence("browser-e2e"),
     passingEvidence("browser-e2e")
-      ? "Desktop Chromium and iPhone WebKit journeys are recorded as passing."
-      : "Browser E2E evidence has not yet been recorded from a passing main-branch workflow."
+      ? "رحلات Chromium على سطح المكتب وWebKit على iPhone مسجلة ناجحة."
+      : "لم يُسجَّل بعد دليل اختبار التصفح من تشغيل ناجح على main."
   );
 
   const companyBrain = companyBrainResult.error ? null : companyBrainResult.data;
@@ -154,8 +154,8 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     "company-brain-cycle",
     companyBrainPassed,
     companyBrainPassed
-      ? `Tenant ${tenantId} completed a fully successful Company Brain cycle within the last 36 hours.`
-      : `Tenant ${tenantId} has no recent fully successful Company Brain cycle with matching PASS evidence.`
+      ? `أتمّ المستأجر ${tenantId} دورة ناجحة كاملة للعقل المؤسسي خلال آخر 36 ساعة.`
+      : `لا دورة حديثة ناجحة كاملة للعقل المؤسسي للمستأجر ${tenantId} بدليل PASS مطابق.`
   );
 
   const cronRows = cronResult.error ? [] : cronResult.data || [];
@@ -170,16 +170,16 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     "watchdog",
     watchdogPassed,
     watchdogPassed
-      ? "The production watchdog completed successfully within the last 36 hours."
-      : "The watchdog has not completed successfully within the last 36 hours."
+      ? "أتمّ مراقب الإنتاج دورة ناجحة خلال آخر 36 ساعة."
+      : "لم يُتمّ المراقب دورة ناجحة خلال آخر 36 ساعة."
   );
   replaceCheck(
     readiness,
     "failed-write-recovery",
     recoveryPassed,
     recoveryPassed
-      ? "The failed-write recovery worker completed successfully within the last 36 hours."
-      : "The failed-write recovery worker has not completed successfully within the last 36 hours."
+      ? "أتمّ عامل استعادة الكتابات الفاشلة تشغيلاً ناجحاً خلال آخر 36 ساعة."
+      : "لم يُتمّ عامل استعادة الكتابات الفاشلة تشغيلاً ناجحاً خلال آخر 36 ساعة."
   );
 
   const capabilities = capabilityResult.error ? [] : capabilityResult.data || [];
@@ -205,10 +205,10 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     "capability-registry",
     capabilityPassed,
     capabilityPassed
-      ? `${capabilities.length} capabilities are explicitly classified and every LIVE evidence-required claim has a current verified receipt or canary record.`
+      ? `${capabilities.length} قدرة مصنفة صراحة، ولكل قدرة LIVE تتطلب دليلاً إيصال متحقق منه حالي أو سجل فحص.`
       : invalidCapabilities.length
-        ? `Capability evidence is missing or invalid for: ${invalidCapabilities.map((row) => String(row.capability_key)).join(", ")}.`
-        : "The capability registry is empty or unavailable."
+        ? `دليل القدرة ناقص أو غير صالح لـ: ${invalidCapabilities.map((row) => String(row.capability_key)).join(", ")}.`
+        : "سجل القدرات فارغ أو غير متاح."
   );
 
   const backups = backupResult.error ? [] : backupResult.data || [];
@@ -218,8 +218,8 @@ export async function getEvidenceAwareProductionReadiness(): Promise<ProductionR
     "backup-restore",
     Boolean(verifiedBackup),
     verifiedBackup
-      ? `A successful restore drill is recorded for ${verifiedBackup.restore_target || "an isolated target"}.`
-      : "No successful restore drill is recorded within the last 90 days."
+      ? `تمرين استعادة ناجح مسجل إلى ${verifiedBackup.restore_target || "هدف معزول"}.`
+      : "لا تمرين استعادة ناجحاً مسجلاً خلال آخر 90 يوماً."
   );
 
   readiness.okForProduction = readiness.checks.every((item) => item.severity !== "FAIL");

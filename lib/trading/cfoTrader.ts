@@ -51,7 +51,7 @@ export function runCfoTradingCycle(input: RunCycleInput): TradingCycleResult {
   const { mode, downgraded } = resolveMode(requestedMode);
   const notes: string[] = [];
   if (downgraded) {
-    notes.push("طُلب تنفيذ حقيقي لكنه غير مُفعّل — تم التحويل إلى وضع المحاكاة تلقائياً (ضابط أمان).");
+    notes.push("طُلب تنفيذ حقيقي لكنه غير مُفعّل، فتحوّل الطلب إلى المحاكاة تلقائياً (ضابط أمان).");
   }
 
   const portfolio: Portfolio = input.existingPortfolio
@@ -65,7 +65,7 @@ export function runCfoTradingCycle(input: RunCycleInput): TradingCycleResult {
     const score = scoreOpportunity(opp);
 
     if (drawdownBreached(portfolio, limits)) {
-      decisions.push({ opportunity: opp, action: "SKIP", allocation: 0, score, reason: "تم تجاوز حد التراجع — إيقاف التداول" });
+      decisions.push({ opportunity: opp, action: "SKIP", allocation: 0, score, reason: "تم تجاوز حد التراجع، فتوقف التداول" });
       continue;
     }
 
@@ -90,7 +90,7 @@ export function runCfoTradingCycle(input: RunCycleInput): TradingCycleResult {
       // Reserve the cash but mark as pending until approved.
       portfolio.cash -= allocation;
       portfolio.deployed += allocation;
-      decisions.push({ opportunity: opp, action: "NEEDS_APPROVAL", allocation, score, reason: `التخصيص ${allocation} يتجاوز حد الموافقة — بانتظار اعتماد بشري` });
+      decisions.push({ opportunity: opp, action: "NEEDS_APPROVAL", allocation, score, reason: `التخصيص ${allocation} يتجاوز حد الموافقة، فهو بانتظار اعتماد بشري` });
     } else {
       portfolio.cash -= allocation;
       portfolio.deployed += allocation;
@@ -119,9 +119,9 @@ export function runCfoTradingCycle(input: RunCycleInput): TradingCycleResult {
  */
 export function sampleOpportunities(): MarketOpportunity[] {
   return [
-    { id: "opp-eq-1", symbol: "AAPL", assetClass: "EQUITY", title: "سهم Apple — زخم إيجابي", expectedReturn: 0.09, risk: "LOW", confidence: 0.72, entryPrice: 195, horizonDays: 30, source: "market-scan" },
-    { id: "opp-cr-1", symbol: "BTC", assetClass: "CRYPTO", title: "بيتكوين — اختراق مقاومة", expectedReturn: 0.22, risk: "HIGH", confidence: 0.6, entryPrice: 64000, horizonDays: 14, source: "market-scan" },
-    { id: "opp-fx-1", symbol: "EUR/USD", assetClass: "FOREX", title: "يورو/دولار — نطاق سعري", expectedReturn: 0.04, risk: "MEDIUM", confidence: 0.5, entryPrice: 1.08, horizonDays: 7, source: "market-scan" },
+    { id: "opp-eq-1", symbol: "AAPL", assetClass: "EQUITY", title: "سهم Apple: زخم إيجابي", expectedReturn: 0.09, risk: "LOW", confidence: 0.72, entryPrice: 195, horizonDays: 30, source: "market-scan" },
+    { id: "opp-cr-1", symbol: "BTC", assetClass: "CRYPTO", title: "بيتكوين: اختراق مقاومة", expectedReturn: 0.22, risk: "HIGH", confidence: 0.6, entryPrice: 64000, horizonDays: 14, source: "market-scan" },
+    { id: "opp-fx-1", symbol: "EUR/USD", assetClass: "FOREX", title: "يورو/دولار: نطاق سعري", expectedReturn: 0.04, risk: "MEDIUM", confidence: 0.5, entryPrice: 1.08, horizonDays: 7, source: "market-scan" },
     { id: "opp-bz-1", symbol: "INV-RESTOCK", assetClass: "BUSINESS", title: "إعادة تخزين منتج عالي الطلب", expectedReturn: 0.18, risk: "MEDIUM", confidence: 0.78, entryPrice: 1, horizonDays: 21, source: "opportunity-radar" },
     { id: "opp-bz-2", symbol: "AD-CAMPAIGN", assetClass: "BUSINESS", title: "حملة تسويقية بعائد مرتفع", expectedReturn: 0.31, risk: "HIGH", confidence: 0.66, entryPrice: 1, horizonDays: 30, source: "opportunity-radar" },
     ...sampleTadawulOpportunities(),

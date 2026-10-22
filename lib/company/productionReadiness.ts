@@ -67,15 +67,15 @@ export function getProductionReadiness(): ProductionReadiness {
         "Google Workspace execution",
         googleWorkspace.credentialsConfigured,
         googleWorkspace.credentialsConfigured
-          ? "Google Workspace is enabled and OAuth credentials are configured. External operations must still create integration attempts and receipts."
-          : `Google Workspace is enabled but missing: ${googleWorkspace.missingEnvironmentVariables.join(", ")}`,
+          ? "Google Workspace مفعّل وبيانات OAuth مضبوطة. ويبقى كل تنفيذ خارجي مسجلاً بمحاولة تكامل وإيصال."
+          : `Google Workspace مفعّل وتنقصه: ${googleWorkspace.missingEnvironmentVariables.join(", ")}`,
         true
       )
     : check(
         "google-workspace",
         "Google Workspace execution",
         false,
-        "Google Workspace execution is disabled. It remains a non-blocking warning for the personal core, but commercial claims must not label it LIVE.",
+        "تنفيذ Google Workspace متوقف. تنبيه لا يوقف النواة الشخصية، ولا يُعرض على أنه يعمل.",
         false
       );
 
@@ -90,21 +90,21 @@ export function getProductionReadiness(): ProductionReadiness {
       isAuthEnabled() && (!personalMode || personalAccessCodeConfigured),
       personalMode
         ? isOwnerAccessConfigured() && personalAccessCodeConfigured
-          ? "Personal mode requires a server-side owner code and a signed HttpOnly trusted-device cookie. Anonymous OWNER fallback is disabled."
-          : "Configure ORVANTA_OWNER_ACCESS_KEY and a server-side signing secret before exposing the personal workspace."
+          ? "الوضع الشخصي يتطلب رمز مالك على الخادم وملف ارتباط موقّعاً لجهاز موثوق، ولا دخول مجهول بصلاحية المالك."
+          : "اضبط ORVANTA_OWNER_ACCESS_KEY وسر توقيع على الخادم قبل فتح مساحة العمل الشخصية."
         : isAuthEnabled()
-          ? "Commercial authentication is enabled. Sensitive routes require authenticated roles and tenant context."
-          : "AUTH_ENABLED is not true. Commercial routes must fail closed."
+          ? "المصادقة التجارية مفعّلة؛ المسارات الحساسة تتطلب دوراً موثقاً وسياق مستأجر."
+          : "AUTH_ENABLED ليست true، فيجب أن تُغلق المسارات التجارية عند الشك."
     ),
     check(
       "owner-code-strength",
       "Owner access code strength",
       !personalMode || !personalAccessCodeConfigured || ownerCodeStrong,
       !personalAccessCodeConfigured
-        ? "No owner access code is configured yet."
+        ? "لم يُضبط رمز وصول للمالك بعد."
         : ownerCodeStrong
-          ? `The configured owner code is at least ${OWNER_CODE_MIN_LENGTH} characters.`
-          : `The configured owner code is only ${personalAccessCode.length} characters. It unlocks the entire financial and operating system — replace ORVANTA_OWNER_ACCESS_KEY with at least ${OWNER_CODE_MIN_LENGTH} characters (20+ recommended) and redeploy.`,
+          ? `رمز المالك المضبوط لا يقل عن ${OWNER_CODE_MIN_LENGTH} حرفاً.`
+          : `عدد أحرف رمز المالك المضبوط ${personalAccessCode.length} فقط، وهو يفتح النظام المالي والتشغيلي كله. استبدل ORVANTA_OWNER_ACCESS_KEY برمز لا يقل عن ${OWNER_CODE_MIN_LENGTH} حرفاً (يُنصح بعشرين فأكثر)، ثم أعد النشر.`,
       false
     ),
     check(
@@ -112,48 +112,48 @@ export function getProductionReadiness(): ProductionReadiness {
       "Dedicated owner cookie signing secret",
       hasDedicatedCookieSecret(),
       hasDedicatedCookieSecret()
-        ? "ORVANTA_OWNER_COOKIE_SECRET is set: session signing is independent of the database key."
-        : "Owner cookies use the Supabase server secret as a fallback. Set a dedicated ORVANTA_OWNER_COOKIE_SECRET so session security is not coupled to (and rotated with) the database key."
+        ? "ORVANTA_OWNER_COOKIE_SECRET مضبوط: توقيع الجلسة مستقل عن مفتاح قاعدة البيانات."
+        : "ملفات ارتباط المالك تُوقَّع احتياطياً بسر Supabase. اضبط ORVANTA_OWNER_COOKIE_SECRET مخصصاً، حتى لا يرتبط أمان الجلسة بمفتاح قاعدة البيانات ولا يتغير بتدويره."
     ),
     check(
       "basic-auth-disabled",
       "No production Basic Auth",
       process.env.NODE_ENV === "production" || process.env.ALLOW_BASIC_AUTH !== "true",
       process.env.ALLOW_BASIC_AUTH === "true"
-        ? "ALLOW_BASIC_AUTH=true is accepted only in local development and is ignored in production."
-        : "Basic Auth is disabled. Signed owner access, Supabase sessions, or trusted system credentials are required."
+        ? "ALLOW_BASIC_AUTH=true مقبولة في التطوير المحلي فقط، وتُتجاهل في الإنتاج."
+        : "Basic Auth متوقف؛ يلزم وصول مالك موقّع أو جلسة Supabase أو بيانات نظام موثوقة."
     ),
     check(
       "supabase-service-role",
       "Durable server persistence",
       hasSupabaseEnv() && hasServerSecret,
       supabaseEnvironment.configurationIssue === "PROJECT_MISMATCH"
-        ? "The Supabase URL and server key belong to different projects. Replace the Vercel server key with a key from the configured project; writes remain blocked until they match."
+        ? "رابط Supabase ومفتاح الخادم من مشروعين مختلفين. استبدل مفتاح الخادم في Vercel بمفتاح من المشروع المضبوط؛ وتبقى الكتابة موقوفة حتى يتطابقا."
         : hasServerSecret
-        ? `${supabaseEnvironment.keySource} is configured for server-only writes.`
-        : "SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY) is missing. Projects, approvals, audit, actions, workflow state, and ledger cannot be durable."
+        ? `${supabaseEnvironment.keySource} مضبوط للكتابة من الخادم وحده.`
+        : "SUPABASE_SECRET_KEY (أو SUPABASE_SERVICE_ROLE_KEY القديم) غير موجود، فلا تُحفظ المشاريع ولا الاعتمادات ولا التدقيق ولا الإجراءات ولا حالة سير العمل ولا الدفتر."
     ),
     check(
       "core-schema-ready",
       "Company OS core schema",
       enabled("ORVANTA_CORE_SCHEMA_READY"),
       enabled("ORVANTA_CORE_SCHEMA_READY")
-        ? "Core completion migration is confirmed as applied."
-        : "Apply the ordered Supabase migrations in staging and production, then set ORVANTA_CORE_SCHEMA_READY=true."
+        ? "تأكد تطبيق هجرة اكتمال النواة."
+        : "طبّق هجرات Supabase المرتبة في بيئة الاختبار والإنتاج، ثم اضبط ORVANTA_CORE_SCHEMA_READY=true."
     ),
     check(
       "execution-transaction",
       "Atomic execution bundle",
       false,
-      "No current rollback-safe execution transaction evidence is stored yet."
+      "لا دليل حالياً على حزمة تنفيذ قابلة للتراجع."
     ),
     check(
       "migration-baseline",
       "Ordered migration baseline",
       enabled("ORVANTA_MIGRATIONS_BASELINED"),
       enabled("ORVANTA_MIGRATIONS_BASELINED")
-        ? "The production schema has an ordered baseline and staging migration verification."
-        : "Create and verify the production baseline from supabase/migrations before declaring release readiness."
+        ? "لمخطط الإنتاج خط أساس مرتب، وتحقُّق من الهجرات في بيئة الاختبار."
+        : "أنشئ خط أساس الإنتاج من supabase/migrations وتحقق منه قبل إعلان الجاهزية."
     ),
     check(
       "tenant-rls-ready",
@@ -161,107 +161,107 @@ export function getProductionReadiness(): ProductionReadiness {
       tenantIsolationPassed,
       tenantIsolationPassed
         ? personalMode
-          ? "The personal workspace uses one explicit tenant and RLS remains enabled."
-          : "Tenant-scoped RLS is confirmed and cross-tenant tests can run."
+          ? "مساحة العمل الشخصية تستخدم مستأجراً واحداً صريحاً، وRLS باقٍ مفعّلاً."
+          : "RLS بحدود المستأجر مؤكد، ويمكن تشغيل اختبارات العبور بين المستأجرين."
         : personalMode
-          ? "Set ORVANTA_TENANT_ID and confirm ORVANTA_RLS_READY=true; personal mode does not justify disabling RLS."
-          : "Set JWT app_metadata.tenant_id, enable ORVANTA_MULTI_TENANT, apply RLS policies, and set ORVANTA_RLS_READY=true."
+          ? "اضبط ORVANTA_TENANT_ID وأكّد ORVANTA_RLS_READY=true؛ فالوضع الشخصي لا يبرر إيقاف RLS."
+          : "اضبط tenant_id في app_metadata للجلسة، وفعّل ORVANTA_MULTI_TENANT، وطبّق سياسات RLS، ثم اضبط ORVANTA_RLS_READY=true."
     ),
     check(
       "rls-regression-tested",
       "RLS regression suite",
       enabled("ORVANTA_RLS_TESTED"),
       enabled("ORVANTA_RLS_TESTED")
-        ? "Anonymous, owner, service, and cross-tenant access tests are recorded as passing."
-        : "Run supabase/tests/rls_regression.sql against staging and set ORVANTA_RLS_TESTED=true only after evidence is stored."
+        ? "اختبارات وصول المجهول والمالك والخدمة والعبور بين المستأجرين مسجلة ناجحة."
+        : "شغّل supabase/tests/rls_regression.sql على بيئة الاختبار، ولا تضبط ORVANTA_RLS_TESTED=true إلا بعد حفظ الدليل."
     ),
     check(
       "workflow-runtime",
       "Durable workflow runtime",
       workflowRuntimeEnabled,
       workflowRuntimeEnabled
-        ? "Durable workflow instances, steps, retries, approvals, and restart recovery are enabled."
-        : "ORVANTA_WORKFLOW_RUNTIME_ENABLED is not true. Long-running company workflows remain blocked."
+        ? "مسارات العمل الدائمة مفعّلة: خطواتها ومحاولاتها واعتماداتها واستعادتها بعد إعادة التشغيل."
+        : "ORVANTA_WORKFLOW_RUNTIME_ENABLED ليست true، فتبقى مسارات العمل الطويلة موقوفة."
     ),
     check(
       "outbox-publisher",
       "Transactional outbox publisher",
       outbox.ready,
       outbox.ready
-        ? "Outbox scheduler authentication, HTTPS destination and signing secret are configured; this does not prove delivery."
-        : `Outbox publishing is blocked. Missing or invalid: ${outbox.missing.join(", ")}. Pending events must remain queued.`
+        ? "مصادقة مجدول الصندوق الصادر ووجهة HTTPS وسر التوقيع مضبوطة؛ وهذا لا يثبت التسليم."
+        : `النشر من الصندوق الصادر موقوف. ناقص أو غير صالح: ${outbox.missing.join(", ")}. وتبقى الأحداث المعلقة في الطابور.`
     ),
     check(
       "watchdog",
       "Operational watchdog and cron tracking",
       enabled("ORVANTA_WATCHDOG_ENABLED"),
       enabled("ORVANTA_WATCHDOG_ENABLED")
-        ? "All scheduled jobs emit durable run records and the watchdog is scheduled."
-        : "Deploy the tracked cron routes and set ORVANTA_WATCHDOG_ENABLED=true after the watchdog completes a successful cycle."
+        ? "كل المهام المجدولة تسجل تشغيلها، والمراقب مجدول."
+        : "انشر مسارات المهام المجدولة المتتبَّعة، ثم اضبط ORVANTA_WATCHDOG_ENABLED=true بعد دورة ناجحة للمراقب."
     ),
     check(
       "failed-write-recovery",
       "Failed-write retry and dead letter worker",
       enabled("ORVANTA_FAILED_WRITE_WORKER_ENABLED"),
       enabled("ORVANTA_FAILED_WRITE_WORKER_ENABLED")
-        ? "Failed writes are claimed, retried with backoff, and moved to dead letter when terminal."
-        : "Enable the failed-write recovery worker only after its first successful production run."
+        ? "الكتابات الفاشلة تُستلم وتُعاد بمهلة متزايدة، وتنتقل إلى قائمة الإخفاق النهائي حين تنفد محاولاتها."
+        : "فعّل عامل استعادة الكتابات الفاشلة بعد أول تشغيل ناجح له في الإنتاج فقط."
     ),
     check(
       "reconciliation-required",
       "External receipt and reconciliation",
       reconciliationRequired,
       reconciliationRequired
-        ? "External actions cannot complete without evidence and reconciliation."
-        : "Set ORVANTA_RECONCILIATION_REQUIRED=true after applying the reconciliation and receipt schema."
+        ? "لا يكتمل إجراء خارجي دون دليل وتسوية."
+        : "اضبط ORVANTA_RECONCILIATION_REQUIRED=true بعد تطبيق مخطط التسوية والإيصالات."
     ),
     check(
       "capability-registry",
       "Capability truth registry",
       enabled("ORVANTA_CAPABILITY_REGISTRY_READY"),
       enabled("ORVANTA_CAPABILITY_REGISTRY_READY")
-        ? "Every exposed capability is labelled LIVE, SANDBOX, HUMAN_CHECKPOINT, NOT_INTEGRATED, or DISABLED."
-        : "Verify the capability registry and hide unsupported modules before setting ORVANTA_CAPABILITY_REGISTRY_READY=true."
+        ? "كل قدرة معروضة موسومة: LIVE أو SANDBOX أو HUMAN_CHECKPOINT أو NOT_INTEGRATED أو DISABLED."
+        : "تحقق من سجل القدرات وأخفِ الوحدات غير المدعومة قبل ضبط ORVANTA_CAPABILITY_REGISTRY_READY=true."
     ),
     check(
       "company-brain-cycle",
       "Company Brain production cycle",
       false,
-      "No recent tenant-scoped Company Brain cycle has been verified yet."
+      "لم يُتحقق بعد من دورة حديثة للعقل المؤسسي ضمن حدود المستأجر."
     ),
     check(
       "accounting-controls",
       "Immutable accounting and period close",
       enabled("ORVANTA_ACCOUNTING_CONTROLS_READY"),
       enabled("ORVANTA_ACCOUNTING_CONTROLS_READY")
-        ? "Posted entries are immutable, reversals are required, and period close/reporting views are active."
-        : "Apply accounting controls, test reversal and close, then set ORVANTA_ACCOUNTING_CONTROLS_READY=true."
+        ? "القيود المرحّلة لا تُعدَّل، والعكس إلزامي، وعروض إغلاق الفترة والتقارير مفعّلة."
+        : "طبّق ضوابط المحاسبة، واختبر العكس والإغلاق، ثم اضبط ORVANTA_ACCOUNTING_CONTROLS_READY=true."
     ),
     check(
       "browser-e2e",
       "Desktop and iPhone E2E gate",
       enabled("ORVANTA_E2E_VERIFIED"),
       enabled("ORVANTA_E2E_VERIFIED")
-        ? "Owner access, lock, navigation, and system status journeys pass in Chromium and iPhone emulation."
-        : "The Browser E2E workflow must pass on main before ORVANTA_E2E_VERIFIED=true."
+        ? "رحلات وصول المالك والقفل والتنقل وحالة النظام ناجحة في Chromium وفي محاكاة iPhone."
+        : "يجب أن ينجح اختبار التصفح على main قبل ضبط ORVANTA_E2E_VERIFIED=true."
     ),
     check(
       "backup-restore",
       "Backup restore drill",
       enabled("ORVANTA_BACKUP_RESTORE_VERIFIED"),
       enabled("ORVANTA_BACKUP_RESTORE_VERIFIED")
-        ? "A recent restore drill is recorded and core table verification passed."
-        : "A backup existing is not enough. Complete a restore drill and record it before setting ORVANTA_BACKUP_RESTORE_VERIFIED=true."
+        ? "تمرين استعادة حديث مسجل، ونجح التحقق من الجداول الأساسية."
+        : "وجود نسخة احتياطية لا يكفي. أكمل تمرين استعادة وسجّله قبل ضبط ORVANTA_BACKUP_RESTORE_VERIFIED=true."
     ),
     check(
       "api-secret",
       "Internal API secret",
       Boolean(process.env.API_SECRET_KEY),
       process.env.API_SECRET_KEY
-        ? "API_SECRET_KEY is configured for trusted system calls."
+        ? "API_SECRET_KEY مضبوط لاستدعاءات النظام الموثوقة."
         : personalMode
-          ? "API_SECRET_KEY is optional in personal mode; owner cookies and CRON_SECRET protect the active surfaces."
-          : "API_SECRET_KEY is missing. Add it before exposing internal automation endpoints.",
+          ? "API_SECRET_KEY اختياري في الوضع الشخصي؛ ملفات ارتباط المالك وCRON_SECRET تحمي الواجهات العاملة."
+          : "API_SECRET_KEY غير موجود. أضفه قبل فتح نقاط الأتمتة الداخلية.",
       !personalMode
     ),
     check(
@@ -269,16 +269,16 @@ export function getProductionReadiness(): ProductionReadiness {
       "Scheduler authentication",
       Boolean(process.env.CRON_SECRET),
       process.env.CRON_SECRET
-        ? "CRON_SECRET is configured for workflow, watchdog, recovery, and outbox workers."
-        : "CRON_SECRET is missing. Background workers cannot be securely invoked."
+        ? "CRON_SECRET مضبوط لعمال سير العمل والمراقبة والاستعادة والصندوق الصادر."
+        : "CRON_SECRET غير موجود، فلا تُستدعى العمليات الخلفية بأمان."
     ),
     check(
       "openai-key",
       "LLM execution",
       Boolean(process.env.OPENAI_API_KEY),
       process.env.OPENAI_API_KEY
-        ? "OPENAI_API_KEY is configured. Agents can use LLM reports."
-        : "OPENAI_API_KEY is missing. The system will fall back to deterministic reports.",
+        ? "OPENAI_API_KEY مضبوط؛ يستطيع الوكلاء استخدام تقارير النماذج."
+        : "OPENAI_API_KEY غير موجود؛ فيعود النظام إلى تقارير ثابتة القواعد.",
       false
     ),
     check(
@@ -286,8 +286,8 @@ export function getProductionReadiness(): ProductionReadiness {
       "No public anon server write fallback",
       !hasPublicAnonServerWriteFallback,
       hasPublicAnonServerWriteFallback
-        ? "Anon keys are present in env. They are ignored by server persistence and must never write governance or finance tables."
-        : "No anon write fallback is configured for server persistence.",
+        ? "مفاتيح anon موجودة في البيئة؛ يتجاهلها الحفظ على الخادم، ولا تكتب أبداً في جداول الحوكمة أو المالية."
+        : "لا كتابة احتياطية بمفتاح anon في الحفظ على الخادم.",
       false
     ),
     googleWorkspaceCheck,

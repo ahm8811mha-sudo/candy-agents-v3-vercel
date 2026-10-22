@@ -35,7 +35,7 @@ export async function submitSaudiOrder(order: SaudiOrderInput): Promise<SaudiOrd
     return {
       submitted: false,
       simulated: true,
-      reason: "لا يوجد وسيط سعودي مُهيّأ — تم تسجيل الأمر كمحاكاة. التنفيذ الحقيقي يتطلب API من وسيط مرخّص.",
+      reason: "لا يوجد وسيط سعودي مُهيّأ، فسُجّل الأمر محاكاةً. التنفيذ الحقيقي يتطلب API من وسيط مرخّص.",
     };
   }
 

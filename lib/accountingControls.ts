@@ -1,9 +1,9 @@
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { getTenantId } from "./tenant";
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for accounting controls.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for accounting controls.");
   return supabase;
 }
 

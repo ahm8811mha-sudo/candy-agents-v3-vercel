@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Loader2, RefreshCcw, AlertTriangle, UserPlus, CheckCircle2, Clock3, ArrowUpRight } from "lucide-react";
+import { Loader2, RefreshCcw, AlertTriangle, UserPlus, CheckCircle2, Clock3, ArrowUpRight } from "lucide-react";
 import { COMPANY_AGENTS } from "@/lib/company/agents";
 import { fluidColumns } from "@/lib/ui/fluidColumns";
 
@@ -61,6 +61,9 @@ export default function DecisionFollowupCenter() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [closing, setClosing] = useState<string | null>(null);
+  const [closeNote, setCloseNote] = useState("");
+  const [closeError, setCloseError] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -78,7 +81,7 @@ export default function DecisionFollowupCenter() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function act(id: string, payload: Record<string, unknown>, okMessage: string) {
+  async function act(id: string, payload: Record<string, unknown>, okMessage: string): Promise<boolean> {
     setBusyId(id);
     setError("");
     setMessage("");
@@ -92,22 +95,32 @@ export default function DecisionFollowupCenter() {
       if (!res.ok || !json.ok) throw new Error(json.reason || json.error || "تعذّر تنفيذ العملية.");
       setMessage(okMessage);
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذّر تنفيذ العملية.");
+      return false;
     } finally {
       setBusyId(null);
     }
   }
 
-  function complete(c: Commitment) {
-    const note = c.requiresProof
-      ? window.prompt("هذا القرار ذو أثر حقيقي — أدخل دليل الإتمام (رقم مرجعي / رابط / وصف):") || ""
-      : window.prompt("ملاحظة الإتمام (اختياري):") || " ";
-    if (c.requiresProof && !note.trim()) {
-      setError("الإغلاق يتطلب دليلاً لهذا القرار.");
+  function toggleClosing(c: Commitment) {
+    setClosing(closing === c.id ? null : c.id);
+    setCloseNote("");
+    setCloseError("");
+  }
+
+  async function complete(c: Commitment) {
+    const note = closeNote.trim();
+    if (c.requiresProof && !note) {
+      setCloseError("الإغلاق يتطلب دليلاً لهذا القرار.");
       return;
     }
-    void act(c.id, { status: "COMPLETED", completionNote: note.trim() }, "أُغلق القرار وسُجّل في سجل التدقيق.");
+    setCloseError("");
+    if (await act(c.id, { status: "COMPLETED", completionNote: note }, "أُغلق القرار وسُجّل في سجل التدقيق.")) {
+      setClosing(null);
+      setCloseNote("");
+    }
   }
 
   const openCommitments = useMemo(() => commitments.filter((c) => c.status !== "COMPLETED" && c.status !== "CANCELLED"), [commitments]);
@@ -120,9 +133,8 @@ export default function DecisionFollowupCenter() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><ClipboardCheck size={16} /> رئيس الديوان التنفيذي</span>
           <h1 className="glow-title">متابعة القرارات</h1>
-          <p className="page-sub">كل قرار معتمد أو محال يُلتقط هنا بمسؤول وموعد، ويُطارَد حتى الإغلاق الحقيقي — لا قرار يضيع بعد صدوره.</p>
+          <p className="page-sub">كل قرار معتمد أو محال يلتقطه رئيس الديوان التنفيذي بمسؤول وموعد، ويطارده حتى الإغلاق الحقيقي، فلا يضيع قرار بعد صدوره.</p>
         </div>
         <button className="secondary-btn btn-sm" onClick={() => void load()}><RefreshCcw size={14} /> تحديث</button>
       </header>
@@ -149,16 +161,16 @@ export default function DecisionFollowupCenter() {
 
       <section style={{ display: "grid", gap: 10 }}>
         {openCommitments.length === 0 ? (
-          <div className="empty-state"><CheckCircle2 size={30} /><strong>لا قرارات مفتوحة</strong><span>كل القرارات الصادرة مُغلقة — الديوان نظيف.</span></div>
+          <div className="empty-state"><CheckCircle2 size={30} /><strong>لا قرارات مفتوحة</strong><span>كل القرارات الصادرة مُغلقة.</span></div>
         ) : openCommitments.map((c) => (
-          <article className="bento-card bento-full" key={c.id} style={{ gap: 10, borderInlineStart: c.overdue ? "3px solid var(--red)" : c.needsOwner ? "3px solid var(--amber)" : undefined }}>
+          <article className="bento-card bento-full" key={c.id} style={{ gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ minWidth: 0 }}>
                 <strong style={{ display: "block" }}>{c.title}</strong>
                 <small style={{ color: "var(--muted)" }}>
                   {c.decidedBy ? `قرار من: ${c.decidedBy} · ` : ""}
                   {c.assigneeName ? `المسؤول: ${c.assigneeName}` : "بانتظار تعيين مسؤول"}
-                  {c.dueAt ? ` · الاستحقاق ${new Date(c.dueAt).toLocaleDateString("ar-SA")}` : ""}
+                  {c.dueAt ? ` · الاستحقاق ${new Date(c.dueAt).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}
                   {c.requiresProof ? " · يتطلب دليل إغلاق" : ""}
                 </small>
               </div>
@@ -180,7 +192,7 @@ export default function DecisionFollowupCenter() {
                   onChange={(e) => { if (e.target.value) void act(c.id, { assigneeId: e.target.value }, "أُسنِد القرار للمسؤول."); }}
                 >
                   <option value="" disabled>تعيين مسؤول…</option>
-                  {ASSIGNABLE.map((a) => <option key={a.id} value={a.id}>{a.name} — {a.title}</option>)}
+                  {ASSIGNABLE.map((a) => <option key={a.id} value={a.id}>{a.name}، {a.title}</option>)}
                 </select>
               </span>
 
@@ -189,10 +201,35 @@ export default function DecisionFollowupCenter() {
                   <Clock3 size={14} /> بدء التنفيذ
                 </button>
               )}
-              <button className="primary-btn btn-sm" disabled={busyId === c.id || c.needsOwner} title={c.needsOwner ? "عيّن مسؤولاً أولاً" : "تأكيد الإتمام"} onClick={() => complete(c)}>
-                {busyId === c.id ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />} تم الإنجاز
+              <button className="primary-btn btn-sm" disabled={busyId === c.id || c.needsOwner} title={c.needsOwner ? "عيّن مسؤولاً أولاً" : undefined} aria-expanded={closing === c.id} onClick={() => toggleClosing(c)}>
+                <CheckCircle2 size={14} /> تم الإنجاز
               </button>
             </div>
+
+            {closing === c.id && (
+              <form className="decide-panel followup-close" onSubmit={(event) => { event.preventDefault(); void complete(c); }}>
+                <label htmlFor={`close-${c.id}`}>{c.requiresProof ? "دليل الإتمام" : "ملاحظة الإتمام (اختيارية)"}</label>
+                <textarea
+                  id={`close-${c.id}`}
+                  className="textarea compact"
+                  value={closeNote}
+                  onChange={(event) => setCloseNote(event.target.value)}
+                  placeholder={c.requiresProof ? "رقم مرجعي أو رابط أو وصف لما تم فعلاً" : "ما الذي أُنجز؟"}
+                  aria-invalid={closeError ? true : undefined}
+                  aria-describedby={`close-${c.id}-hint`}
+                  autoFocus
+                />
+                <small id={`close-${c.id}-hint`} className={closeError ? "followup-close__error" : undefined} role={closeError ? "alert" : undefined}>
+                  {closeError || (c.requiresProof ? "هذا القرار ذو أثر حقيقي، فلا يُغلق دون دليل." : "تُحفظ الملاحظة في سجل التدقيق مع الإغلاق.")}
+                </small>
+                <div className="decide-actions">
+                  <button type="submit" className="primary-btn btn-sm" disabled={busyId === c.id}>
+                    {busyId === c.id ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />} تأكيد الإغلاق
+                  </button>
+                  <button type="button" className="text-action" onClick={() => toggleClosing(c)}>إلغاء</button>
+                </div>
+              </form>
+            )}
           </article>
         ))}
       </section>

@@ -1,5 +1,5 @@
 import { evaluateGovernedAction, logDecision, seedGovernanceOS } from "./governanceOS";
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "./supabase";
 import { createHash } from "node:crypto";
 import { toLegacyDecisionAuditRow } from "./company/audit";
 import { callOpenAIChat } from "./ai/openai";
@@ -211,7 +211,7 @@ const knownDocumentTypes = new Set(Object.keys(requiredFieldsByType));
 
 function requireSupabase() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   return supabase;
 }
 

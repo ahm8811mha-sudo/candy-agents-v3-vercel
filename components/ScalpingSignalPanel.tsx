@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LineChart, Loader2, Clock, ShieldAlert, ArrowUpRight, ArrowDownRight, Minus, Filter } from "lucide-react";
+import { Loader2, Clock, ShieldAlert, ArrowUpRight, ArrowDownRight, Minus, Filter } from "lucide-react";
 
 type Signal = {
   signal: "BUY" | "SELL" | "HOLD" | "FILTERED";
@@ -93,8 +93,7 @@ export default function ScalpingSignalPanel() {
     <div className="delivery-panel fade-in trading-signal-panel" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header trading-panel-header">
         <div>
-          <span className="eyebrow"><LineChart size={16} /> استراتيجية Scalping محافظة</span>
-          <h2>{data.symbol} · RSI + Bollinger + MACD</h2>
+          <h2><span className="lead-in">مضاربة لحظية محافظة:</span> {data.symbol} · RSI + Bollinger + MACD</h2>
         </div>
         <div className="trading-header-actions">
           <span className={`status-pill ${data.source === "alpaca" ? "done" : ""}`}>
@@ -110,7 +109,7 @@ export default function ScalpingSignalPanel() {
       {error && <p className="notice error">{error}</p>}
 
       <p className="notice integration-notice" style={{ color: "var(--muted)" }}>
-        وسيط Alpaca: {data.broker.configured ? `متصل (${data.broker.mode === "live" ? "حقيقي" : "ورقي/Paper"})` : "غير مُهيّأ"} ·
+        وسيط Alpaca: {data.broker.configured ? `متصل (${data.broker.mode === "live" ? "حقيقي" : "ورقي"})` : "غير مُهيّأ"} ·
         المصدر {data.source === "alpaca" ? `${data.broker.feed.toUpperCase()} الحقيقي` : "سلسلة عرض محلية"} ·
         فلتر التذبذب ≤ {(data.config.volatilityMaxPct * 100).toFixed(1)}% · TP {(data.config.takeProfitPct * 100).toFixed(1)}% / SL {(data.config.stopLossPct * 100).toFixed(1)}%
       </p>
@@ -164,7 +163,7 @@ export default function ScalpingSignalPanel() {
         ضوابط الجلسة: حد خسارة يومي {(data.sessionLimits.maxDailyLossPct * 100).toFixed(0)}% · أقصى {data.sessionLimits.maxOpenPositions} مراكز · {data.sessionLimits.maxTradesPerDay} صفقة/يوم.
         {data.demo
           ? " هذه إشارة عرض على بيانات تجريبية ولا تُستخدم للتنفيذ."
-          : ` الإشارة محسوبة من شموع Alpaca الفعلية${data.asOf ? ` حتى ${new Date(data.asOf).toLocaleString("ar-SA")}` : ""}، لكنها ليست توصية استثمارية.`}
+          : ` الإشارة محسوبة من شموع Alpaca الفعلية${data.asOf ? ` حتى ${new Date(data.asOf).toLocaleString("ar-SA-u-nu-latn")}` : ""}، لكنها ليست توصية استثمارية.`}
       </p>
     </div>
   );

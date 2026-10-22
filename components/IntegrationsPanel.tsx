@@ -41,7 +41,6 @@ export default function IntegrationsPanel() {
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><Plug size={16} /> التكاملات الخارجية</span>
           <h2>الخدمات المتصلة</h2>
         </div>
         <span className="status-pill done">

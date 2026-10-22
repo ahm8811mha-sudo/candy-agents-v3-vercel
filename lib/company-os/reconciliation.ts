@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import type { CompanyAction } from "../company/actionQueue";
 import { reconcileExecution } from "./finance";
 
@@ -74,7 +74,7 @@ export async function reconcileCompanyAction(input: {
   }
 
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for action reconciliation.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for action reconciliation.");
 
   const payload = asRecord(input.action.payload);
   const integration = asRecord(payload.integration);

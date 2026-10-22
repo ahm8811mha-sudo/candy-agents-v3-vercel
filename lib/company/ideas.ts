@@ -36,7 +36,7 @@ export type SubmitIdeaInput = {
 // Compatibility snapshots for pulse/digest/learning. Refreshed on each request;
 // they are never the source of truth for production writes or individual lookups.
 const store: Idea[] = [];
-const sar = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
+const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { maximumFractionDigits: 2 });
 function db() {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("اتصال قاعدة البيانات غير مهيأ. لم تُحفظ أي تغييرات.");

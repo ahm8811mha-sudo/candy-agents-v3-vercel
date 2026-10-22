@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext } from "@/lib/company-os/context";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError, failureStatus } from "@/lib/supabase";
 import { acknowledgeSystemAlert } from "@/lib/operations/systemAlerts";
 import { runOperationalWatchdog } from "@/lib/operations/watchdog";
 import { processFailedWrites } from "@/lib/operations/failedWriteWorker";
@@ -12,7 +12,7 @@ const LIMIT = 100;
 
 async function loadOperations(tenantId: string) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for operational status.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for operational status.");
 
   const [cron, alerts, failedWrites, deadLetters, attempts, capabilities, backups, evidence] = await Promise.all([
     supabase.from("cron_runs").select("*").eq("tenant_id", tenantId).order("started_at", { ascending: false }).limit(LIMIT),
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "تعذر تحميل الحالة التشغيلية." },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest) {
   const auth = await requireCompanyContext(req, "OWNER");
   if (!auth.ok) return auth.response;
   const supabase = getSupabaseAdmin();
-  if (!supabase) return NextResponse.json({ ok: false, error: "Supabase is unavailable." }, { status: 503 });
+  if (!supabase) return NextResponse.json({ ok: false, error: new DatabaseNotConfiguredError().message }, { status: 503 });
 
   try {
     const body = await req.json();
@@ -182,7 +182,7 @@ export async function PATCH(req: NextRequest) {
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ الإجراء التشغيلي." },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }

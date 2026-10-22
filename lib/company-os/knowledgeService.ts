@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import type { DecisionPacket, KnowledgeEntityType } from "./types";
 
 export type KnowledgeNodeInput = {
@@ -26,7 +26,7 @@ export type KnowledgeEdgeInput = {
 
 function requireKnowledgeStore() {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for organizational memory.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for organizational memory.");
   return supabase;
 }
 

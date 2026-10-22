@@ -167,12 +167,12 @@ export function formatReportAsText(report: ExecutiveReport): string {
   const typeLabel = report.type === "DAILY" ? "يومي" : report.type === "WEEKLY" ? "أسبوعي" : "شهري";
   const lines: string[] = [
     `📊 التقرير التنفيذي ${typeLabel}`,
-    `التاريخ: ${new Date(report.generatedAt).toLocaleDateString("ar-SA")}`,
+    `التاريخ: ${new Date(report.generatedAt).toLocaleDateString("ar-SA-u-nu-latn")}`,
     "",
     "━━ الملخص المالي ━━",
-    `الإيرادات: ${report.financialSummary.income.toLocaleString("ar-SA")} ريال`,
-    `المصروفات: ${report.financialSummary.expenses.toLocaleString("ar-SA")} ريال`,
-    `صافي الربح: ${report.financialSummary.profit.toLocaleString("ar-SA")} ريال`,
+    `الإيرادات: ${report.financialSummary.income.toLocaleString("ar-SA-u-nu-latn")} ريال`,
+    `المصروفات: ${report.financialSummary.expenses.toLocaleString("ar-SA-u-nu-latn")} ريال`,
+    `صافي الربح: ${report.financialSummary.profit.toLocaleString("ar-SA-u-nu-latn")} ريال`,
     `مؤشر الصحة: ${report.financialSummary.healthScore}%`,
     "",
     "━━ الملخص التشغيلي ━━",

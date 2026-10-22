@@ -153,3 +153,118 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 @media(max-width:650px){
   .proof-facts__grid,.proof-view__facts{grid-template-columns:minmax(0,1fr)}
 }
+
+/* ── Company tools share the work desk's register ─────────────────────────
+   Every tool page opens with the same plain heading on the page surface,
+   numbers sit in one joined strip, panels are tonal surfaces with small
+   radii, one face (Cairo) carries every heading, and nothing lifts, glows
+   or wears a coloured top bar. */
+.executive-shell{--radius-sm:4px;--radius-md:5px;--radius-lg:6px;--radius-xl:6px}
+.executive-shell h1,.executive-shell h2,.executive-shell h3{font-family:var(--font-body)}
+.executive-shell .skip-link{min-height:44px;display:inline-flex;align-items:center;border-radius:5px}
+
+.executive-shell .company-app,.executive-shell .apple-dashboard{width:auto;min-height:0;max-width:1440px;margin:auto;padding:42px 40px 36px;background:none;gap:22px}
+.executive-shell .apple-shell{width:auto;gap:22px}
+@media(min-width:1600px){.executive-shell .company-app,.executive-shell .apple-dashboard{padding-inline:56px}}
+@media(max-width:1150px){.executive-shell .company-app,.executive-shell .apple-dashboard{padding:30px 25px}}
+@media(max-width:960px){.executive-shell .company-app,.executive-shell .apple-dashboard{padding-bottom:100px}}
+@media(max-width:650px){.executive-shell .company-app,.executive-shell .apple-dashboard{padding:25px 18px 100px}}
+
+/* The heading block: the same h1 and sub as the work desk, facts as quiet text. */
+.executive-shell .department-hero,.executive-shell .company-app .department-hero{display:block;background:none;border:0;border-radius:0;box-shadow:none;padding:0;margin:0}
+.executive-shell .department-hero h1,.executive-shell .apple-header h1{font-size:clamp(26px,2.75vw,40px);letter-spacing:-.04em;line-height:1.6;font-weight:750;margin:5px 0 8px;color:var(--text-strong)}
+.executive-shell .department-hero p,.executive-shell .apple-header p{font-size:12px;max-width:650px;line-height:1.9;margin:0;color:var(--muted)}
+.executive-shell .department-hero-actions,.executive-shell .page-facts{display:flex;flex-wrap:wrap;gap:6px 20px;margin:14px 0 0}
+.executive-shell .department-hero-actions span,.executive-shell .page-facts span,.executive-shell .apple-status{display:inline-flex;align-items:center;gap:7px;min-height:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;font-size:11px;font-weight:600;color:var(--muted-2)}
+.executive-shell .department-hero-actions svg,.executive-shell .page-facts svg,.executive-shell .apple-status svg{color:#829483;flex:none;width:15px;height:15px}
+.executive-shell .department-hero-actions .is-warning,.executive-shell .department-hero-actions .is-warning svg{color:var(--amber)}
+.executive-shell .apple-header{display:block}
+.executive-shell .apple-header>.apple-status{margin-top:14px}
+.executive-shell .back-link,.executive-shell .apple-back{display:inline-flex;align-items:center;gap:6px;min-height:32px;margin:0 0 4px;font-size:11px;font-weight:600;color:var(--muted)}
+.executive-shell .back-link:hover,.executive-shell .apple-back:hover{color:var(--primary)}
+.executive-shell .enterprise-actions{background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;padding:14px 0 0;gap:10px}
+.executive-shell .lead-in{color:var(--muted);font-weight:600}
+
+/* Numbers in one joined strip: a single row up to six, two rows of four beyond. */
+.executive-shell .ops-metrics,.executive-shell .apple-metrics.extended{gap:0;grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);border-block:1px solid var(--line)}
+.executive-shell .ops-metrics:has(>:nth-child(7)){grid-auto-flow:row;grid-template-columns:repeat(4,minmax(0,1fr))}
+.executive-shell .ops-metrics>.metric-card,.executive-shell .apple-metrics>.apple-card{position:relative;margin:0;border:0;border-radius:0;background:none;box-shadow:none;min-height:0;padding:20px 20px 22px;gap:6px;min-width:0;transform:none;transition:none}
+.executive-shell .ops-metrics>*+*,.executive-shell .apple-metrics>*+*{border-inline-start:1px solid var(--line)}
+.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(4n+1){border-inline-start:0}
+.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(n+5){border-top:1px solid var(--line)}
+.executive-shell .ops-metrics>:first-child,.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(4n+1),.executive-shell .apple-metrics>:first-child{padding-inline-start:0}
+.executive-shell .apple-card.blue,.executive-shell .apple-card.green,.executive-shell .apple-card.red{border-top:0}
+.executive-shell .metric-card>span{position:absolute;inset-inline-end:18px;top:21px;width:auto;height:auto;background:none;border-radius:0;color:#829483}
+.executive-shell .metric-card>span svg{width:16px;height:16px}
+.executive-shell .metric-card small,.executive-shell .apple-card p{font-size:11px;font-weight:600;color:var(--muted);padding-inline-end:26px}
+.executive-shell .metric-card strong,.executive-shell .apple-card strong{font-family:var(--font-body);font-size:clamp(20px,1.9vw,28px);font-weight:600;line-height:1.45;letter-spacing:0;color:var(--text-strong);overflow-wrap:anywhere}
+.executive-shell .metric-card.department-link:hover,.executive-shell .metric-card:hover,.executive-shell .apple-card:hover{transform:none;border-color:var(--line);background:none}
+.executive-shell .metric-card.department-link:hover strong,.executive-shell .metric-card.department-link[aria-expanded="true"] strong{color:var(--primary)}
+@media(max-width:900px){
+  .executive-shell .ops-metrics,.executive-shell .ops-metrics:has(>:nth-child(7)),.executive-shell .apple-metrics.extended{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .executive-shell .ops-metrics>*,.executive-shell .ops-metrics:has(>:nth-child(7))>*,.executive-shell .apple-metrics>*{border-inline-start:0;border-top:0;padding:16px 14px 18px}
+  .executive-shell .ops-metrics>:nth-child(even),.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(even),.executive-shell .apple-metrics>:nth-child(even){border-inline-start:1px solid var(--line)}
+  .executive-shell .ops-metrics>:nth-child(n+3),.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(n+3),.executive-shell .apple-metrics>:nth-child(n+3){border-top:1px solid var(--line)}
+  .executive-shell .ops-metrics>:nth-child(odd),.executive-shell .ops-metrics:has(>:nth-child(7))>:nth-child(odd),.executive-shell .apple-metrics>:nth-child(odd){padding-inline-start:0}
+  .executive-shell .ops-metrics>:last-child:nth-child(odd){grid-column:1/-1}
+}
+
+/* Panels: tonal surfaces, small radii, a title instead of a coloured label. */
+.executive-shell .ops-card,.executive-shell .apple-control,.executive-shell .apple-section,.executive-shell .apple-command-center,.executive-shell .request-panel,.executive-shell .delivery-panel{border-radius:6px;box-shadow:none}
+.executive-shell .bento-card:hover{border-color:var(--line)}
+.executive-shell a.bento-card:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.executive-shell .department-link:hover{transform:none}
+.executive-shell .bento-kicker{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;font-weight:700;line-height:1.7;color:var(--text-strong);letter-spacing:0;text-transform:none}
+.executive-shell .bento-kicker svg{color:#829483;flex:none}
+.executive-shell .apple-signal{border-radius:5px}
+.executive-shell .apple-command-main h2{font-size:clamp(18px,1.7vw,24px);line-height:1.8}
+.executive-shell .apple-sections{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media(max-width:1300px){.executive-shell .apple-sections{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.executive-shell .apple-sections{grid-template-columns:minmax(0,1fr)}}
+
+/* The departments index: one register of nine, three to a row. */
+.department-index{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+.department-index__item{display:grid;grid-template-rows:auto auto 1fr auto;gap:6px;min-height:190px;padding:26px 24px 22px;border-bottom:1px solid var(--line);color:var(--text);text-decoration:none}
+.department-index__item:not(:nth-child(3n+1)){border-inline-start:1px solid var(--line)}
+.department-index__item:nth-child(3n+1){padding-inline-start:0}
+.department-index__item:nth-child(3n){padding-inline-end:0}
+.department-index__item>svg{color:#829483;margin-bottom:10px}
+.department-index__item h2{font-size:17px;font-weight:700;line-height:1.6;margin:0;color:var(--text-strong);letter-spacing:0;transition:color .18s ease}
+.department-index__item p{margin:0;font-size:12px;line-height:1.9;color:var(--muted)}
+.department-index__item>span{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-size:12px;font-weight:700;color:var(--primary)}
+.department-index__item>span svg{transition:transform .22s cubic-bezier(.2,.7,.2,1)}
+.department-index__item:hover h2{color:var(--primary)}
+.department-index__item:hover>span svg{transform:translate(-3px,-3px)}
+.department-index__item:focus-visible{outline-offset:-3px}
+@media(max-width:760px){
+  .department-index{grid-template-columns:minmax(0,1fr)}
+  .department-index>.department-index__item{min-height:0;padding:20px 0;border-inline-start:0}
+  .executive-shell .back-link,.executive-shell .apple-back{min-height:44px}
+}
+@media(max-width:650px){.executive-shell .department-hero h1,.executive-shell .apple-header h1{font-size:28px}}
+@media(prefers-reduced-motion:reduce){.department-index__item>span svg,.department-index__item h2{transition:none}}
+.executive-shell .apple-signal small,.executive-shell .apple-empty-row{color:var(--muted-2)}
+.executive-shell .page-sub a{padding-block:11px;color:var(--primary);font-weight:700}
+.followup-close{display:grid;gap:8px}
+.followup-close small{font-size:11px;line-height:1.8;color:var(--muted)}
+.followup-close .followup-close__error{color:var(--red);font-weight:700}
+/* Boards keep whole rows: four panels sit two by two, three sit in one row, and a lone last panel takes the row. */
+@media(min-width:901px){
+  .executive-shell .ops-board:not(.two):has(>:nth-child(4):last-child){grid-template-columns:repeat(2,minmax(0,1fr))}
+  .executive-shell .ops-board:not(.two)>:nth-child(3n+1):last-child:not(:nth-child(4)){grid-column:1/-1}
+  .executive-shell .ops-board.two:has(>:nth-child(3):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}
+  .executive-shell .ops-board.two>:nth-child(odd):last-child:not(:nth-child(3)){grid-column:1/-1}
+}
+.executive-shell .statement-list:empty::before{content:"لا توجد بيانات بعد.";font-size:12px;color:var(--muted)}
+.executive-shell .apple-icon-button{background:none;border:0;border-radius:4px;box-shadow:none;color:var(--primary);min-width:44px;min-height:44px}
+.executive-shell .ops-metrics:empty{display:none}
+.executive-shell .status-banner{border-radius:0;font-size:12px;line-height:1.9}
+/* A file field in the page's own words: the native picker stays the control, the label wears Arabic. */
+.file-field{position:relative;display:flex;align-items:center;gap:12px;min-height:44px;padding:6px 8px;border:1px solid var(--line-strong);border-radius:5px;background:var(--field);cursor:pointer}
+.file-field__input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.file-field__button{display:inline-flex;align-items:center;gap:7px;flex:none;padding:6px 12px;border-radius:4px;background:var(--panel-2);color:var(--primary);font-size:12px;font-weight:700}
+.file-field__name{min-width:0;overflow-wrap:anywhere;font-size:12px;font-weight:500;color:var(--muted)}
+.file-field:hover .file-field__button{background:var(--accent-sky-wash)}
+.file-field:has(.file-field__input:focus-visible){outline:3px solid #9b631f;outline-offset:3px}
+.executive-shell .request-copy h1{font-size:clamp(26px,2.75vw,40px);letter-spacing:-.04em;line-height:1.6;font-weight:750;margin:5px 0 8px;color:var(--text-strong)}
+.executive-shell .request-copy p{font-size:12px;line-height:1.9;color:var(--muted)}

@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../supabase";
+import { getSupabaseAdmin, DatabaseNotConfiguredError } from "../supabase";
 import { raiseSystemAlert, resolveSystemAlert, type AlertSeverity } from "./systemAlerts";
 
 const EXPECTED_JOBS: Array<{ jobName: string; maximumAgeHours: number }> = [
@@ -39,7 +39,7 @@ async function syncFinding(tenantId: string, finding: WatchdogFinding | null, ke
 
 export async function runOperationalWatchdog(tenantId: string) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) throw new Error("Supabase is required for the operational watchdog.");
+  if (!supabase) throw new DatabaseNotConfiguredError("Supabase is required for the operational watchdog.");
 
   const findings: WatchdogFinding[] = [];
   const sinceTenDays = hoursAgo(10 * 24);

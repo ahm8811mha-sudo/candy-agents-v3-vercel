@@ -50,15 +50,15 @@ type AuditInput = {
 };
 
 const costCenters = [
-  { id: "cc-executive", name: "Executive Office", owner_role: "CEO Office", monthly_budget: 15000 },
-  { id: "cc-marketing", name: "Growth and Marketing", owner_role: "Marketing Director", monthly_budget: 25000 },
-  { id: "cc-operations", name: "Operations and Fulfillment", owner_role: "Operations Manager", monthly_budget: 20000 },
-  { id: "cc-supply", name: "Supply Chain and Inventory", owner_role: "Supply Chain Manager", monthly_budget: 30000 },
-  { id: "cc-radar", name: "Opportunity Radar Pilots", owner_role: "CEO Office", monthly_budget: 10000 },
+  { id: "cc-executive", name: "المكتب التنفيذي", owner_role: "مكتب الرئيس التنفيذي", monthly_budget: 15000 },
+  { id: "cc-marketing", name: "النمو والتسويق", owner_role: "مديرة التسويق", monthly_budget: 25000 },
+  { id: "cc-operations", name: "العمليات والتسليم", owner_role: "مدير العمليات", monthly_budget: 20000 },
+  { id: "cc-supply", name: "سلسلة الإمداد والمخزون", owner_role: "مدير سلسلة الإمداد", monthly_budget: 30000 },
+  { id: "cc-radar", name: "تجارب رادار الفرص", owner_role: "مكتب الرئيس التنفيذي", monthly_budget: 10000 },
 ];
 
 const integrations = [
-  { id: "bank-feed", provider: "Bank feed", status: "READY_FOR_CONNECTION", config: { scope: "bank_reconciliation" } },
+  { id: "bank-feed", provider: "ربط البنك", status: "READY_FOR_CONNECTION", config: { scope: "bank_reconciliation" } },
   { id: "google-calendar", provider: "Google Calendar", status: "READY_FOR_CONNECTION", config: { scope: "executive_schedule" } },
   { id: "gmail", provider: "Gmail", status: "READY_FOR_CONNECTION", config: { scope: "secretary_follow_up" } },
   { id: "whatsapp-business", provider: "WhatsApp Business", status: "READY_FOR_CONNECTION", config: { scope: "sales_outreach" } },
@@ -110,7 +110,7 @@ export async function logDecision(input: AuditInput): Promise<AuditEntry> {
     entityId: input.entityId || "-",
     detail:
       `${input.immutableNote || "Enterprise governed action."}` +
-      (input.amount ? ` · المبلغ ${number(input.amount).toLocaleString("ar-SA")} ر.س` : "") +
+      (input.amount ? ` · المبلغ ${number(input.amount).toLocaleString("ar-SA-u-nu-latn")} ر.س` : "") +
       (input.riskLevel ? ` · المخاطرة ${input.riskLevel}` : "") +
       (input.approvalStatus ? ` · الحالة ${input.approvalStatus}` : ""),
     metadata: {
@@ -165,7 +165,7 @@ export async function evaluateGovernedAction(action: GovernedAction) {
       type: "GENERAL",
       title: action.title,
       detail:
-        `إجراء مؤسسي بانتظار الاعتماد · الفئة ${tier.tier} — يعتمدها ${tier.approver}` +
+        `إجراء مؤسسي بانتظار الاعتماد · الفئة ${tier.tier} · يعتمدها ${tier.approver}` +
         (highRisk ? " · مخاطرة عالية (تصعيد إلزامي)" : "") +
         (action.entityType ? ` · النوع ${action.entityType}` : ""),
       amount: amount > 0 ? amount : undefined,
@@ -220,7 +220,7 @@ export async function getGovernanceCenter() {
     roles: COMPANY_AGENTS.filter((agent) => agent.rank === "OWNER" || agent.rank === "CEO" || agent.rank === "DEPARTMENT_HEAD").map(
       (agent) => ({
         id: agent.id,
-        name: `${agent.name} — ${agent.title}`,
+        name: `${agent.name}، ${agent.title}`,
         description: agent.responsibilities.join("، "),
         permissions: { rank: agent.rank, department: agent.department },
         spend_limit: agent.authorityLimitSAR,

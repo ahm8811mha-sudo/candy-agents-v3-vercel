@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Boxes,
   BriefcaseBusiness,
-  Building2,
   CalendarClock,
   CheckCircle2,
   ClipboardCheck,
@@ -25,13 +24,13 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { approvalGateLabel, riskLabel } from "@/lib/ui/statusLabels";
 
 type DepartmentId = "marketing" | "operations" | "supply" | "executive";
 
 type Props = {
   title: string;
   subtitle: string;
-  badge: string;
   icon: DepartmentId;
   capabilities: string[];
 };
@@ -194,11 +193,11 @@ const profiles: Record<DepartmentId, DepartmentProfile> = {
     actionTokens: ["SUPPLIER", "Supplier", "inventory", "مورد"],
     kpiTokens: ["Supplier", "supplier", "inventory", "مورد"],
     emptyTask: "لا توجد مهام إمداد بعد. شغل طلبًا يتضمن مخزونًا أو موردين لإنشاء الخطة.",
-    emptyAction: "لا توجد قائمة موردين جاهزة. سيجهز النظام shortlist وربط تكلفة الوحدة عند التشغيل.",
+    emptyAction: "لا توجد قائمة موردين جاهزة. سيجهز النظام قائمة مختصرة بالموردين ويربط تكلفة الوحدة عند التشغيل.",
   },
   executive: {
     heroAction: "اعتماد القرار النهائي ومراقبة المخاطر والأداء",
-    prompt: "مثال: قيم هل نعتمد مشروع جديد بميزانية 50000 ريال وحدد قرار CEO وخطة التنفيذ",
+    prompt: "مثال: قيم هل نعتمد مشروع جديد بميزانية 50000 ريال وحدد قرار الرئيس التنفيذي وخطة التنفيذ",
     taskTokens: ["CEO", "review", "قرار", "مراجعة", "اعتماد"],
     actionTokens: ["BUDGET_GATE", "APPROVAL", "INTERNAL"],
     kpiTokens: ["review", "approval", "Budget", "Scope"],
@@ -219,7 +218,7 @@ const emptyData: DashboardData = {
 };
 
 const statusLabel: Record<string, string> = {
-  TODO: "لم تبدأ — غير منفذة",
+  TODO: "لم تبدأ بعد",
   PENDING: "معلق",
   IN_PROGRESS: "قيد التنفيذ",
   DONE: "مكتملة",
@@ -233,7 +232,7 @@ const statusLabel: Record<string, string> = {
   NOT_REQUIRED: "لا يحتاج اعتماد",
 };
 
-export default function DepartmentPage({ title, subtitle, badge, icon, capabilities }: Props) {
+export default function DepartmentPage({ title, subtitle, icon, capabilities }: Props) {
   const Icon = icons[icon];
   const profile = profiles[icon];
   const [data, setData] = useState<DashboardData>(emptyData);
@@ -353,9 +352,6 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <Icon size={16} /> {title}
-          </span>
           <h1>{title}</h1>
           <p>{subtitle}</p>
           <div className="department-hero-actions">
@@ -365,20 +361,16 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
             <span>
               <Gauge size={16} /> صحة الشركة {data.commandCenter?.healthScore ?? 0}/100
             </span>
+            <span>
+              <ShieldCheck size={16} /> المخاطر: {riskLabel(data.commandCenter?.riskLevel)}
+            </span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>{badge}</strong>
-          <small>{data.commandCenter?.riskLevel || "LOW"} Risk</small>
         </div>
       </section>
 
       <section className="delivery-panel department-live-panel">
         <div className="delivery-header">
           <div>
-            <span className="eyebrow">
-              <Building2 size={16} /> نظام الإدارة
-            </span>
             <h2>مركز تشغيل هذه الصفحة</h2>
           </div>
           <button className="secondary-btn" type="button" onClick={loadDashboard} disabled={loading}>
@@ -408,14 +400,12 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
       <section className="department-workbench">
         <form className="department-command-card" onSubmit={runDepartmentRequest}>
           <div>
-            <span className="eyebrow">
-              <Sparkles size={16} /> تشغيل الإدارة الآن
-            </span>
             <h2>اطلب نتيجة تنفيذية وليس تعليقًا</h2>
             <p>سيتم إرسال الطلب إلى نظام الشركة، ثم إنشاء مشروع ومهام ومؤشرات وإجراءات تجارية قابلة للمتابعة.</p>
           </div>
           <textarea
             className="textarea"
+            aria-label="طلب التشغيل"
             value={request}
             onChange={(event) => setRequest(event.target.value)}
             placeholder={profile.prompt}
@@ -430,13 +420,10 @@ export default function DepartmentPage({ title, subtitle, badge, icon, capabilit
         </form>
 
         <aside className="department-decision-card">
-          <span className="eyebrow">
-            <ShieldCheck size={16} /> قرار اليوم
-          </span>
-          <h3>{data.commandCenter?.actionToday || "شغل طلبًا ليظهر القرار التنفيذي التالي."}</h3>
+          <h3><span className="lead-in">قرار اليوم:</span> {data.commandCenter?.actionToday || "شغّل طلبًا ليظهر القرار التنفيذي التالي."}</h3>
           <div className="department-signal-grid">
-            <Signal label="المخاطر" value={data.commandCenter?.riskLevel || "LOW"} />
-            <Signal label="بوابة الاعتماد" value={data.commandCenter?.approval?.gate || "AUTO"} />
+            <Signal label="المخاطر" value={riskLabel(data.commandCenter?.riskLevel)} />
+            <Signal label="بوابة الاعتماد" value={approvalGateLabel(data.commandCenter?.approval?.gate)} />
             <Signal label="المهام النشطة" value={String(filtered.tasks.length)} />
             <Signal label="إجراءات جاهزة" value={String(filtered.actions.length)} />
           </div>
@@ -561,8 +548,8 @@ function buildCapabilityInsights(
     return [
       { icon: Megaphone, value: `${pendingActions} إجراءات`, body: "الحملات ومسودات الرسائل تتحول إلى إجراءات جاهزة للربط.", tone: "blue" },
       { icon: Users, value: `${openTasks} مهام`, body: "تحليل الجمهور والاختبارات التسويقية تظهر كمهام متابعة.", tone: "green" },
-      { icon: BriefcaseBusiness, value: `${data.commandCenter?.approval?.gate || "AUTO"}`, body: "ميزانية التسويق تمر عبر بوابة اعتماد حسب حجم الصرف والمخاطر.", tone: "amber" },
-      { icon: Target, value: `${kpis} KPIs`, body: "مؤشرات مثل العملاء المحتملين وCAC تُتابع من نفس الصفحة.", tone: "green" },
+      { icon: BriefcaseBusiness, value: approvalGateLabel(data.commandCenter?.approval?.gate), body: "ميزانية التسويق تمر عبر بوابة اعتماد حسب حجم الصرف والمخاطر.", tone: "amber" },
+      { icon: Target, value: `${kpis} مؤشرات`, body: "مؤشرات مثل العملاء المحتملين وتكلفة اكتساب العميل تُتابع من نفس الصفحة.", tone: "green" },
     ];
   }
 
@@ -570,7 +557,7 @@ function buildCapabilityInsights(
     { icon: Boxes, value: `${openTasks} مهام`, body: "المخزون والتوريد يتحولان إلى مهام محددة بمالك وموعد.", tone: "blue" },
     { icon: ClipboardCheck, value: `${pendingActions} إجراءات`, body: "قائمة الموردين وتكلفة الوحدة تحفظ كإجراءات جاهزة للربط.", tone: "green" },
     { icon: BriefcaseBusiness, value: `${uniqueOwners(filtered.tasks)} أدوار`, body: "توزيع المسؤوليات بين الإمداد والمالية والعمليات واضح.", tone: "amber" },
-    { icon: Gauge, value: `${kpis} KPIs`, body: "مؤشرات الموردين والتكلفة والجاهزية تظهر هنا.", tone: "green" },
+    { icon: Gauge, value: `${kpis} مؤشرات`, body: "مؤشرات الموردين والتكلفة والجاهزية تظهر هنا.", tone: "green" },
   ];
 }
 
@@ -587,7 +574,7 @@ function nextDueDate(tasks: DashboardTask[]) {
     .sort((a, b) => a.getTime() - b.getTime());
 
   if (!dueDates.length) return "لا يوجد";
-  return dueDates[0].toLocaleDateString("ar-SA", { month: "short", day: "numeric" });
+  return dueDates[0].toLocaleDateString("ar-SA-u-nu-latn", { month: "short", day: "numeric" });
 }
 
 function statusText(status?: string) {
@@ -638,7 +625,7 @@ function TaskRow({
         <span className={`mini-pill ${status.toLowerCase()}`}>{statusText(status)}</span>
         <strong>{task.task_number ? `#${task.task_number} · ` : ""}{task.title || task.content || "مهمة تنفيذية"}</strong>
         <p>{task.description || task.content || task.owner_role || "مهمة مرتبطة بخطة الشركة."}</p>
-        <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA")} • ` : ""}{task.owner_role || "AI Employee"} {task.due_date ? `• الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA")}` : ""}</small>
+        <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} • ` : ""}{task.owner_role || "AI Employee"} {task.due_date ? `• الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
       </div>
       <div className="row-actions">
         {status !== "IN_PROGRESS" && status !== "DONE" && (
@@ -666,7 +653,7 @@ function KpiRow({ kpi }: { kpi: DashboardKpi }) {
       <div>
         <span className="mini-pill">{statusText(kpi.status)}</span>
         <strong>{kpi.name || "مؤشر أداء"}</strong>
-        <p>{current.toLocaleString("ar-SA")} من {target.toLocaleString("ar-SA")} {kpi.unit || ""}</p>
+        <p>{current.toLocaleString("ar-SA-u-nu-latn")} من {target.toLocaleString("ar-SA-u-nu-latn")} {kpi.unit || ""}</p>
       </div>
       <span className="kpi-progress">
         <i style={{ width: `${progress}%` }} />
@@ -682,7 +669,7 @@ function ActionRow({ action }: { action: DashboardAction }) {
         <span className={`mini-pill ${action.requires_approval ? "pending" : ""}`}>{statusText(action.status)}</span>
         <strong>{action.action_number ? `#${action.action_number} · ` : ""}{action.title || action.action_type || "إجراء تجاري"}</strong>
         <p>{action.description || "إجراء جاهز للتحويل إلى تكامل خارجي."}</p>
-        <small>{action.action_date ? `${new Date(action.action_date).toLocaleDateString("ar-SA")} • ` : ""}{action.provider || "internal"} • {action.execution_mode || "INTERNAL"}</small>
+        <small>{action.action_date ? `${new Date(action.action_date).toLocaleDateString("ar-SA-u-nu-latn")} • ` : ""}{action.provider || "internal"} • {action.execution_mode || "INTERNAL"}</small>
       </div>
     </article>
   );

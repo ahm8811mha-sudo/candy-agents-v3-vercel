@@ -8,6 +8,7 @@ import {
   CalendarCheck,
   CheckCircle2,
   ClipboardList,
+  Database,
   Loader2,
   Plus,
   Radar,
@@ -20,6 +21,7 @@ import ActionableMetricGrid, { type ActionableMetric } from "./ActionableMetricG
 import { InitiativeExecutionPanel } from "./InitiativeExecutionPanel";
 import OwnerAbsencePanel from "./OwnerAbsencePanel";
 import type { InitiativePlan } from "@/lib/company/initiativePlanning";
+import { riskLabel } from "@/lib/ui/statusLabels";
 
 type OfficeData = {
   operatingBrief?: {
@@ -133,7 +135,7 @@ export default function ExecutiveOfficeConsole() {
         setDatabaseIssue(issue);
         return false;
       }
-      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تنفيذ أمر مكتب CEO."));
+      if (!res.ok || !json.ok) throw new Error(apiErrorMessage(json, "تعذر تنفيذ أمر المكتب التنفيذي."));
       setMessage(successText(action));
       if (action === "execute") {
         setSelectedInitiativeId("");
@@ -145,7 +147,7 @@ export default function ExecutiveOfficeConsole() {
       await load();
       return json;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر مكتب CEO.");
+      setError(err instanceof Error ? err.message : "تعذر تنفيذ أمر المكتب التنفيذي.");
       return false;
     } finally {
       setWorking("");
@@ -162,7 +164,7 @@ export default function ExecutiveOfficeConsole() {
         notes: String(form.get("notes") || ""),
         priority: String(form.get("priority") || "HIGH"),
         itemType: "CEO_DIRECTIVE",
-        ownerRole: "CEO Office",
+        ownerRole: "المكتب التنفيذي",
         dueDays: Number(form.get("dueDays") || 1),
       },
     }).then((succeeded) => {
@@ -203,12 +205,12 @@ export default function ExecutiveOfficeConsole() {
     void run("meeting-minutes", {
       data: {
         title: String(form.get("title") || ""),
-        attendees: String(form.get("attendees") || "CEO Office,CFO,Marketing Director")
+        attendees: String(form.get("attendees") || "المكتب التنفيذي,المدير المالي,مدير التسويق")
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
         decisions: String(form.get("decisions") || ""),
-        actionItems: [{ title: String(form.get("actionItem") || "Follow up decision"), owner: "Chief of Staff" }],
+        actionItems: [{ title: String(form.get("actionItem") || "متابعة القرار"), owner: "رئيس الديوان التنفيذي" }],
       },
     }).then((succeeded) => {
       if (succeeded) formElement.reset();
@@ -232,7 +234,7 @@ export default function ExecutiveOfficeConsole() {
   const initiativePlan = initiativePlanFromProject(initiativeProject);
   const databaseReady = Boolean(data && !databaseIssue);
   const databaseBadge = databaseReady
-    ? "Command ready"
+    ? "قاعدة البيانات متصلة"
     : loading
       ? "جارٍ التحقق"
       : databaseIssue?.isPreview
@@ -248,27 +250,21 @@ export default function ExecutiveOfficeConsole() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <BriefcaseBusiness size={16} /> مكتب المدير التنفيذي
-          </span>
-          <h1>واجهة تنفيذية لإدارة الشركة</h1>
+          <h1>المكتب التنفيذي</h1>
           <p>
-            مكتب CEO يراقب المشاريع، الاعتمادات، المخاطر، الفرص، الأداء، ويوجه الإدارات التنفيذية من شاشة واحدة.
+            مكتب الرئيس التنفيذي: المشاريع والاعتمادات والمخاطر والفرص والأداء، وتوجيه الإدارات من شاشة واحدة.
           </p>
           <div className="department-hero-actions">
             <span>
               <Target size={16} /> صحة الشركة {brief ? `${brief.healthScore}/100` : "—"}
             </span>
             <span>
-              <ShieldAlert size={16} /> المخاطر {brief?.riskLevel || "—"}
+              <ShieldAlert size={16} /> المخاطر: {brief ? riskLabel(brief.riskLevel) : "—"}
+            </span>
+            <span className={databaseReady ? "" : "is-warning"}>
+              <Database size={16} /> {databaseBadge}
             </span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>مكتب الرئيس التنفيذي</strong>
-          <small className={databaseReady ? "" : "is-warning"}>
-            {databaseBadge}
-          </small>
         </div>
       </section>
 
@@ -323,10 +319,7 @@ export default function ExecutiveOfficeConsole() {
           <ActionableMetricGrid metrics={buildOfficeMetrics(data, brief)} />
 
       <section className="ops-card executive-brief">
-        <span className="eyebrow">
-          <ClipboardList size={16} /> توجيه اليوم
-        </span>
-        <h2>{brief?.actionToday || "لا يوجد توجيه تنفيذي بعد."}</h2>
+        <h2><span className="lead-in">توجيه اليوم:</span> {brief?.actionToday || "لا يوجد توجيه تنفيذي بعد."}</h2>
         <p>{data?.enterprise?.strategy?.investment_thesis}</p>
       </section>
 
@@ -336,7 +329,7 @@ export default function ExecutiveOfficeConsole() {
         <>
           {initiativeProjects.length > 1 && (
             <section className="ops-card initiative-picker" aria-labelledby="initiative-picker-title">
-              <div><span className="eyebrow">سجل المبادرات</span><h2 id="initiative-picker-title">افتح خطة أو نتيجة محددة</h2><p>إنشاء طلب جديد لا يخفي مسار الطلبات السابقة أو نتائجها.</p></div>
+              <div><h2 id="initiative-picker-title">سجل المبادرات</h2><p>افتح خطة أو نتيجة سابقة؛ الطلب الجديد لا يخفي ما قبله.</p></div>
               <label>المبادرة المعروضة
                 <select className="input" value={initiativeProject.id} onChange={(event) => {
                   const projectId = event.target.value;
@@ -375,7 +368,7 @@ export default function ExecutiveOfficeConsole() {
         </form>
 
         <form className="ops-card" onSubmit={submitDirective}>
-          <h2>إضافة متابعة أو توجيه CEO</h2>
+          <h2>إضافة متابعة أو توجيه للرئيس التنفيذي</h2>
           <div className="ops-form-grid">
             <label>
               العنوان
@@ -396,7 +389,7 @@ export default function ExecutiveOfficeConsole() {
           </div>
           <label>
             ملاحظات
-            <input className="input" name="notes" placeholder="ما الذي يجب أن يتابعه مكتب CEO؟" />
+            <input className="input" name="notes" placeholder="ما الذي يجب أن يتابعه المكتب التنفيذي؟" />
           </label>
           <button className="secondary-btn" disabled={Boolean(working)}>
             {working === "create-item" ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
@@ -405,7 +398,7 @@ export default function ExecutiveOfficeConsole() {
         </form>
 
         <form className="ops-card" onSubmit={submitCalendar}>
-          <h2>تقويم CEO</h2>
+          <h2>تقويم الرئيس التنفيذي</h2>
           <div className="ops-form-grid">
             <label>
               العنوان
@@ -447,7 +440,7 @@ export default function ExecutiveOfficeConsole() {
           </label>
           <label>
             الحضور
-            <input className="input" name="attendees" defaultValue="CEO Office,CFO,Marketing Director" />
+            <input className="input" name="attendees" defaultValue="المكتب التنفيذي,المدير المالي,مدير التسويق" />
           </label>
           <label>
             القرارات
@@ -455,7 +448,7 @@ export default function ExecutiveOfficeConsole() {
           </label>
           <label>
             إجراء مطلوب
-            <input className="input" name="actionItem" placeholder="إرسال تقرير KPI إلى CEO" />
+            <input className="input" name="actionItem" placeholder="إرسال تقرير المؤشرات إلى الرئيس التنفيذي" />
           </label>
           <button className="secondary-btn" disabled={Boolean(working)}>
             {working === "meeting-minutes" ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
@@ -465,7 +458,7 @@ export default function ExecutiveOfficeConsole() {
       </section>
 
       <section className="ops-board">
-        <Panel title="متابعات مكتب CEO" id="ceo-follow-ups">
+        <Panel title="متابعات المكتب التنفيذي" id="ceo-follow-ups">
           {(data?.enterprise?.ceoItems || []).slice(0, 9).map((item) => (
             <ActionRow
               key={item.id}
@@ -479,10 +472,10 @@ export default function ExecutiveOfficeConsole() {
         </Panel>
         <Panel title="المشاريع والمهام">
           {(data?.dashboard?.projects || []).slice(0, 4).map((project) => (
-            <Statement key={project.id} label={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}${project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA")}` : ""}`} value={project.status || "ACTIVE"} />
+            <Statement key={project.id} label={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}${project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`} value={project.status || "ACTIVE"} />
           ))}
           {(data?.dashboard?.tasks || []).slice(0, 6).map((task) => (
-            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA")}` : ""}`} value={task.status} />
+            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`} value={task.status} />
           ))}
         </Panel>
         <Panel title="الاعتمادات والمخاطر">
@@ -509,9 +502,9 @@ export default function ExecutiveOfficeConsole() {
       </section>
 
       <section className="ops-board">
-        <Panel title="تقويم CEO">
+        <Panel title="تقويم الرئيس التنفيذي">
           {(data?.calendarEvents || []).slice(0, 8).map((event) => (
-            <Statement key={event.id} label={`${event.title} - ${new Date(event.starts_at).toLocaleString("ar-SA")}`} value={event.status} />
+            <Statement key={event.id} label={`${event.title} - ${new Date(event.starts_at).toLocaleString("ar-SA-u-nu-latn")}`} value={event.status} />
           ))}
         </Panel>
         <Panel title="الملخصات والمحاضر">
@@ -535,11 +528,11 @@ export default function ExecutiveOfficeConsole() {
 }
 
 function successText(action: string) {
-  if (action === "radar") return "تم تشغيل رادار الفرص وربطه بمكتب CEO.";
+  if (action === "radar") return "شُغّل رادار الفرص وربُط بالمكتب التنفيذي.";
   if (action === "execute") return "اكتملت دراسات الوكلاء وجُمعت الخطة. اعتماد واحد سيبدأ التنفيذ التلقائي ويعيد النتائج هنا.";
-  if (action === "create-item") return "تمت إضافة التوجيه لمكتب CEO.";
+  if (action === "create-item") return "أُضيف التوجيه إلى المكتب التنفيذي.";
   if (action === "update-item") return "تم تحديث بند المتابعة.";
-  if (action === "calendar-event") return "تمت إضافة الموعد إلى تقويم CEO.";
+  if (action === "calendar-event") return "أُضيف الموعد إلى تقويم الرئيس التنفيذي.";
   if (action === "meeting-minutes") return "تم حفظ محضر الاجتماع.";
   if (action === "daily-brief") return "تم توليد الملخص التنفيذي.";
   return "تم تنفيذ العملية.";
@@ -560,7 +553,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
     {
       key: "ceo-items",
       icon: CalendarCheck,
-      label: "بنود متابعة CEO",
+      label: "بنود متابعة الرئيس التنفيذي",
       value: brief?.pendingItems ?? ceoItems.length,
       sourceType: "ceo-item",
       items: ceoItems.map((c) => ({
@@ -611,7 +604,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       items: projects.map((p) => ({
         id: p.id,
         title: `${p.project_number ? `#${p.project_number} · ` : ""}${p.name}`,
-        subtitle: `${p.status || "ACTIVE"}${p.project_date ? ` · ${new Date(p.project_date).toLocaleDateString("ar-SA")}` : ""}`,
+        subtitle: `${p.status || "ACTIVE"}${p.project_date ? ` · ${new Date(p.project_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`,
         href: `/operations?project=${encodeURIComponent(p.id)}#approved-projects`,
         openLabel: "فتح ملف المشروع",
         context: { requestedBy: "إدارة المشاريع", relatedTo: p.project_number ? `المشروع #${p.project_number}` : p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
@@ -626,7 +619,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       items: lateTasks.map((t) => ({
         id: t.id,
         title: `${t.task_number ? `#${t.task_number} · ` : ""}${t.title || t.content || "مهمة"}`,
-        subtitle: `${t.status}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA")}` : ""}`,
+        subtitle: `${t.status}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`,
         href: "/operations#approved-projects",
         openLabel: "فتح مهام التنفيذ",
         context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: t.task_number ? `المهمة #${t.task_number}` : "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },

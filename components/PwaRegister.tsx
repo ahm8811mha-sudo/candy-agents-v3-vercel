@@ -31,7 +31,7 @@ export default function PwaRegister() {
         const marker = `${new Date().toISOString().slice(0, 10)}:${json.stale}`;
         if (localStorage.getItem(NOTIFIED_KEY) === marker) return;
         localStorage.setItem(NOTIFIED_KEY, marker);
-        new Notification("Orvanta — قرارات متأخرة", {
+        new Notification("أورفانتا: قرارات متأخرة", {
           body: `${json.stale} قرار تجاوز 24 ساعة بانتظار اعتمادك.`,
           icon: "/orvanta-mark.svg",
           tag: "orvanta-stale",

@@ -356,7 +356,7 @@ export async function reviveDueDeferrals(): Promise<ApprovalItem[]> {
     }
 
     item.status = "PENDING";
-    item.note = `عادت للصندوق بعد التأجيل — السبب السابق: ${deferral?.reason ?? "غير مذكور"}`;
+    item.note = `عادت للصندوق بعد التأجيل. السبب السابق: ${deferral?.reason ?? "غير مذكور"}`;
     item.metadata = { ...item.metadata, deferral: { ...deferral, revivedAt: new Date().toISOString() } };
     persist("company_approvals", toRow(item));
     emitWebhook("approval.revived", { id: item.id, type: item.type, title: item.title });

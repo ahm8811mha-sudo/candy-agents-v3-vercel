@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Loader2, CheckCircle2, XCircle, Clock, GitCommit } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, GitCommit } from "lucide-react";
 
 type Deployment = {
   id: string;
@@ -76,7 +76,6 @@ export default function MonitoringPanel() {
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><Activity size={16} /> مراقبة النشر</span>
           <h2>حالة النظام · {data.projectName}</h2>
         </div>
         <span className={`status-pill ${data.healthy ? "done" : "running"}`}>
@@ -121,7 +120,7 @@ export default function MonitoringPanel() {
                 </span>
                 <br />
                 <small style={{ color: "var(--muted)" }}>
-                  {d.target} · {new Date(d.createdAt).toLocaleString("ar-SA")}
+                  {d.target} · {new Date(d.createdAt).toLocaleString("ar-SA-u-nu-latn")}
                 </small>
               </span>
               <b style={{ color: stateColors[d.state] || "var(--muted)" }}>

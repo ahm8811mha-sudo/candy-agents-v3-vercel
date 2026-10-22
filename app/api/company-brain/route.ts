@@ -15,6 +15,7 @@ import {
   runSimulation,
   upsertKnowledgeNode,
 } from "@/lib/company-intelligence/engine";
+import { failureStatus } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
         error: error instanceof Error ? error.message : "تعذر بناء ذكاء الشركة.",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
         error: error instanceof Error ? error.message : "تعذر تنفيذ عملية ذكاء الشركة.",
         requestId: auth.context.requestId,
       },
-      { status: 500 }
+      { status: failureStatus(error) }
     );
   }
 }

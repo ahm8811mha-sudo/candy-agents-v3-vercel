@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, BriefcaseBusiness, CheckCircle2, LayoutDashboard, Loader2, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, CheckCircle2, Loader2, RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
+import { approvalGateLabel, entityLabel, riskLabel, workStatusLabel } from "@/lib/ui/statusLabels";
 
 type Project = {
   id: string;
@@ -129,7 +130,7 @@ const emptyData: DashboardData = {
   memory: [],
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -150,7 +151,7 @@ export default function Dashboard() {
     try {
       const res = await fetch("/api/dashboard", { cache: "no-store" });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل لوحة CEO.");
+      if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل لوحة الرئيس التنفيذي.");
       setData({
         financials: json.financials || emptyData.financials,
         commandCenter: json.commandCenter || emptyData.commandCenter,
@@ -164,7 +165,7 @@ export default function Dashboard() {
         memory: json.memory || [],
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تحميل لوحة CEO.");
+      setError(err instanceof Error ? err.message : "تعذر تحميل لوحة الرئيس التنفيذي.");
     } finally {
       setLoadingData(false);
     }
@@ -206,7 +207,6 @@ export default function Dashboard() {
         <header className="apple-header">
           <div>
             <Link className="apple-back" href="/"><ArrowRight size={16} /> العودة للشركة</Link>
-            <span className="apple-eyebrow"><LayoutDashboard size={16} /> CEO Dashboard</span>
             <h1>لوحة الرئيس التنفيذي</h1>
             <p>متابعة مالية وتشغيلية للشركة، وتشغيل وكلاء الذكاء الاصطناعي لإنشاء مشاريع ومهام تنفيذية.</p>
           </div>
@@ -216,31 +216,29 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <section className="apple-metrics extended" aria-label="Financial cards">
-          <Card title="Health Score" value={`${data.commandCenter.healthScore}/100`} tone={data.commandCenter.healthScore >= 70 ? "green" : data.commandCenter.healthScore >= 45 ? "blue" : "red"} />
-          <Card title="Revenue" value={currency.format(Number(data.financials.income) || 0)} tone="blue" />
-          <Card title="Expenses" value={currency.format(Number(data.financials.expenses) || 0)} tone="red" />
-          <Card title="Profit" value={currency.format(Number(data.financials.profit) || 0)} tone={data.financials.profit >= 0 ? "green" : "red"} />
+        <section className="apple-metrics extended" aria-label="المؤشرات المالية">
+          <Card title="صحة الشركة" value={`${data.commandCenter.healthScore}/100`} tone={data.commandCenter.healthScore >= 70 ? "green" : data.commandCenter.healthScore >= 45 ? "blue" : "red"} />
+          <Card title="الإيرادات" value={currency.format(Number(data.financials.income) || 0)} tone="blue" />
+          <Card title="المصروفات" value={currency.format(Number(data.financials.expenses) || 0)} tone="red" />
+          <Card title="صافي الربح" value={currency.format(Number(data.financials.profit) || 0)} tone={data.financials.profit >= 0 ? "green" : "red"} />
         </section>
 
         <section className="apple-command-center">
           <div className="apple-command-main">
-            <span className="apple-eyebrow"><Sparkles size={16} /> Recommended Action Today</span>
-            <h2>{data.commandCenter.actionToday}</h2>
+            <h2><span className="lead-in">الإجراء الموصى به اليوم:</span> {data.commandCenter.actionToday}</h2>
             <p>{data.commandCenter.approval.reason}</p>
           </div>
           <div className="apple-signal-grid">
-            <Signal title="Risk" value={data.commandCenter.riskLevel} />
-            <Signal title="Approval" value={data.commandCenter.approval.gate} />
-            <Signal title="Expense Ratio" value={`${Math.round(data.commandCenter.expenseRatio * 100)}%`} />
-            <Signal title="Runway" value={`${Number(data.commandCenter.runwayMonths || 0).toFixed(1)} شهر`} />
+            <Signal title="المخاطر" value={riskLabel(data.commandCenter.riskLevel)} />
+            <Signal title="بوابة الاعتماد" value={approvalGateLabel(data.commandCenter.approval.gate)} />
+            <Signal title="نسبة المصروفات" value={`${Math.round(data.commandCenter.expenseRatio * 100)}%`} />
+            <Signal title="مدى النقد" value={`${Number(data.commandCenter.runwayMonths || 0).toFixed(1)} شهر`} />
           </div>
         </section>
 
         <section className="apple-control">
           <div className="apple-section-heading">
             <div>
-              <span className="apple-eyebrow"><Sparkles size={16} /> Run AI Company</span>
               <h2>تشغيل الشركة</h2>
             </div>
             <button className="apple-icon-button" onClick={fetchData} type="button" disabled={loadingData} aria-label="تحديث البيانات">
@@ -250,6 +248,7 @@ export default function Dashboard() {
 
           <form className="apple-command" onSubmit={runAI}>
             <textarea
+              aria-label="طلب تشغيل الشركة"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="مثلاً: اطلق مشروع متجر إلكتروني..."
@@ -276,64 +275,64 @@ export default function Dashboard() {
         </section>
 
         <div className="apple-sections">
-          <Section title="Alerts" count={data.alerts.length}>
+          <Section title="التنبيهات" count={data.alerts.length}>
             {data.alerts.length === 0 && <EmptyRow text="لا توجد تنبيهات مفتوحة." />}
             {data.alerts.map((alert) => (
               <AlertItem key={alert.id} severity={alert.severity} title={alert.title} text={alert.message} />
             ))}
           </Section>
 
-          <Section title="Approvals" count={data.approvals.length}>
+          <Section title="الاعتمادات" count={data.approvals.length}>
             {data.approvals.length === 0 && <EmptyRow text="لا توجد موافقات معلقة." />}
             {data.approvals.map((approval) => (
-              <Item key={approval.id} title={approval.entity_type} text={approval.notes || ""} meta={approval.status} />
+              <Item key={approval.id} title={entityLabel(approval.entity_type)} text={approval.notes || ""} meta={workStatusLabel(approval.status)} />
             ))}
           </Section>
 
-          <Section title="KPIs" count={data.kpis.length}>
+          <Section title="مؤشرات الأداء" count={data.kpis.length}>
             {data.kpis.length === 0 && <EmptyRow text="لا توجد مؤشرات أداء بعد." />}
             {data.kpis.map((kpi) => (
               <KpiItem key={kpi.id} name={kpi.name} current={Number(kpi.current) || 0} target={Number(kpi.target) || 0} unit={kpi.unit} status={kpi.status} />
             ))}
           </Section>
 
-          <Section title="Business Actions" count={data.actions.length}>
+          <Section title="الإجراءات التجارية" count={data.actions.length}>
             {data.actions.length === 0 && <EmptyRow text="لا توجد إجراءات تجارية جاهزة." />}
             {data.actions.map((action) => (
               <Item
                 key={action.id}
                 title={`${action.action_number ? `#${action.action_number} · ` : ""}${action.title}`}
                 text={`${action.action_date ? `${formatDate(action.action_date)} · ` : ""}${action.description || ""}`}
-                meta={`${action.status} · ${action.provider || action.execution_mode}`}
+                meta={`${workStatusLabel(action.status)} · ${action.provider || workStatusLabel(action.execution_mode)}`}
               />
             ))}
           </Section>
 
-          <Section title="Projects" count={data.projects.length}>
+          <Section title="المشاريع" count={data.projects.length}>
             {data.projects.length === 0 && <EmptyRow text="لا توجد مشاريع محفوظة بعد." />}
             {data.projects.map((project) => (
               <Item
                 key={project.id}
                 title={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}`}
                 text={formatDate(project.project_date || project.created_at)}
-                meta={project.status || "ACTIVE"}
+                meta={workStatusLabel(project.status || "ACTIVE")}
               />
             ))}
           </Section>
 
-          <Section title="Tasks" count={data.tasks.length}>
+          <Section title="المهام" count={data.tasks.length}>
             {data.tasks.length === 0 && <EmptyRow text="لا توجد مهام محفوظة بعد." />}
             {data.tasks.map((task) => (
               <Item
                 key={task.id}
                 title={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || "مهمة تنفيذية"}`}
                 text={`${task.task_date ? `${formatDate(task.task_date)} · ` : ""}${shortText(task.content || task.description || "")}`}
-                meta={task.status || "TODO"}
+                meta={workStatusLabel(task.status || "TODO")}
               />
             ))}
           </Section>
 
-          <Section title="Decisions" count={data.decisions.length}>
+          <Section title="القرارات" count={data.decisions.length}>
             {data.decisions.length === 0 && <EmptyRow text="لا توجد قرارات محفوظة بعد." />}
             {data.decisions.map((decision) => (
               <Item
@@ -345,10 +344,10 @@ export default function Dashboard() {
             ))}
           </Section>
 
-          <Section title="Business Memory" count={data.memory.length}>
+          <Section title="الذاكرة التجارية" count={data.memory.length}>
             {data.memory.length === 0 && <EmptyRow text="لا توجد ذاكرة تجارية بعد." />}
             {data.memory.map((memory) => (
-              <Item key={memory.id} title={memory.title} text={shortText(memory.summary || "")} meta={memory.decision_quality || "WATCH"} />
+              <Item key={memory.id} title={memory.title} text={shortText(memory.summary || "")} meta={workStatusLabel(memory.decision_quality || "WATCH")} />
             ))}
           </Section>
         </div>
@@ -371,7 +370,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
     <section className="apple-section">
       <div className="apple-section-heading">
         <h2>{title}</h2>
-        <span>{count.toLocaleString("ar-SA")}</span>
+        {count > 0 && <span>{count.toLocaleString("ar-SA-u-nu-latn")}</span>}
       </div>
       <div className="apple-list">{children}</div>
     </section>
@@ -402,7 +401,7 @@ function Signal({ title, value }: { title: string; value: string }) {
 function AlertItem({ severity, title, text }: { severity: string; title: string; text: string }) {
   return (
     <article className={`apple-alert ${severity.toLowerCase()}`}>
-      <small>{severity}</small>
+      <small>خطورة {riskLabel(severity)}</small>
       <strong>{title}</strong>
       <p>{text}</p>
     </article>
@@ -415,7 +414,7 @@ function KpiItem({ name, current, target, unit, status }: { name: string; curren
     <article className="apple-kpi">
       <div>
         <strong>{name}</strong>
-        <small>{status} · {current.toLocaleString("ar-SA")} / {target.toLocaleString("ar-SA")} {unit}</small>
+        <small>{workStatusLabel(status)} · {current.toLocaleString("ar-SA-u-nu-latn")} / {target.toLocaleString("ar-SA-u-nu-latn")} {unit}</small>
       </div>
       <span><i style={{ width: `${percent}%` }} /></span>
     </article>
@@ -433,5 +432,5 @@ function shortText(value: string) {
 
 function formatDate(value?: string) {
   if (!value) return "";
-  return new Date(value).toLocaleDateString("ar-SA");
+  return new Date(value).toLocaleDateString("ar-SA-u-nu-latn");
 }

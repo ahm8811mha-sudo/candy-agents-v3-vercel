@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ShoppingBag, Loader2, Package, AlertTriangle, TrendingUp, Plus, Trash2, RefreshCcw, Warehouse, Link2 } from "lucide-react";
+import { Loader2, Package, AlertTriangle, TrendingUp, Plus, Trash2, RefreshCcw, Warehouse, Link2 } from "lucide-react";
 import { fluidColumns } from "@/lib/ui/fluidColumns";
 
 type Product = { id: string; title: string; status: string; totalInventory: number; price: number; vendor: string };
@@ -101,7 +101,7 @@ export default function ShopifyPanel() {
   }
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat("ar-SA", { style: "currency", currency: data?.summary.currency || "SAR", maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: data?.summary.currency || "SAR", maximumFractionDigits: 0 }).format(n);
 
   if (loading) {
     return (
@@ -118,8 +118,7 @@ export default function ShopifyPanel() {
     <div className="delivery-panel fade-in" style={{ display: "grid", gap: 16 }}>
       <div className="delivery-header">
         <div>
-          <span className="eyebrow"><ShoppingBag size={16} /> متجر إلكتروني مربوط</span>
-          <h2>{data.shopName}</h2>
+          <h2><span className="lead-in">المتجر المربوط:</span> {data.shopName}</h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span className={`status-pill ${data.source === "live" ? "done" : "running"}`}>
@@ -167,7 +166,7 @@ export default function ShopifyPanel() {
               </button>
             )}
             {data.writeEnabled && (
-              <button type="button" className="secondary-btn btn-sm" disabled={busy} onClick={() => void act({ action: "registerWebhooks" }, "سُجّلت webhooks المتجر — التغييرات ستصل تلقائياً.")}>
+              <button type="button" className="secondary-btn btn-sm" disabled={busy} onClick={() => void act({ action: "registerWebhooks" }, "سُجّلت إشعارات المتجر، وستصل التغييرات تلقائياً.")}>
                 <Link2 size={14} /> تفعيل المزامنة التلقائية
               </button>
             )}
@@ -184,7 +183,7 @@ export default function ShopifyPanel() {
           </div>
           <div className="memory-list">
             {warehouse.length === 0 ? (
-              <p style={{ color: "var(--muted)", padding: "8px 0" }}>لا توجد منتجات في المستودع بعد — أضف منتجاً بالأعلى.</p>
+              <p style={{ color: "var(--muted)", padding: "8px 0" }}>لا توجد منتجات في المستودع بعد. أضف منتجاً من الأعلى.</p>
             ) : warehouse.slice(0, 8).map((it) => (
               <div key={it.id} className="statement-row">
                 <span>

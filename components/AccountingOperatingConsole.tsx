@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { financialStateLabel, workStatusLabel } from "@/lib/ui/statusLabels";
 
 type AccountingData = {
   statements?: {
@@ -47,7 +48,7 @@ type AccountingData = {
   bankTransactions?: Array<{ id: string; description: string; amount: number; status: string; created_at: string }>;
 };
 
-const currency = new Intl.NumberFormat("ar-SA", {
+const currency = new Intl.NumberFormat("ar-SA-u-nu-latn", {
   style: "currency",
   currency: "SAR",
   maximumFractionDigits: 0,
@@ -140,7 +141,7 @@ export default function AccountingOperatingConsole() {
     const form = new FormData(event.currentTarget);
     submit("cost-center", {
       name: String(form.get("name") || ""),
-      ownerRole: String(form.get("ownerRole") || "CFO"),
+      ownerRole: String(form.get("ownerRole") || "المدير المالي"),
       monthlyBudget: Number(form.get("monthlyBudget") || 0),
     }).then(() => event.currentTarget.reset());
   }
@@ -159,25 +160,18 @@ export default function AccountingOperatingConsole() {
           <Link className="back-link" href="/">
             <ArrowRight size={16} /> العودة للشركة
           </Link>
-          <span className="eyebrow">
-            <BookOpenCheck size={16} /> الإدارة المالية
-          </span>
-          <h1>نظام محاسبي تشغيلي كامل</h1>
+          <h1>المالية والمحاسبة</h1>
           <p>
-            واجهة CFO لإدارة الحسابات، القيود المزدوجة، الفواتير، البنك، الذمم، قائمة الدخل، الميزانية، والتحكم المالي قبل أي توسع.
+            مكتب المدير المالي: الحسابات والقيود المزدوجة والفواتير والبنك والذمم وقائمة الدخل والميزانية، والضبط المالي قبل أي توسع.
           </p>
           <div className="department-hero-actions">
             <span>
-              <ShieldCheck size={16} /> حالة CFO: {data?.cfoSummary?.status || "READY"}
+              <ShieldCheck size={16} /> الوضع المالي: {financialStateLabel(data?.cfoSummary?.status)}
             </span>
             <span>
               <Landmark size={16} /> النقد: {currency.format(data?.statements?.cash || 0)}
             </span>
           </div>
-        </div>
-        <div className="department-badge">
-          <strong>Accounting OS</strong>
-          <small>Double-entry ready</small>
         </div>
       </section>
 
@@ -340,7 +334,7 @@ export default function AccountingOperatingConsole() {
             </label>
             <label>
               المسؤول
-              <input className="input" name="ownerRole" defaultValue="CFO" />
+              <input className="input" name="ownerRole" defaultValue="المدير المالي" />
             </label>
             <label>
               الميزانية الشهرية
@@ -365,8 +359,8 @@ export default function AccountingOperatingConsole() {
           <Statement label="الالتزامات" value={currency.format(balance?.liabilities || 0)} />
           <Statement label="حقوق الملكية + الأرباح" value={currency.format((balance?.equity || 0) + (balance?.retainedEarnings || 0))} strong />
         </Panel>
-        <Panel title="ضوابط CFO">
-          <p className="muted">{data?.cfoSummary?.message}</p>
+        <Panel title="ضوابط المدير المالي">
+          {data?.cfoSummary?.message && <p className="muted">{data.cfoSummary.message}</p>}
           {(data?.cfoSummary?.controls || []).map((control) => (
             <Statement key={control} label={control} value="فعال" />
           ))}
@@ -375,7 +369,7 @@ export default function AccountingOperatingConsole() {
           <Statement label="ضريبة المخرجات" value={currency.format(data?.taxSummary?.taxCollected || 0)} />
           <Statement label="ضريبة المدخلات" value={currency.format(data?.taxSummary?.taxPaid || 0)} />
           <Statement label="صافي الضريبة المستحقة" value={currency.format(data?.taxSummary?.netTaxPayable || 0)} strong />
-          <Statement label="موعد مراجعة VAT" value={data?.taxSummary?.nextVatReview || "-"} />
+          <Statement label="موعد مراجعة ضريبة القيمة المضافة" value={data?.taxSummary?.nextVatReview || "-"} />
           <Statement label="حركات بنك غير مطابقة" value={String(data?.reconciliation?.unmatchedBank || 0)} />
           <Statement label="ذمم مدينة متأخرة +90" value={currency.format(data?.aging?.receivables?.over_90 || 0)} />
           <Statement label="ذمم دائنة متأخرة +90" value={currency.format(data?.aging?.payables?.over_90 || 0)} />
@@ -385,26 +379,26 @@ export default function AccountingOperatingConsole() {
       <section className="ops-board two">
         <Panel title="دفتر الحسابات">
           {(data?.accounts || []).slice(0, 12).map((account) => (
-            <Statement key={account.id} label={`${account.code} - ${account.name}`} value={account.type} />
+            <Statement key={account.id} label={`${account.code} - ${account.name}`} value={workStatusLabel(account.type)} />
           ))}
         </Panel>
         <Panel title="آخر القيود والفواتير والبنك">
           {(data?.journalEntries || []).slice(0, 5).map((entry) => (
-            <Statement key={entry.id} label={entry.memo || entry.entry_number} value={entry.status} />
+            <Statement key={entry.id} label={entry.memo || entry.entry_number} value={workStatusLabel(entry.status)} />
           ))}
           {(data?.invoices || []).slice(0, 4).map((invoice) => (
-            <Statement key={invoice.id} label={`${invoice.invoice_type} ${currency.format(Number(invoice.total))}`} value={invoice.status} />
+            <Statement key={invoice.id} label={`${workStatusLabel(invoice.invoice_type)} ${currency.format(Number(invoice.total))}`} value={workStatusLabel(invoice.status)} />
           ))}
           {(data?.bankTransactions || []).slice(0, 4).map((transaction) => (
-            <Statement key={transaction.id} label={transaction.description} value={`${transaction.status} ${currency.format(Number(transaction.amount))}`} />
+            <Statement key={transaction.id} label={transaction.description} value={`${workStatusLabel(transaction.status)} ${currency.format(Number(transaction.amount))}`} />
           ))}
         </Panel>
         <Panel title="الإقفال والتدفق النقدي">
           {(data?.monthlyCloses || []).slice(0, 4).map((close) => (
-            <Statement key={close.id} label={`${close.period} - ${close.status}`} value={currency.format(Number(close.net_income))} />
+            <Statement key={close.id} label={`${close.period} - ${workStatusLabel(close.status)}`} value={currency.format(Number(close.net_income))} />
           ))}
           {(data?.cashForecasts || []).slice(0, 6).map((row) => (
-            <Statement key={`${row.forecast_date}-${row.scenario}`} label={`${row.forecast_date} ${row.scenario}`} value={currency.format(Number(row.net_cash))} />
+            <Statement key={`${row.forecast_date}-${row.scenario}`} label={`${row.forecast_date} ${workStatusLabel(row.scenario)}`} value={currency.format(Number(row.net_cash))} />
           ))}
         </Panel>
       </section>
@@ -418,7 +412,7 @@ function operationMessage(action: string) {
   if (action === "invoice") return "تم حفظ الفاتورة وترحيل أثرها المالي.";
   if (action === "bank") return "تمت إضافة حركة البنك للمطابقة.";
   if (action === "cost-center") return "تم حفظ مركز التكلفة وربطه بالميزانية.";
-  if (action === "close-period") return "تم إنشاء إقفال شهري مع حوكمة CFO.";
+  if (action === "close-period") return "أُنشئ إقفال شهري بحوكمة المدير المالي.";
   if (action === "cash-forecast") return "تم توليد توقع التدفق النقدي.";
   if (action === "reconcile") return "تمت مطابقة حركة البنك.";
   return "تم تنفيذ العملية.";

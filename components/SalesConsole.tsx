@@ -3,15 +3,14 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ShoppingBag,
   Loader2,
-  Inbox,
   BadgeDollarSign,
   PencilRuler,
-  ArrowLeft,
+  ArrowUpLeft,
   CheckCircle2,
   Package,
   Plus,
+  ShoppingBag,
   Trash2,
 } from "lucide-react";
 
@@ -36,6 +35,9 @@ type Console = {
 
 const kindLabel: Record<string, string> = { PRICE: "تعديل سعر", STATUS: "تغيير حالة", DISCOUNT: "خصم" };
 const changeStatusPill: Record<string, string> = { PENDING: "medium", APPLIED: "done", REJECTED: "high" };
+/** Shopify reports product status as `active` / `draft` / `archived` (REST) or in capitals (GraphQL). */
+const PRODUCT_STATUS: Record<string, string> = { active: "معروض", draft: "مسودة", archived: "مؤرشف" };
+const productStatusLabel = (status: string) => PRODUCT_STATUS[String(status || "").toLowerCase()] || status;
 
 export default function SalesConsole() {
   const [data, setData] = useState<Console | null>(null);
@@ -44,7 +46,7 @@ export default function SalesConsole() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat("ar-SA", { style: "currency", currency: data?.currency || "SAR", maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: data?.currency || "SAR", maximumFractionDigits: 0 }).format(n);
 
   const load = useCallback(async () => {
     try {
@@ -139,15 +141,14 @@ export default function SalesConsole() {
     <main className="page-wrap">
       <header className="page-head">
         <div>
-          <span className="eyebrow"><ShoppingBag size={16} /> قسم المبيعات · سارة · منصة {data.shopName}</span>
-          <h1 className="glow-title">نظام المبيعات المدمج</h1>
+          <h1 className="glow-title">المتجر والمبيعات</h1>
           <p className="page-sub">
-            متجر Shopify كقسم داخل الشركة — الفريق يعدّل نظام البيع، والمداخيل تُعتمد وتُسجّل عبر مركز القرار حسب الحوكمة.
+            متجر {data.shopName} على Shopify قسم داخل الشركة تديره سارة: الفريق يعدّل نظام البيع، والمداخيل تُعتمد وتُسجّل عبر مركز القرار حسب الحوكمة.
+          </p>
+          <p className="page-facts">
+            <span><ShoppingBag size={13} aria-hidden="true" /> {data.source === "live" ? "متصل بالمتجر مباشرة" : "بيانات تجريبية، المتجر غير مربوط بعد"}</span>
           </p>
         </div>
-        <span className={`status-pill ${data.source === "live" ? "done" : "running"}`}>
-          {data.source === "live" ? "متصل مباشرة" : "بيانات تجريبية"}
-        </span>
       </header>
 
       {msg && (
@@ -176,7 +177,7 @@ export default function SalesConsole() {
             {busy ? <Loader2 className="spin" size={16} /> : <BadgeDollarSign size={16} />}
             رفع {data.pendingOrderCount} طلب لاعتماد المداخيل
           </button>
-          <Link className="secondary-btn" href="/inbox"><Inbox size={16} /> مركز القرار <ArrowLeft size={13} /></Link>
+          <Link className="text-action" href="/inbox">فتح مكتب القرار <ArrowUpLeft size={14} aria-hidden="true" /></Link>
         </div>
         {data.ledger.length > 0 && (
           <div className="bento-list">
@@ -218,7 +219,7 @@ export default function SalesConsole() {
             </button>
             {!data.writeEnabled && (
               <small style={{ color: "var(--muted)" }}>
-                التطبيق الفعلي على المتجر يتطلب <code>SHOPIFY_WRITE_ENABLED</code> — حالياً يُعتمد ويُسجّل (محاكاة).
+                التطبيق الفعلي على المتجر غير مفعّل بعد، فيُعتمد التعديل ويُسجَّل دون أن يُطبَّق.
               </small>
             )}
           </form>
@@ -226,7 +227,7 @@ export default function SalesConsole() {
             <div className="bento-list">
               {data.changes.map((c) => (
                 <div key={c.id} className="bento-list__row">
-                  <span><b style={{ color: "var(--text-strong)" }}>{kindLabel[c.kind] || c.kind}</b> — {c.target}<br /><small>{c.detail}</small></span>
+                  <span><b style={{ color: "var(--text-strong)" }}>{kindLabel[c.kind] || c.kind}</b>: {c.target}<br /><small>{c.detail}</small></span>
                   <span className={`mini-pill ${changeStatusPill[c.status] || ""}`}>{c.status === "APPLIED" ? "طُبِّق" : c.status === "REJECTED" ? "مرفوض" : "بانتظار"}</span>
                 </div>
               ))}
@@ -246,7 +247,7 @@ export default function SalesConsole() {
           <div className="bento-list">
             {data.products.map((p) => (
               <div key={p.id} className="bento-list__row">
-                <span>{p.title}<br /><small>{fmt(p.price)} · {p.status}</small></span>
+                <span>{p.title}<br /><small>{fmt(p.price)} · {productStatusLabel(p.status)}</small></span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                   <b style={{ color: p.totalInventory <= 5 ? "var(--amber)" : "var(--text-strong)" }}>{p.totalInventory}</b>
                   <button

@@ -42,7 +42,7 @@ export async function executeApprovedTrade(meta: TradeApprovalMeta): Promise<Exe
   // Saudi market (Tadawul) routes through the configurable Saudi broker adapter.
   if (assetClass === "TADAWUL") {
     if (entryEarly <= 0 || allocationEarly <= 0) {
-      return { executed: false, simulated: true, reason: "بيانات السعر/التخصيص غير صالحة — اعتماد محاكاة فقط" };
+      return { executed: false, simulated: true, reason: "بيانات السعر أو التخصيص غير صالحة، فالاعتماد محاكاة فقط" };
     }
     const qty = Math.max(1, Math.floor(allocationEarly / entryEarly));
     const result = await submitSaudiOrder({ symbol: String(meta.symbol || ""), qty, side: "buy" });
@@ -59,16 +59,16 @@ export async function executeApprovedTrade(meta: TradeApprovalMeta): Promise<Exe
   const tradable = assetClass === "EQUITY" || assetClass === "CRYPTO";
 
   if (!tradable) {
-    return { executed: false, simulated: true, reason: "الأصل غير قابل للتداول على Alpaca (فرصة تجارية/فوركس) — اعتماد محاكاة فقط" };
+    return { executed: false, simulated: true, reason: "الأصل غير قابل للتداول على Alpaca (فرصة تجارية أو فوركس)، فالاعتماد محاكاة فقط" };
   }
   if (!isAlpacaConfigured()) {
-    return { executed: false, simulated: true, reason: "Alpaca غير مُهيّأ — تم الاعتماد كمحاكاة فقط" };
+    return { executed: false, simulated: true, reason: "Alpaca غير مُهيّأ، فاعتُمد الطلب محاكاةً فقط" };
   }
 
   const entry = Number(meta.entryPrice) || 0;
   const allocation = Number(meta.allocation) || 0;
   if (entry <= 0 || allocation <= 0) {
-    return { executed: false, simulated: true, reason: "بيانات السعر/التخصيص غير صالحة — اعتماد محاكاة فقط" };
+    return { executed: false, simulated: true, reason: "بيانات السعر أو التخصيص غير صالحة، فالاعتماد محاكاة فقط" };
   }
 
   let symbol = String(meta.symbol || "");
