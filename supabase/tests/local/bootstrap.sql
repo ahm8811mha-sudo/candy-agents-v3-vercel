@@ -13,6 +13,8 @@ $$;
 
 create schema if not exists auth;
 create or replace function auth.jwt() returns jsonb language sql stable as $$ select null::jsonb $$;
+create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+create or replace function auth.role() returns text language sql stable as $$ select null::text $$;
 
 create schema if not exists storage;
 create table storage.buckets (
@@ -117,3 +119,57 @@ grant all on sequence public.accounting_payments_id_seq to service_role;
 -- Postgres grants new functions to PUBLIC.
 create function public.orvanta_regression_definer() returns integer
   language sql security definer set search_path = '' as $$ select 1 $$;
+
+-- The tenant helpers as production holds them (release build log,
+-- 2026-10-22), before 20260718000200_advisor_followup_hardening.sql pins
+-- their search path, and the event writer it closes to client roles.
+create function public.orvanta_current_tenant() returns text
+  language sql stable set search_path = public, auth
+  as $$ select nullif(coalesce(auth.jwt() -> 'app_metadata' ->> 'tenant_id', auth.jwt() -> 'user_metadata' ->> 'tenant_id'), '') $$;
+create function public.orvanta_has_tenant_access(row_tenant text) returns boolean
+  language sql stable set search_path = public, auth
+  as $$ select auth.role() = 'service_role' or (auth.uid() is not null and row_tenant = public.orvanta_current_tenant()) $$;
+create function public.orvanta_append_event(p_event jsonb, p_outbox jsonb) returns void
+  language plpgsql security definer set search_path = public as $$ begin end $$;
+
+-- The accounting core as production holds it: journal amounts in plain
+-- numeric, read by the trial-balance view 202607130004 creates, with a line
+-- whose amounts already have two decimals.
+create table public.accounting_accounts (
+  id uuid primary key default gen_random_uuid(), tenant_id text not null default 'golden-star',
+  code text not null, name text not null, type text not null, normal_balance text not null
+);
+create table public.accounting_journal_entries (
+  id uuid primary key default gen_random_uuid(), tenant_id text not null default 'golden-star',
+  entry_number text, entry_date date not null default current_date, status text not null default 'DRAFT'
+);
+create table public.accounting_journal_lines (
+  id uuid primary key default gen_random_uuid(), entry_id uuid, account_id uuid,
+  debit numeric not null default 0, credit numeric not null default 0, tenant_id text not null default 'golden-star'
+);
+create view public.accounting_trial_balance_v as
+select a.tenant_id, a.id as account_id, a.code, a.name, a.type, a.normal_balance,
+  coalesce(sum(case when e.status='POSTED' then l.debit else 0 end),0)::numeric(18,2) as total_debit,
+  coalesce(sum(case when e.status='POSTED' then l.credit else 0 end),0)::numeric(18,2) as total_credit,
+  coalesce(sum(case when e.status='POSTED' then l.debit-l.credit else 0 end),0)::numeric(18,2) as net_balance
+from public.accounting_accounts a
+left join public.accounting_journal_lines l on l.account_id=a.id and l.tenant_id=a.tenant_id
+left join public.accounting_journal_entries e on e.id=l.entry_id and e.tenant_id=a.tenant_id
+group by a.tenant_id,a.id,a.code,a.name,a.type,a.normal_balance;
+revoke all on public.accounting_trial_balance_v from anon, authenticated;
+grant select on public.accounting_trial_balance_v to service_role;
+insert into public.accounting_accounts (id, code, name, type, normal_balance)
+  values ('00000000-0000-4000-8000-00000000a001', '1000', 'Cash', 'ASSET', 'DEBIT');
+insert into public.accounting_journal_lines (account_id, debit, credit)
+  values ('00000000-0000-4000-8000-00000000a001', 12.50, 0);
+
+-- Inventory as production holds it: older than the Shopify link
+-- 20260719000200_commerce_inventory_shopify_link.sql describes.
+create table public.inventory_items (
+  id uuid primary key default gen_random_uuid(), sku text not null, name text not null,
+  category text not null default 'commerce', unit_cost numeric not null default 0,
+  target_price numeric not null default 0, on_hand numeric not null default 0,
+  reorder_point numeric not null default 5, status text not null default 'ACTIVE',
+  created_at timestamptz default now(), updated_at timestamptz default now(),
+  tenant_id text not null default 'golden-star'
+);

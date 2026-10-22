@@ -58,10 +58,59 @@ alter table public.accounting_journal_entries
 alter table public.accounting_journal_lines
   add column if not exists tenant_id text not null default 'golden-star';
 
--- Money columns must carry an explicit scale; round any drifted values once.
-alter table public.accounting_journal_lines
-  alter column debit type numeric(18,2) using round(debit, 2),
-  alter column credit type numeric(18,2) using round(credit, 2);
+-- Money columns must carry an explicit scale. Postgres will not retype a
+-- column a view reads, and accounting_trial_balance_v (202607130004) reads
+-- these, so the view is set aside and recreated from its own definition with
+-- its grants. Columns that already carry the scale are left alone, and an
+-- amount with more than two decimals stops this rather than being rounded
+-- silently. Changed on 2026-10-22: the plain alter that stood here could not
+-- run wherever the view already existed, production included; see
+-- 20261022000200_journal_amount_scale.sql.
+do $$
+declare
+  v_view regclass := to_regclass('public.accounting_trial_balance_v');
+  v_definition text;
+  v_grants text[];
+  v_grant text;
+  v_unscaled integer;
+begin
+  if to_regclass('public.accounting_journal_lines') is null then
+    return;
+  end if;
+  if (select count(*) from information_schema.columns
+       where table_schema = 'public' and table_name = 'accounting_journal_lines'
+         and column_name in ('debit', 'credit') and numeric_precision = 18 and numeric_scale = 2) = 2 then
+    return;
+  end if;
+
+  select count(*) into v_unscaled from public.accounting_journal_lines
+   where debit <> round(debit, 2) or credit <> round(credit, 2);
+  if v_unscaled > 0 then
+    raise exception '% journal lines carry more than two decimals; review them before the scale is fixed', v_unscaled;
+  end if;
+
+  if v_view is not null then
+    v_definition := pg_get_viewdef(v_view);
+    select array_agg(format('grant %s on public.accounting_trial_balance_v to %s', a.privilege_type, a.grantee::regrole))
+      into v_grants
+      from pg_class c, aclexplode(c.relacl) a
+     where c.oid = v_view and a.grantee <> 0 and a.grantee <> c.relowner;
+    drop view public.accounting_trial_balance_v;
+  end if;
+
+  alter table public.accounting_journal_lines
+    alter column debit type numeric(18,2),
+    alter column credit type numeric(18,2);
+
+  if v_definition is not null then
+    execute 'create view public.accounting_trial_balance_v as ' || v_definition;
+    revoke all on public.accounting_trial_balance_v from public, anon, authenticated;
+    foreach v_grant in array coalesce(v_grants, '{}') loop
+      execute v_grant;
+    end loop;
+  end if;
+end;
+$$;
 
 -- 3. Entry-number uniqueness per tenant (the real duplicate guard).
 -- The legacy schema had a GLOBAL unique on entry_number, which is wrong under
