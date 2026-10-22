@@ -88,7 +88,9 @@ async function recordDigest(digest: Digest, dispatch: Omit<DispatchResult, "reco
   const { error } = await supabase.from("activity_logs").insert({
     id: `digest-${digest.date}-${Date.now()}`,
     tenant_id: getTenantId(),
-    actor_id: "system",
+    // actor_id names an employee (activity_logs.actor_id references employees);
+    // the system is not one, and "system" there fails the insert.
+    actor_id: null,
     action: "DAILY_DIGEST_COMPOSED",
     entity_type: "daily_digest",
     entity_id: digest.date,
@@ -106,7 +108,7 @@ async function recordDigest(digest: Digest, dispatch: Omit<DispatchResult, "reco
   return true;
 }
 
-/** Compose from the official journal, persist evidence, then deliver through a real configured channel. */
+/** Compose from the official journal, deliver through a real configured channel, then record what happened. */
 export async function dispatchDigest(now: Date = new Date()): Promise<{ digest: Digest; dispatch: DispatchResult }> {
   const digest = await composeOfficialDigest(now);
   const enabled = getEnabledIntegrations();
