@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain ESM module without type declarations
 import { replayHazards, splitStatements } from "../lib/release/sqlStatements.mjs";
 // @ts-expect-error -- plain ESM module without type declarations
-import { changedKeys, describeWrites, judgeReplay, repairLedgerByReplay } from "../lib/release/migrationReplay.mjs";
+import { changedKeys, describeWrites, judgeReplay, repairLedgerByReplay, replayChain } from "../lib/release/migrationReplay.mjs";
 
 type Statement = { code: string; keyword: string; line: number };
 type Replayed = { file: string; version: string; error: string | null; changed: string[] };
@@ -129,6 +129,19 @@ describe("deciding which missing migrations the replay clears", () => {
     const result = judgeReplay({ missing: [], recorded: new Set(["7"]), replayed, lasting: new Set(["relation public.t"]) });
     expect(result.notes).toHaveLength(1);
     expect(result.unrecorded).toEqual([]);
+  });
+});
+
+describe("replaying the chain", () => {
+  it("rolls everything back and stops once the replay passes its time budget", async () => {
+    const queries: string[] = [];
+    const db = { async query(text: string) { queries.push(text); return { rows: [] }; } };
+    let now = 0;
+    const files = [{ file: "1_a.sql", sql: "select 'a';" }, { file: "2_b.sql", sql: "select 'b';" }];
+    const replay = replayChain(db, files, { budgetMs: 1000, clock: () => (now += 1100) });
+    await expect(replay).rejects.toThrow("the replay passed its 1s budget after 1_a.sql and was rolled back");
+    expect(queries).not.toContain("select 'b';");
+    expect(queries.at(-1)).toBe("rollback");
   });
 });
 
