@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain ESM module without type declarations
 import { replayHazards, splitStatements } from "../lib/release/sqlStatements.mjs";
 // @ts-expect-error -- plain ESM module without type declarations
-import { changedKeys, describeWrites, judgeReplay, repairLedgerByReplay, replayChain } from "../lib/release/migrationReplay.mjs";
+import { changedKeys, describeDifference, describeWrites, judgeReplay, repairLedgerByReplay, replayChain, tablesTouched } from "../lib/release/migrationReplay.mjs";
 
 type Statement = { code: string; keyword: string; line: number };
 type Replayed = { file: string; version: string; error: string | null; changed: string[] };
@@ -86,6 +86,36 @@ describe("reading what a replay changed", () => {
     const before = new Map([["public.a", [1, 0, 0]]]);
     const after = new Map([["public.a", [3, 0, 0]], ["public.b", [0, 4, 1]], ["public.c", [0, 0, 0]]]);
     expect(describeWrites(before, after)).toBe("public.a +2, public.b ~4 -1");
+  });
+});
+
+describe("explaining what a replay changed", () => {
+  it("says whether the database lacks an object or holds it differently, line by line", () => {
+    expect(describeDifference("index public.i", undefined, "CREATE INDEX i ON public.t USING btree (a)")).toEqual([
+      "index public.i: missing from the database; the chain makes it: CREATE INDEX i ON public.t USING btree (a)",
+    ]);
+    expect(describeDifference("policy public.t.p", "PERMISSIVE ALL {anon} using=true check=", undefined)).toEqual([
+      "policy public.t.p: in the database, but the chain removes it",
+    ]);
+    const held = "CREATE FUNCTION public.f()\n SECURITY DEFINER\nAS $function$ select 1 $function$";
+    const made = "CREATE FUNCTION public.f()\nAS $function$ select 2 $function$";
+    expect(describeDifference("function public.f()", held, made)).toEqual([
+      "function public.f(): held differently (2 lines only in the database, 1 only in the chain)",
+      "  database: SECURITY DEFINER",
+      "  database: AS $function$ select 1 $function$",
+      "  chain:    AS $function$ select 2 $function$",
+    ]);
+  });
+
+  it("names the public tables a statement creates, alters or indexes, never the schema", () => {
+    const sql = [
+      "create table if not exists public.inventory_items (id uuid);",
+      "create unique index if not exists inventory_items_shopify_uidx on public.inventory_items (tenant_id, shopify_product_id);",
+      "alter table if exists only public.inventory_movements enable row level security;",
+      "do $$ begin execute format('alter table public.%I enable row level security', 'x'); end $$;",
+      'alter table "MixedCase" add column a int;',
+    ].join("\n");
+    expect(tablesTouched(sql)).toEqual(["MixedCase", "inventory_items", "inventory_movements"]);
   });
 });
 

@@ -55,6 +55,12 @@ create table public.company_approvals (
   id text primary key, tenant_id text, type text, title text, status text,
   amount numeric, metadata jsonb, created_at timestamptz default now()
 );
+-- A slice of the ideas board, which 202607170001_idea_execution_link.sql
+-- extends and indexes.
+create table public.company_ideas (
+  id text primary key, tenant_id text not null default 'golden-star', title text,
+  status text not null default 'NEW', created_at timestamptz default now()
+);
 
 -- Document tables as database/schema.sql and database/policies.sql leave
 -- them: readable, and in storage writable, by the anonymous role. Two are the

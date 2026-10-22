@@ -167,7 +167,8 @@ export async function listDecisionCommitments(
   let query = supabase.from("decision_commitments").select("*").eq("tenant_id", tenantId);
   if (!options.includeClosed) query = query.not("status", "in", "(COMPLETED,CANCELLED)");
   const { data, error } = await query.order("due_at", { ascending: true }).limit(300);
-  if (error) return [];
+  // A failed read must not look like an office with nothing to follow up.
+  if (error) throw new Error("تعذّرت قراءة متابعة القرارات من قاعدة البيانات.");
   return (data || []).map(mapRow);
 }
 
