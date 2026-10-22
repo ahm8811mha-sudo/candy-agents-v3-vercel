@@ -22,9 +22,21 @@ type CompleteCronRunInput = {
   details?: Record<string, unknown>;
 };
 
-function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+/**
+ * What failed, in words a reader can act on. Supabase hands back plain error
+ * objects, not Error instances, and String() turns those into "[object Object]".
+ */
+export function describeFailure(error: unknown): { code: string; message: string } {
+  if (error instanceof Error) return { code: error.name, message: error.message };
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+    const failure = error as { message: string; code?: unknown; details?: unknown; hint?: unknown };
+    const parts = [failure.message, failure.details, failure.hint].filter((part) => typeof part === "string" && part.trim());
+    return { code: typeof failure.code === "string" && failure.code ? failure.code : "CRON_FAILED", message: parts.join("; ") };
+  }
+  return { code: "CRON_FAILED", message: String(error) };
 }
+
+const message = (error: unknown) => describeFailure(error).message;
 
 export async function startCronRun(input: StartCronRunInput): Promise<CronRunHandle> {
   const id = randomUUID();
@@ -128,7 +140,7 @@ export async function failCronRun(handle: CronRunHandle, errorValue: unknown, in
       processed_count: Math.max(0, Math.trunc(input.processedCount || 0)),
       failed_count: Math.max(1, Math.trunc(input.failedCount || 1)),
       details: input.details || {},
-      error_code: errorValue instanceof Error ? errorValue.name : "CRON_FAILED",
+      error_code: describeFailure(errorValue).code,
       error_message: errorMessage,
       updated_at: new Date(completedAt).toISOString(),
     })

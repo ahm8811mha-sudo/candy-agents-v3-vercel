@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCompanyContext, type CompanyRequestContext } from "../company-os/context";
-import { failCronRun, heartbeatCronRun, startCronRun, succeedCronRun } from "./cronRun";
+import { describeFailure, failCronRun, heartbeatCronRun, startCronRun, succeedCronRun } from "./cronRun";
 
 export type TrackedCronResult = {
   body?: Record<string, unknown>;
@@ -66,7 +66,7 @@ export async function executeTrackedCron(input: TrackedCronInput) {
         cronRunId: run.id,
         requestId: auth.context.requestId,
         correlationId: auth.context.correlationId,
-        error: error instanceof Error ? error.message : `${input.jobName} failed`,
+        error: describeFailure(error).message || `${input.jobName} failed`,
       },
       { status: 500 }
     );

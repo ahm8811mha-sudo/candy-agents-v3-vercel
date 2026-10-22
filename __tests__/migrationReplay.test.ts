@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain ESM module without type declarations
 import { replayHazards, splitStatements } from "../lib/release/sqlStatements.mjs";
 // @ts-expect-error -- plain ESM module without type declarations
-import { changedKeys, describeDifference, describeWrites, judgeReplay, repairLedgerByReplay, replayChain, tablesTouched } from "../lib/release/migrationReplay.mjs";
+import { changedKeys, describeDifference, describeWrites, judgeReplay, repairLedgerByReplay, replayChain, sameFunction, sqlTokens, tablesTouched } from "../lib/release/migrationReplay.mjs";
 
 type Statement = { code: string; keyword: string; line: number };
 type Replayed = { file: string; version: string; error: string | null; changed: string[] };
@@ -116,6 +116,28 @@ describe("explaining what a replay changed", () => {
       'alter table "MixedCase" add column a int;',
     ].join("\n");
     expect(tablesTouched(sql)).toEqual(["MixedCase", "inventory_items", "inventory_movements"]);
+  });
+});
+
+describe("telling a rewritten function from a different one", () => {
+  const head = "CREATE OR REPLACE FUNCTION public.orvanta_guard_journal_entry()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$";
+  const written = (body: string, tail = "\n acl={postgres=X/postgres}") => `${head}${body}$function$${tail}`;
+  // The two shapes production and the repository hold (production replay, 2026-10-22).
+  const repository = written("\nbegin\n  -- a posted entry never changes\n  if tg_op = 'INSERT' then\n    perform public.orvanta_assert_accounting_period_open(new.tenant_id, new.entry_date);\n    return new;\n  end if;\nend;\n");
+  const production = written("begin if tg_op='INSERT' then perform public.orvanta_assert_accounting_period_open(new.tenant_id,new.entry_date); return NEW; end if; end; ");
+
+  it("treats the same tokens laid out differently as the same function", () => {
+    expect(sameFunction(production, repository)).toBe(true);
+  });
+
+  it("tells apart a different literal, a different header, and different privileges", () => {
+    expect(sameFunction(production.replace("'INSERT'", "'UPDATE'"), repository)).toBe(false);
+    expect(sameFunction(production.replace(" LANGUAGE plpgsql", " LANGUAGE plpgsql\n SECURITY DEFINER"), repository)).toBe(false);
+    expect(sameFunction(production.replace("acl={postgres=X/postgres}", "acl={anon=X/postgres,postgres=X/postgres}"), repository)).toBe(false);
+  });
+
+  it("keeps strings, quoted names and dollar-quoted text exactly, and drops comments", () => {
+    expect(sqlTokens("SELECT \"Odd\", E'a\\'b', $q$ -- kept $q$ -- dropped\n/* dropped */ x")).toEqual(['select', '"Odd"', ",", "e", "'a\\'b'", ",", "$q$ -- kept $q$", "x"]);
   });
 });
 
