@@ -53,7 +53,8 @@ export async function GET(req: NextRequest) {
       const { error } = await supabase.from("activity_logs").insert({
         id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         tenant_id: context.tenantId,
-        actor_id: "system",
+        // No employee generated this; see recordDigest in lib/company/digest.ts.
+        actor_id: null,
         action: "DAILY_REPORT_GENERATED",
         entity_type: "report",
         metadata: {
