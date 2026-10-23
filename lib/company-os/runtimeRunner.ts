@@ -118,7 +118,17 @@ export async function runCoreRuntimeSweep(options: {
     if (tick.processed === 0) break;
   }
 
-  const outbox = await publishOutboxBatch({ tenantId: options.tenantId, limit: outboxLimit });
+  // An outbox with no delivery target refuses to claim events. That refusal is
+  // this sweep's failure to report, not a reason to skip the work after it.
+  const outbox = await publishOutboxBatch({ tenantId: options.tenantId, limit: outboxLimit }).catch((error) => ({
+    selected: 0,
+    processed: 0,
+    published: 0,
+    retried: 0,
+    deadLettered: 0,
+    results: [],
+    error: error instanceof Error ? error.message : "Outbox publishing failed",
+  }));
   const ownerAbsencePolicy = await getOwnerAbsencePolicy(options.tenantId);
   const agentProjectLimit = ownerAbsencePolicy.effectiveStatus === "ACTIVE" ? 3 : 1;
   const agentExecution = await recoverPendingAgentProjects(options.tenantId, agentProjectLimit).catch((error) => ({

@@ -51,9 +51,12 @@ export async function GET(req: NextRequest) {
         })
     );
 
+    const outboxError = "error" in sweep.outbox ? sweep.outbox.error : null;
+    const agentRecoveryError = "error" in sweep.agentExecution ? sweep.agentExecution.error : null;
     const processedCount = sweep.workflow.totalProcessed + sweep.outbox.processed + sweep.agentExecution.results.length;
     const failedCount = sweep.outbox.retried + sweep.outbox.deadLettered
-      + sweep.agentExecution.results.reduce((sum, result) => sum + result.failed, 0);
+      + sweep.agentExecution.results.reduce((sum, result) => sum + result.failed, 0)
+      + (outboxError ? 1 : 0) + (agentRecoveryError ? 1 : 0);
     await succeedCronRun(run, {
       processedCount,
       failedCount,
@@ -64,6 +67,8 @@ export async function GET(req: NextRequest) {
         outboxPublished: sweep.outbox.published,
         outboxRetried: sweep.outbox.retried,
         outboxDeadLettered: sweep.outbox.deadLettered,
+        outboxError,
+        agentRecoveryError,
         agentProjectsSelected: sweep.agentExecution.selected,
         agentProjectsCompleted: sweep.agentExecution.results.length,
         ownerAbsenceActive: sweep.continuity.active,

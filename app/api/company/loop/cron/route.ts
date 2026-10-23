@@ -53,18 +53,23 @@ export async function GET(req: NextRequest) {
         : { processed: 0, disabled: true };
       await heartbeat({ phase: "workflow-tick", processed: Number((workflows as { processed?: number }).processed || 0) });
 
+      // A blocked outbox is this run's failed item; the work above it still ran.
       const outbox = process.env.ORVANTA_OUTBOX_ENABLED === "true"
-        ? await publishOutboxBatch({ tenantId: context.tenantId, limit: 50 })
+        ? await publishOutboxBatch({ tenantId: context.tenantId, limit: 50 }).catch((error) => ({
+          processed: 0,
+          error: error instanceof Error ? error.message : "Outbox publishing failed",
+        }))
         : { processed: 0, disabled: true };
 
       const workflowProcessed = Number((workflows as { processed?: number }).processed || 0);
       const outboxProcessed = Number((outbox as { processed?: number }).processed || 0);
-      const outboxFailed = Number((outbox as { retried?: number }).retried || 0) + Number((outbox as { deadLettered?: number }).deadLettered || 0);
+      const outboxError = (outbox as { error?: string }).error || null;
+      const outboxFailed = Number((outbox as { retried?: number }).retried || 0) + Number((outbox as { deadLettered?: number }).deadLettered || 0) + (outboxError ? 1 : 0);
 
       return {
         processedCount: Number(generated.created) + workflowProcessed + outboxProcessed,
         failedCount: outboxFailed,
-        details: { workflowProcessed, outboxProcessed, outboxFailed, ideaId: idea?.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
+        details: { workflowProcessed, outboxProcessed, outboxFailed, outboxError, ideaId: idea?.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
         body: {
           dailyIdea: idea ? { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode } : null,
           opportunityReason: generated.reason,

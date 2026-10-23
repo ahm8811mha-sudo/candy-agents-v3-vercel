@@ -129,19 +129,25 @@ async function countRows(
   if (!supabase) return 0;
   let query = supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
   if (configure) query = configure(query);
-  const { count, error } = await query;
+  const { count, error, status } = await query;
   if (error) {
-    console.error("[orvanta:company-brain] count failed", { table, error: error.message });
-    return 0;
+    // A head request's error has no body, so the HTTP status is the evidence.
+    // A count that could not be read must never reach the owner as a zero.
+    const failure = `could not count ${table} (HTTP ${status}${error.code ? `, ${error.code}` : ""})${error.message ? `: ${error.message}` : ""}`;
+    console.error(`[orvanta:company-brain] ${failure}`);
+    throw new Error(`The company brain ${failure}.`);
   }
   return count || 0;
 }
 
 export async function buildCompanySnapshot(tenantId: string): Promise<CompanySnapshot> {
+  // Open decisions are the owner's approval queue. company_decisions only logs
+  // review actions and has no status. Workflow and integration statuses are
+  // the ones workflowRuntime writes and integration_attempts allows.
   const [openDecisions, activeWorkflows, failedIntegrations, openCriticalAlerts, governmentDocuments, postedJournalEntries] = await Promise.all([
-    countRows("company_decisions", tenantId, (query) => query.in("status", ["DRAFT", "PENDING", "AWAITING_APPROVAL"])),
-    countRows("workflow_instances", tenantId, (query) => query.in("status", ["READY", "RUNNING", "WAITING", "RETRYING"])),
-    countRows("integration_attempts", tenantId, (query) => query.in("status", ["FAILED", "DEAD_LETTER", "RETRYING"])),
+    countRows("company_approvals", tenantId, (query) => query.eq("status", "PENDING")),
+    countRows("workflow_instances", tenantId, (query) => query.in("status", ["PENDING", "RUNNING", "WAITING_APPROVAL", "RETRY"])),
+    countRows("integration_attempts", tenantId, (query) => query.in("status", ["FAILED", "RETRY", "DEAD_LETTER"])),
     countRows("system_alerts", tenantId, (query) => query.eq("status", "OPEN").in("severity", ["HIGH", "CRITICAL"])),
     countRows("gov_documents", tenantId),
     countRows("accounting_journal_entries", tenantId, (query) => query.eq("status", "POSTED")),
