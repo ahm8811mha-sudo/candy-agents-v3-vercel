@@ -129,10 +129,13 @@ async function countRows(
   if (!supabase) return 0;
   let query = supabase.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
   if (configure) query = configure(query);
-  const { count, error } = await query;
+  const { count, error, status } = await query;
   if (error) {
-    console.error("[orvanta:company-brain] count failed", { table, error: error.message });
-    return 0;
+    // A head request's error has no body, so the HTTP status is the evidence.
+    // A count that could not be read must never reach the owner as a zero.
+    const failure = `could not count ${table} (HTTP ${status}${error.code ? `, ${error.code}` : ""})${error.message ? `: ${error.message}` : ""}`;
+    console.error(`[orvanta:company-brain] ${failure}`);
+    throw new Error(`The company brain ${failure}.`);
   }
   return count || 0;
 }

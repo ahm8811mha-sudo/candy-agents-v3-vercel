@@ -69,4 +69,16 @@ describe("the company brain's snapshot counts", () => {
       postedJournalEntries: 2,
     });
   });
+
+  it("fails, naming the table, when a count cannot be read, instead of reporting zero", async () => {
+    const saved = tables.columns.integration_attempts;
+    tables.columns.integration_attempts = ["id", "tenant_id"];
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(buildCompanySnapshot("golden-star")).rejects.toThrow("could not count integration_attempts (HTTP 400)");
+    } finally {
+      tables.columns.integration_attempts = saved;
+      logged.mockRestore();
+    }
+  });
 });
