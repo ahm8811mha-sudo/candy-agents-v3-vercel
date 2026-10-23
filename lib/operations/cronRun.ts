@@ -139,7 +139,9 @@ export async function failCronRun(handle: CronRunHandle, errorValue: unknown, in
       duration_ms: Math.max(0, completedAt - handle.startedAt),
       processed_count: Math.max(0, Math.trunc(input.processedCount || 0)),
       failed_count: Math.max(1, Math.trunc(input.failedCount || 1)),
-      details: input.details || {},
+      // Without details of its own, a failure keeps the last heartbeat's, which
+      // show how far the run got.
+      ...(input.details ? { details: input.details } : {}),
       error_code: describeFailure(errorValue).code,
       error_message: errorMessage,
       updated_at: new Date(completedAt).toISOString(),
