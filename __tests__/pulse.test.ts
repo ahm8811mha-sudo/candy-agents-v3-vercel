@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { getCompanyPulse } from "../lib/company/pulse";
 import { submitIdea, _clearIdeas } from "../lib/company/ideas";
 import { listApprovals, decideApproval, _clearApprovals } from "../lib/approvals";
+import { readySpendForDecision } from "./fixtures/readySpend";
 import { _clearDecisions, recordDecision } from "../lib/decisions";
 
 describe("company pulse", () => {
@@ -40,6 +41,7 @@ describe("company pulse", () => {
   it("owner sign-offs appear as SIGNOFF events", () => {
     submitIdea({ study: completeStudy, title: "فكرة توقيع", hypothesis: "ف", budgetSAR: 40_000, horizonDays: 30 });
     const approval = listApprovals()[0];
+    readySpendForDecision(approval.id);
     decideApproval(approval.id, "APPROVED", "المالك");
     const pulse = getCompanyPulse();
     const signoff = pulse.events.find((e) => e.kind === "SIGNOFF");

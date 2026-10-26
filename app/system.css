@@ -613,7 +613,7 @@ a.bento-card:hover, .metric-card.department-link:hover { border-color: var(--pri
 .decide-detail__facts span { display: grid; gap: 1px; }
 .decide-detail__facts small { color: var(--muted); font-size: 0.74rem; font-weight: 700; }
 .decide-detail__facts b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
-.decide-detail__body { margin: 0; line-height: 1.9; color: var(--text); }
+.decide-detail__body { margin: 0; line-height: 1.9; color: var(--text); white-space: pre-line; }
 .decide-consequence {
   margin: 0;
   padding: 12px 14px;

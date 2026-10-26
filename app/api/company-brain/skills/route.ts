@@ -18,7 +18,7 @@ const requestSchema = z.object({
   version: z.string().min(1).max(40).optional(),
   idempotencyKey: z.string().min(8).max(240).optional(),
   runId: z.string().uuid().optional(),
-  input: z.record(z.unknown()).optional(),
+  input: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function GET(req: NextRequest) {

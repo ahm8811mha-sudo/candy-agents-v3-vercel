@@ -24,44 +24,37 @@ export type TierRule = {
 export const AUTHORITY_MATRIX: TierRule[] = [
   {
     tier: "T0",
-    maxSAR: 5_000,
-    approver: "رئيس القسم",
+    maxSAR: 0,
+    approver: "صاحب الدور",
     approverAgentId: "department-head",
-    label: "تنفيذ ذاتي",
-    note: "يُسجَّل قيداً محاسبياً وفي سجل التدقيق",
-  },
-  {
-    tier: "T1",
-    maxSAR: 25_000,
-    approver: "سلطان، الرئيس التنفيذي",
-    approverAgentId: "sultan",
-    label: "اعتماد الرئيس التنفيذي",
-    note: "يظهر للمالك للاطلاع",
+    label: "قرار تشغيلي بلا صرف",
+    note: "يبقى داخل الدور ما دام بلا مبلغ",
   },
   {
     tier: "T2",
     maxSAR: 100_000,
-    approver: "المالك",
+    approver: "أحمد، رئيس مجلس الإدارة",
     approverAgentId: "owner",
-    label: "اعتماد المالك",
-    note: "بند إلزامي في مركز القرار",
+    label: "اعتماد رئيس مجلس الإدارة",
+    note: "بعد القسم ثم عبدالرحمن ثم حارس ثم توصية سلطان",
   },
   {
     tier: "T3",
     maxSAR: Number.POSITIVE_INFINITY,
-    approver: "المالك + جدوى ثلاثية",
+    approver: "أحمد، رئيس مجلس الإدارة",
     approverAgentId: "owner",
-    label: "اعتماد المالك مع دراسة جدوى موقعة من 3 أقسام",
-    note: "لا استثناءات",
+    label: "اعتماد رئيس مجلس الإدارة",
+    note: "كل مبلغ فوق 100,000 يمر بنفس السلسلة بلا استثناء",
   },
 ];
 
-/** The rule governing a given amount (amounts ≤ 0 are invalid → top tier). */
+/** Any amount above 0 belongs to the Chairman. Zero is operational. Invalid amounts escalate. */
 export function requiredTier(amountSAR: number): TierRule {
-  if (!Number.isFinite(amountSAR) || amountSAR <= 0) {
+  if (!Number.isFinite(amountSAR) || amountSAR < 0) {
     return AUTHORITY_MATRIX[AUTHORITY_MATRIX.length - 1];
   }
-  return AUTHORITY_MATRIX.find((r) => amountSAR <= r.maxSAR)!;
+  if (amountSAR === 0) return AUTHORITY_MATRIX[0];
+  return AUTHORITY_MATRIX.find((rule) => amountSAR <= rule.maxSAR)!;
 }
 
 /**
@@ -77,40 +70,38 @@ export function effectiveTier(amountSAR: number, riskLevel?: string): TierRule {
   return ["T0", "T1"].includes(financialTier.tier) ? ownerTier : financialTier;
 }
 
-/** Resolve the persisted tier used by the sign-off API. */
+/**
+ * The sign-off tier. A stored T0 or T1 label cannot keep a positive amount
+ * inside an employee band. Zero-amount work stays operational unless a prior
+ * high-risk escalation already stored T2 or T3.
+ */
 export function approvalTierForDecision(
   amountSAR: number | undefined,
   metadata?: Record<string, unknown>
 ): ApprovalTier {
+  const amount = Number(amountSAR);
+  if (Number.isFinite(amount) && amount > 0) return requiredTier(amount).tier;
   const persisted = String(metadata?.governanceTier || metadata?.tier || "");
-  if (["T0", "T1", "T2", "T3"].includes(persisted)) return persisted as ApprovalTier;
-  return amountSAR ? requiredTier(amountSAR).tier : "T1";
+  if (persisted === "T0" || persisted === "T2" || persisted === "T3") return persisted;
+  return "T0";
 }
 
-/** May this agent spend this amount without escalation? (T0 gate) */
+/** No employee may approve a positive amount. The Chairman may. */
 export function canSelfApprove(agentId: string, amountSAR: number): boolean {
   const agent = getAgent(agentId);
-  if (!agent || amountSAR <= 0) return false;
-  const tier = requiredTier(amountSAR);
-  if (agent.rank === "OWNER") return true;
-  if (agent.rank === "CEO") return tier.tier === "T0" || tier.tier === "T1";
-  return tier.tier === "T0" && amountSAR <= agent.authorityLimitSAR;
+  if (!agent || !(amountSAR > 0)) return false;
+  return agent.rank === "OWNER";
 }
 
-export function canRoleApprove(role: ServerApprovalRole, amountSAR: number, feasibilityConfirmed = false): boolean {
-  const tier = requiredTier(amountSAR).tier;
-  if (role === "OWNER") return tier !== "T3" || feasibilityConfirmed;
-  if (tier === "T0") return role === "ADMIN" || role === "CEO";
-  if (tier === "T1") return role === "ADMIN" || role === "CEO";
-  return false;
+export function canRoleApprove(role: ServerApprovalRole, amountSAR: number): boolean {
+  if (!Number.isFinite(amountSAR) || amountSAR < 0) return role === "OWNER";
+  if (amountSAR === 0) return role === "OWNER" || role === "ADMIN" || role === "CEO" || role === "STAFF";
+  return role === "OWNER" || role === "ADMIN";
 }
 
-export function assertCanApprove(role: ServerApprovalRole, amountSAR: number, feasibilityConfirmed = false) {
+export function assertCanApprove(role: ServerApprovalRole, amountSAR: number) {
   const tier = requiredTier(amountSAR);
-  if (!canRoleApprove(role, amountSAR, feasibilityConfirmed)) {
-    if (tier.tier === "T3" && role === "OWNER" && !feasibilityConfirmed) {
-      throw new Error("يتطلب هذا القرار دراسة جدوى ثلاثية قبل اعتماد المالك.");
-    }
+  if (!canRoleApprove(role, amountSAR)) {
     throw new Error(`لا يملك هذا المستخدم صلاحية اعتماد ${tier.tier}. المطلوب: ${tier.approver}.`);
   }
   return tier;

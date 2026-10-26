@@ -125,8 +125,8 @@ export default function OwnerAbsencePanel() {
 
   const status = form ? statusCopy[form.effectiveStatus] : statusCopy.INACTIVE;
   const authorityRows = useMemo(() => form ? [
-    { label: "تنفيذ داخلي روتيني", limit: `حتى ${form.routineAutoLimitSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س`, result: "ينفذه الوكيل ويعيد الدليل" },
-    { label: "قرار تنفيذي متوسط", limit: `حتى ${form.executiveAgentLimitSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س`, result: "مراجعة وكيل الرئيس التنفيذي ثم التنفيذ" },
+    { label: "تنفيذ داخلي روتيني", limit: "بلا مبلغ", result: "ينفذه الوكيل ويعيد الدليل" },
+    { label: "صرف بأي مبلغ", limit: "0 ر.س", result: "سلسلة المراجعة ثم اعتماد رئيس مجلس الإدارة" },
     { label: "استراتيجية أو مخاطرة عالية", limit: "دون سقف ذاتي", result: "يُحفظ في صندوق المالك" },
     { label: "التزام خارجي", limit: form.allowExternalActions ? "مسموح داخل الحدود" : "متوقف", result: form.allowExternalActions ? "بتدقيق وسجل أثر" : "ينتظر المالك" },
   ] : [], [form]);

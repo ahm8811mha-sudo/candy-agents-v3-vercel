@@ -3,10 +3,14 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { getLearningSnapshot } from "../lib/company/learning";
 import { submitIdea, _clearIdeas } from "../lib/company/ideas";
 import { listApprovals, decideApproval, _clearApprovals } from "../lib/approvals";
+import { readySpendForDecision } from "./fixtures/readySpend";
 
 function decideLatestIdea(decision: "APPROVED" | "REJECTED") {
   const approval = listApprovals().find((a) => a.type === "IDEA" && a.status === "PENDING");
-  if (approval) decideApproval(approval.id, decision, "المالك");
+  if (approval) {
+    readySpendForDecision(approval.id);
+    decideApproval(approval.id, decision, "المالك");
+  }
 }
 
 describe("self-improvement loop", () => {

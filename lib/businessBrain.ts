@@ -1,6 +1,4 @@
 import type { Financials } from "./accountingSystem";
-import { effectiveTier } from "./company/governance";
-
 export type Severity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
@@ -294,41 +292,28 @@ export function evaluateBusiness(request: string, financials: Financials): Busin
 
 function getApprovalPolicy(budget: number, riskLevel: RiskLevel, profit: number): ApprovalPolicy {
   const elevatedRisk = riskLevel === "HIGH" || profit < 0;
-  const tier = effectiveTier(Math.max(budget, 1), elevatedRisk ? "HIGH" : riskLevel);
-
-  if (tier.tier === "T2" || tier.tier === "T3") {
+  if (budget > 0) {
     return {
       budget,
       gate: "OWNER",
       requiredRole: "OWNER",
-      reason:
-        tier.tier === "T3"
-          ? "القرار ضمن T3 ويتطلب اعتماد المالك ودراسة جدوى ثلاثية قبل التنفيذ."
-          : elevatedRisk
-            ? "المخاطر المالية مرتفعة، لذلك صُعّد القرار إلى T2 واعتماد المالك."
-            : "الميزانية ضمن T2 وتحتاج اعتماد المالك قبل التنفيذ.",
+      reason: "أي مبلغ أعلى من صفر يعتمد من رئيس مجلس الإدارة بعد سلسلة المراجعة، ولا يعتمده موظف.",
     };
   }
-
-  if (budget <= 0 || tier.tier === "T0") {
+  if (elevatedRisk) {
     return {
       budget,
-      gate: "AUTO",
-      requiredRole: "NONE",
-      reason: "الطلب ضمن حد التشغيل التجريبي ويمكن تحويله إلى مهام مباشرة.",
+      gate: "OWNER",
+      requiredRole: "OWNER",
+      reason: "المخاطر مرتفعة، لذلك يُرفع القرار إلى رئيس مجلس الإدارة.",
     };
   }
-
-  if (tier.tier === "T1") {
-    return {
-      budget,
-      gate: "CEO",
-      requiredRole: "CEO",
-      reason: "الميزانية ضمن شريحة T1 وتحتاج اعتماد الرئيس التنفيذي قبل الصرف.",
-    };
-  }
-
-  throw new Error(`Unsupported authority tier: ${tier.tier}`);
+  return {
+    budget,
+    gate: "AUTO",
+    requiredRole: "NONE",
+    reason: "الطلب بلا صرف ويبقى داخل الدور.",
+  };
 }
 
 function chooseActionToday(profit: number, expenseRatio: number, budget: number, gate: ApprovalPolicy["gate"]) {

@@ -22,6 +22,8 @@ import {
 import { authenticateRequest, isAuthEnabled } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { approvalTierForDecision } from "@/lib/company/governance";
+import { chairmanSpendBlock, approvalVisibleToChairman } from "@/lib/company/spendChain";
+import { settleChairmanCommandForSpend } from "@/lib/company/chairmanCommands";
 import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { executeProjectInternalActions } from "@/lib/company/internalAgentExecutor";
@@ -43,10 +45,17 @@ export async function GET(req: NextRequest) {
   // Deferred items whose reminder date passed come back on every queue read.
   await reviveDueDeferrals();
   const status = req.nextUrl.searchParams.get("status") as ApprovalStatus | null;
+  const approvals = listApprovals(status || undefined).filter(approvalVisibleToChairman);
   return NextResponse.json({
     ok: true,
-    approvals: listApprovals(status || undefined),
-    stats: approvalStats(),
+    approvals,
+    stats: {
+      pending: approvals.filter((item) => item.status === "PENDING").length,
+      approved: approvals.filter((item) => item.status === "APPROVED").length,
+      rejected: approvals.filter((item) => item.status === "REJECTED").length,
+      deferred: approvals.filter((item) => item.status === "DEFERRED").length,
+      total: approvals.length,
+    },
   });
 }
 
@@ -116,6 +125,10 @@ export async function POST(req: NextRequest) {
 
     const decidedBy = user?.name || String(body.decidedBy || "المالك");
     const note = body.note ? String(body.note) : undefined;
+    if (decision === "APPROVED" || decision === "REJECTED") {
+      const spendBlock = chairmanSpendBlock(user?.role || (!isAuthEnabled() ? "OWNER" : null), target);
+      if (spendBlock) return NextResponse.json({ ok: false, error: spendBlock }, { status: 403 });
+    }
     let result: ApprovalItem | null = null;
     let execution: unknown = null;
 
@@ -207,6 +220,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (result && (decision === "APPROVED" || decision === "REJECTED")) {
+      await settleChairmanCommandForSpend(result.id, decision);
+    }
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
   } catch (error) {
     const typed = error as Error & { code?: string; decision?: unknown };

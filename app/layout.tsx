@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
+import { PUBLIC_PAGE_HEADER } from "@/lib/security/publicPages";
 import "./globals.css";
 import "./brand.css";
 import "./facade.css";
@@ -69,7 +71,9 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const headerStore = await headers();
+  const publicPage = headerStore.get(PUBLIC_PAGE_HEADER) === "1";
   return (
     <html lang="ar" dir="rtl">
       <head>
@@ -78,7 +82,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <ThemeShell>
-          <AppShell>{children}</AppShell>
+          {publicPage ? children : <AppShell>{children}</AppShell>}
         </ThemeShell>
         <PwaRegister />
       </body>

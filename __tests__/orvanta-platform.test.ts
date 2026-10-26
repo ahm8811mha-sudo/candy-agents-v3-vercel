@@ -56,7 +56,7 @@ describe("customizable agents (roadmap #5)", () => {
     expect(effective.customized).toBe(true);
     // structure untouched
     expect(effective.rank).toBe("CEO");
-    expect(effective.authorityLimitSAR).toBe(25_000);
+    expect(effective.authorityLimitSAR).toBe(0);
   });
 
   it("deactivation flags the agent but keeps them in the registry", () => {

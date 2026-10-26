@@ -11,7 +11,7 @@ describe("status labels", () => {
 
   it("names the approval gates and the financial state", () => {
     expect(approvalGateLabel("AUTO")).toBe("تلقائي ضمن الحدود");
-    expect(approvalGateLabel("OWNER")).toBe("المالك");
+    expect(approvalGateLabel("OWNER")).toBe("رئيس مجلس الإدارة");
     expect(financialStateLabel("LOSS_MAKING")).toBe("خاسر");
   });
 

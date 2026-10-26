@@ -15,7 +15,7 @@ describe("governanceOS facade (unified decision center)", () => {
       title: "Small internal report",
       entityType: "reports",
       entityId: "rep-1",
-      amount: 1_200,
+      amount: 0,
       riskLevel: "LOW",
       actorRole: "CFO",
     });
@@ -60,7 +60,7 @@ describe("governanceOS facade (unified decision center)", () => {
     expect(result.allowedToExecute).toBe(false);
     expect(result.requiresApproval).toBe(true);
     expect(result.policy.tier).toBe("T2");
-    expect(result.requiredRole).toBe("المالك");
+    expect(result.requiredRole).toBe("أحمد، رئيس مجلس الإدارة");
     expect(result.approval?.metadata?.governanceTier).toBe("T2");
     expect(listApprovals("PENDING")).toHaveLength(1);
   });
@@ -74,7 +74,7 @@ describe("governanceOS facade (unified decision center)", () => {
       riskLevel: "CRITICAL",
     });
     expect(result.policy.tier).toBe("T2");
-    expect(result.approval?.requestedRole).toBe("المالك");
+    expect(result.approval?.requestedRole).toBe("أحمد، رئيس مجلس الإدارة");
   });
 
   it("rejects unlinked actions that would create orphan approvals", async () => {
@@ -84,15 +84,21 @@ describe("governanceOS facade (unified decision center)", () => {
   });
 
   it("uses the authoritative tier matrix (no parallel 1,500 SAR rulebook)", async () => {
-    // 3,000 SAR was PENDING under the legacy approval_policies table but is
-    // T0 self-execution under the company authority matrix.
-    expect(requiredTier(3_000).tier).toBe("T0");
-    const result = await evaluateGovernedAction({
+    expect(requiredTier(3_000).tier).toBe("T2");
+    await expect(evaluateGovernedAction({
       title: "Mid-small spend",
       amount: 3_000,
       riskLevel: "LOW",
+    })).rejects.toThrow(/مرتبطاً بنوع ومعرّف/);
+    const linked = await evaluateGovernedAction({
+      title: "Mid-small spend",
+      entityType: "ops",
+      entityId: "ops-3000",
+      amount: 3_000,
+      riskLevel: "LOW",
     });
-    expect(result.allowedToExecute).toBe(true);
+    expect(linked.allowedToExecute).toBe(false);
+    expect(linked.requiresApproval).toBe(true);
   });
 
   it("repeated evaluation of the same entity does not duplicate pending items", async () => {

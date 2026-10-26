@@ -281,9 +281,9 @@ export async function evaluateRuntimePolicy(workOrder: WorkOrder, step: WorkOrde
     };
   }
   const commitmentSAR = Math.max(0, Number(step.input.commitmentSAR || 0));
-  const tier = effectiveTier(commitmentSAR || 0.01, workOrder.riskLevel);
+  const tier = effectiveTier(commitmentSAR, workOrder.riskLevel);
   const riskOk = RISK[workOrder.riskLevel] <= RISK[principal.maxAutonomousRisk];
-  const amountOk = commitmentSAR === 0 || commitmentSAR <= principal.authorityLimitSAR;
+  const amountOk = commitmentSAR === 0;
   let autonomous = tier.tier === "T0" && riskOk && amountOk;
   if (delegatedFromEmployeeId) reasons.push(`تفويض مؤقت موثق من ${delegatedFromEmployeeId} إلى ${step.employeeId}.`);
   if (!riskOk) reasons.push("مستوى المخاطر أعلى من حد الدور الأصلي.");
@@ -309,7 +309,7 @@ export async function evaluateRuntimePolicy(workOrder: WorkOrder, step: WorkOrde
     reasons.push(...absence.decision.reasons);
   }
   const approvalRequired = !autonomous;
-  const approverEmployeeId = tier.tier === "T0" ? principalId : tier.tier === "T1" ? "sultan" : "owner";
+  const approverEmployeeId = commitmentSAR > 0 || tier.tier !== "T0" ? "owner" : principalId;
   const allowed = absence.decision.allowed && (!approvalRequired || workOrder.approvalStatus === "APPROVED");
   if (!allowed && approvalRequired) reasons.push(`بانتظار اعتماد ${approverEmployeeId}.`);
   return {

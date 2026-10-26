@@ -5,9 +5,13 @@ import {
   isOwnerAccessConfigured,
   verifyOwnerAccessToken,
 } from "@/lib/security/personalAccess";
+import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
+import { PUBLIC_PAGE_HEADER, shouldServePublicDocument } from "@/lib/security/publicPages";
 
 const PUBLIC_EXACT_PATHS = new Set([
   "/login",
+  "/privacy",
+  "/terms",
   "/api/owner-access",
   "/api/health",
   // Shopify calls this without the owner cookie; the route verifies Shopify's
@@ -38,6 +42,20 @@ function isTrustedSystemRequest(req: NextRequest) {
 
 function isPublicPath(pathname: string) {
   return PUBLIC_EXACT_PATHS.has(pathname);
+}
+
+function publicDocument(req: NextRequest) {
+  const headers = new Headers(req.headers);
+  headers.set(PUBLIC_PAGE_HEADER, "1");
+  return NextResponse.next({ request: { headers } });
+}
+
+function ownerNext(req: NextRequest) {
+  const headers = new Headers(req.headers);
+  headers.delete(PUBLIC_PAGE_HEADER);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set("x-orvanta-access-mode", "personal-owner-device");
+  return response;
 }
 
 function unauthorized(req: NextRequest) {
@@ -74,6 +92,19 @@ export async function proxy(req: NextRequest) {
 
   if (isTrustedSystemRequest(req)) return NextResponse.next();
 
+  if (req.nextUrl.pathname.startsWith("/api/bridge")) {
+    const bridge = authorizeBridgeHeaders({
+      pathname: req.nextUrl.pathname,
+      agentBridgeKey: req.headers.get(AGENT_BRIDGE_HEADER),
+      chairmanDigestKey: req.headers.get(CHAIRMAN_DIGEST_HEADER),
+    });
+    const presented = Boolean(req.headers.get(AGENT_BRIDGE_HEADER) || req.headers.get(CHAIRMAN_DIGEST_HEADER));
+    if (presented && !bridge.ok) {
+      return NextResponse.json({ ok: false, error: bridge.error }, { status: bridge.status });
+    }
+    if (bridge.ok) return NextResponse.next();
+  }
+
   const configured = isOwnerAccessConfigured();
   const token = req.cookies.get(OWNER_ACCESS_COOKIE)?.value;
   const unlocked = configured && (await verifyOwnerAccessToken(token));
@@ -82,6 +113,12 @@ export async function proxy(req: NextRequest) {
     const destination = req.nextUrl.searchParams.get("next");
     const safeDestination = safeInternalDestination(destination);
     return NextResponse.redirect(new URL(safeDestination, req.url));
+  }
+
+  // Privacy, terms, and the anonymous home page answer 200. The owner
+  // device still receives the private office at /. Nothing else is opened.
+  if (shouldServePublicDocument(req.nextUrl.pathname, Boolean(unlocked))) {
+    return publicDocument(req);
   }
 
   if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
@@ -102,9 +139,7 @@ export async function proxy(req: NextRequest) {
 
   if (!unlocked) return unauthorized(req);
 
-  const response = NextResponse.next();
-  response.headers.set("x-orvanta-access-mode", "personal-owner-device");
-  return response;
+  return ownerNext(req);
 }
 
 export const config = {

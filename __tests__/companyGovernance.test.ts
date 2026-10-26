@@ -39,25 +39,21 @@ describe("authority matrix", () => {
     expect(maxes[maxes.length - 1]).toBe(Number.POSITIVE_INFINITY);
   });
 
-  it("maps amounts to the correct tier (boundaries inclusive)", () => {
-    expect(requiredTier(1_000).tier).toBe("T0");
-    expect(requiredTier(5_000).tier).toBe("T0");
-    expect(requiredTier(5_001).tier).toBe("T1");
-    expect(requiredTier(25_000).tier).toBe("T1");
-    expect(requiredTier(25_001).tier).toBe("T2");
+  it("maps zero to operations and every positive amount to the Chairman", () => {
+    expect(requiredTier(0).tier).toBe("T0");
+    expect(requiredTier(1).tier).toBe("T2");
     expect(requiredTier(100_000).tier).toBe("T2");
     expect(requiredTier(100_001).tier).toBe("T3");
   });
 
   it("invalid amounts escalate to the top tier", () => {
-    expect(requiredTier(0).tier).toBe("T3");
     expect(requiredTier(-500).tier).toBe("T3");
     expect(requiredTier(NaN).tier).toBe("T3");
   });
 
-  it("owner approval required from T2 up", () => {
-    expect(requiresOwner(25_000)).toBe(false);
-    expect(requiresOwner(25_001)).toBe(true);
+  it("owner approval is required for any positive amount", () => {
+    expect(requiresOwner(0)).toBe(false);
+    expect(requiresOwner(1)).toBe(true);
     expect(requiresOwner(500_000)).toBe(true);
   });
 
@@ -67,28 +63,24 @@ describe("authority matrix", () => {
   });
 });
 
-describe("self-approval (T0 gate)", () => {
-  it("department head may self-approve within their limit", () => {
-    expect(canSelfApprove("abdulrahman", 4_000)).toBe(true);
-    expect(canSelfApprove("abdulrahman", 5_000)).toBe(true);
+describe("self-approval", () => {
+  it("no employee may approve a positive amount", () => {
+    for (const agent of ["sultan", "abdulrahman", "noura", "fahad", "sara", "khalid", "majed", "rased", "ameen", "hares", "diwan"]) {
+      expect(canSelfApprove(agent, 1)).toBe(false);
+      expect(canSelfApprove(agent, 20_000)).toBe(false);
+    }
   });
 
-  it("department head may NOT exceed T0", () => {
-    expect(canSelfApprove("abdulrahman", 6_000)).toBe(false);
-  });
-
-  it("functional agents cannot spend alone", () => {
-    expect(canSelfApprove("rased", 100)).toBe(false);
-    expect(canSelfApprove("ameen", 1)).toBe(false);
-  });
-
-  it("sultan covers T0 and T1 but not T2", () => {
-    expect(canSelfApprove("sultan", 20_000)).toBe(true);
-    expect(canSelfApprove("sultan", 30_000)).toBe(false);
-  });
-
-  it("owner approves anything; unknown agent approves nothing", () => {
+  it("the Chairman may approve any positive amount; an unknown id may not", () => {
     expect(canSelfApprove("owner", 1_000_000)).toBe(true);
     expect(canSelfApprove("ghost", 10)).toBe(false);
+  });
+
+  it("every employee spend ceiling is zero", () => {
+    for (const agent of COMPANY_AGENTS) {
+      if (agent.id === "owner") continue;
+      expect(agent.authorityLimitSAR).toBe(0);
+    }
+    expect(getAgent("owner")?.title).toBe("رئيس مجلس الإدارة");
   });
 });

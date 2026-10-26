@@ -10,9 +10,11 @@ describe("unified inbox", () => {
   });
 
   it("includes system approvals as actionable via approvals endpoint", async () => {
-    createApproval({ type: "TRADE", title: "صفقة AAPL", detail: "d", amount: 15000 });
+    createApproval({ type: "TRADE", title: "صفقة AAPL", detail: "d" });
+    createApproval({ type: "TRADE", title: "صرف قائم", detail: "d", amount: 15000 });
     const inbox = await getInbox();
     const item = inbox.items.find((i) => i.title === "صفقة AAPL");
+    expect(inbox.items.find((i) => i.title === "صرف قائم")).toBeUndefined();
     expect(item).toBeDefined();
     expect(item!.channel).toBe("SYSTEM");
     expect(item!.actionsVia).toBe("approvals");

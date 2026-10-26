@@ -14,9 +14,9 @@ import { hasPermission, isAuthEnabled } from "../auth";
 /** Minimum role required to sign off each tier. */
 const TIER_MIN_ROLE: Record<string, UserRole> = {
   T0: "MANAGER",
-  T1: "CEO",
-  T2: "ADMIN", // the owner
-  T3: "ADMIN", // the owner (+ feasibility, enforced upstream)
+  T1: "ADMIN",
+  T2: "ADMIN",
+  T3: "ADMIN",
 };
 
 export function minRoleForTier(tier: string): UserRole {

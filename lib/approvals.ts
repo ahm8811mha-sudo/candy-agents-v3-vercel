@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { persist, persistCritical, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
 import { getTenantId } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
+import { blankSpendChain, employeeActorBlocked, isMonetarySpend, isOwnerReadySpend, readSpendChain } from "./company/spendChain";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED";
@@ -149,9 +150,30 @@ function buildApproval(input: CreateApprovalInput): ApprovalItem {
     requestedRole: input.requestedRole || "CEO",
     status: "PENDING",
     createdAt: new Date().toISOString(),
-    metadata: { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) },
+    metadata: spendMetadata(input),
     dedupeKey: input.dedupeKey,
   };
+}
+
+function spendMetadata(input: CreateApprovalInput): Record<string, unknown> {
+  const metadata: Record<string, unknown> = { ...input.metadata, ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}) };
+  if (!isMonetarySpend(input.amount) || metadata.spendChain) return metadata;
+  return {
+    ...metadata,
+    spendChain: blankSpendChain({
+      amountSAR: Number(input.amount),
+      subject: input.title,
+      preparingAgentId: typeof metadata.preparingAgentId === "string" ? metadata.preparingAgentId : "department",
+    }),
+  };
+}
+
+export function writeApproval(item: ApprovalItem): ApprovalItem {
+  const index = store.findIndex((approval) => approval.id === item.id);
+  if (index >= 0) store[index] = item;
+  else store.unshift(item);
+  persist("company_approvals", toRow(item));
+  return item;
 }
 
 async function findDurableApproval(id: string, dedupeKey?: string, tenantId = getTenantId()): Promise<ApprovalItem | null> {
@@ -219,6 +241,18 @@ export function decideApproval(
   const item = store.find((a) => a.id === id);
   if (!item) return null;
   if (item.status !== "PENDING") return item;
+  if (decision === "APPROVED" && isMonetarySpend(item.amount)) {
+    if (!isOwnerReadySpend(readSpendChain(item))) {
+      throw new Error("الطلب المالي لم يكتمل في سلسلة المراجعة، ولن يُعتمد قبل ذلك.");
+    }
+    if (employeeActorBlocked(decidedBy)) {
+      throw new Error("لا يملك أي موظف صلاحية اعتماد الصرف.");
+    }
+    item.metadata = {
+      ...item.metadata,
+      spendChain: { ...readSpendChain(item), stage: "decided", decision, decidedAt: new Date().toISOString() },
+    };
+  }
   item.status = decision;
   item.decidedAt = new Date().toISOString();
   item.decidedBy = decidedBy;

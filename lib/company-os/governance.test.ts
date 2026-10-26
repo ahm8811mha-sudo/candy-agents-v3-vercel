@@ -4,7 +4,8 @@ import { approvalRoute, classifyRisk, mayAutoExecute, validateDecisionSeparation
 describe("company OS governance", () => {
   it("classifies reversible low-cost work as LOW", () => {
     expect(classifyRisk({ commitmentSAR: 3_000 })).toBe("LOW");
-    expect(mayAutoExecute("LOW", 3_000)).toBe(true);
+    expect(mayAutoExecute("LOW", 3_000)).toBe(false);
+    expect(mayAutoExecute("LOW", 0)).toBe(true);
   });
 
   it("raises customer-facing work to MEDIUM", () => {

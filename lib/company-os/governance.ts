@@ -8,7 +8,7 @@ export const RISK_POLICIES: Record<RiskLevel, GovernancePolicy> = {
       "إنشاء تقرير داخلي",
       "إعادة ترتيب مهمة",
       "إنشاء مستند أولي",
-      "تجربة داخلية تقل عن 5,000 ريال",
+      "تجربة داخلية بلا التزام مالي",
     ],
     approvers: [],
     controls: [
@@ -19,7 +19,7 @@ export const RISK_POLICIES: Record<RiskLevel, GovernancePolicy> = {
       "تسجيل تدقيق إلزامي",
     ],
     requiredDocumentation: ["سجل الإجراء", "النتيجة المتوقعة", "دليل التنفيذ"],
-    maximumAutomaticCommitmentSAR: 5_000,
+    maximumAutomaticCommitmentSAR: 0,
   },
   MEDIUM: {
     level: "MEDIUM",
@@ -142,7 +142,7 @@ export function approvalRoute(level: RiskLevel): ExecutiveRole[] {
 
 export function mayAutoExecute(level: RiskLevel, commitmentSAR = 0) {
   const policy = RISK_POLICIES[level];
-  return level === "LOW" && commitmentSAR <= policy.maximumAutomaticCommitmentSAR;
+  return level === "LOW" && commitmentSAR <= 0 && commitmentSAR <= policy.maximumAutomaticCommitmentSAR;
 }
 
 export function validateDecisionSeparation(input: {

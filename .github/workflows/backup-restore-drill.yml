@@ -1,31 +1,41 @@
 name: Backup Restore Drill
 
+# Takes a logical dump of production and restores it into the isolated
+# project jejdisbbtgkmpkredxtv, then runs scripts/verify-restore.mjs.
+# The dump is deleted at the end of the job and is never uploaded.
+# Connection strings are not printed.
+
 on:
   workflow_dispatch:
     inputs:
       backup_reference:
-        description: Backup identifier or timestamp restored into the isolated target
+        description: Identifier recorded on the backup_verification_runs row
         required: true
         type: string
       restore_target:
-        description: Isolated Supabase project or branch identifier
+        description: Must be the isolated project ref jejdisbbtgkmpkredxtv
         required: true
+        default: jejdisbbtgkmpkredxtv
         type: string
 
 permissions:
   contents: read
 
 jobs:
-  verify-restored-database:
+  restore-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     env:
       RESTORE_SUPABASE_URL: ${{ secrets.RESTORE_SUPABASE_URL }}
       RESTORE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.RESTORE_SUPABASE_SERVICE_ROLE_KEY }}
       PRODUCTION_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
       PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+      PRODUCTION_DB_URL: ${{ secrets.PRODUCTION_DB_URL }}
+      RESTORE_DB_URL: ${{ secrets.RESTORE_DB_URL }}
       BACKUP_REFERENCE: ${{ inputs.backup_reference }}
       RESTORE_TARGET: ${{ inputs.restore_target }}
+      APPROVED_RESTORE_PROJECT_REF: jejdisbbtgkmpkredxtv
+      DUMP_PATH: ${{ runner.temp }}/orvanta-production.dump
 
     steps:
       - uses: actions/checkout@v4
@@ -35,11 +45,95 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Require the database URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PRODUCTION_DB_URL:-}" ] || [ -z "${RESTORE_DB_URL:-}" ]; then
+            echo "::error::PRODUCTION_DB_URL and RESTORE_DB_URL must both be set. Values are not printed."
+            exit 1
+          fi
+
+      - name: Refuse a restore target that can reach production
+        shell: bash
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/ops/restoreTargetGuard.ts
+
+      - name: Install the PostgreSQL client that matches production
+        id: client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client curl ca-certificates
+          version_file="$RUNNER_TEMP/server-version.txt"
+          if ! psql "$PRODUCTION_DB_URL" -Atqc "SHOW server_version_num;" >"$version_file" 2>"$RUNNER_TEMP/psql.err"; then
+            echo "::error::Could not read the production server version. Connection details were not printed."
+            rm -f "$RUNNER_TEMP/psql.err" "$version_file"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/psql.err"
+          version_num=$(tr -cd '0-9' <"$version_file")
+          rm -f "$version_file"
+          major=$((version_num / 10000))
+          if [ "$major" -lt 14 ] || [ "$major" -gt 18 ]; then
+            echo "::error::Refusing an unexpected PostgreSQL major version."
+            exit 1
+          fi
+          echo "PostgreSQL client major ${major} matches production."
+          if [ ! -x "/usr/lib/postgresql/${major}/bin/pg_dump" ]; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            . /etc/os-release
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            sudo apt-get update
+            sudo apt-get install -y "postgresql-client-${major}"
+          fi
+          echo "/usr/lib/postgresql/${major}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${major}/bin/pg_dump" --version
+
+      - name: Dump production
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pg_dump "$PRODUCTION_DB_URL" -Fc --no-owner --no-privileges --file "$DUMP_PATH" 2>"$RUNNER_TEMP/pgdump.err"; then
+            echo "::error::pg_dump failed. Details were withheld so a connection string cannot leak."
+            rm -f "$RUNNER_TEMP/pgdump.err" "$DUMP_PATH"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/pgdump.err"
+          if [ ! -s "$DUMP_PATH" ]; then
+            echo "::error::pg_dump produced an empty file."
+            exit 1
+          fi
+          echo "Production dump is $(wc -c < "$DUMP_PATH") bytes. It is deleted at the end of this job."
+
+      - name: Restore into the isolated database
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lib/ops/restoreTargetGuard.ts
+          if ! pg_restore --no-owner --clean --if-exists --dbname "$RESTORE_DB_URL" "$DUMP_PATH" 2>"$RUNNER_TEMP/pgrestore.err"; then
+            echo "::error::pg_restore failed. Details were withheld so a connection string cannot leak."
+            rm -f "$RUNNER_TEMP/pgrestore.err"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/pgrestore.err"
+
       - name: Install locked dependencies
         run: npm ci
 
       - name: Verify restored core data and record evidence
         run: node scripts/verify-restore.mjs | tee restore-verification.json
+
+      - name: Delete the production dump
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$DUMP_PATH" "$RUNNER_TEMP/pgdump.err" "$RUNNER_TEMP/pgrestore.err" "$RUNNER_TEMP/psql.err" "$RUNNER_TEMP/server-version.txt"
+          if [ -e "$DUMP_PATH" ]; then
+            echo "::error::The production dump is still on disk."
+            exit 1
+          fi
 
       - name: Upload restore evidence
         if: always()
