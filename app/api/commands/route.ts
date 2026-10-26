@@ -22,10 +22,13 @@ export async function POST(req: Request) {
     const command = String(body.command ?? body.text ?? "").trim();
     if (command.length < 3) return NextResponse.json({ ok: false, message: "الأمر قصير." }, { status: 400 });
     const priority = ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(body.priority) ? body.priority : "HIGH";
-    const issued = await issueChairmanCommand(command, { priority });
+    const assignee = body.assignee == null ? undefined : String(body.assignee);
+    const issued = await issueChairmanCommand(command, { priority, assignee });
     return NextResponse.json({ ok: true, command: publicCommandStatus(issued) });
   } catch (error) {
     await logError("CHAIRMAN_COMMAND_FAILED", error);
-    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "تعذر تسجيل الأمر." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "تعذر تسجيل الأمر.";
+    const status = /غير معروف|قصير/.test(message) ? 400 : 500;
+    return NextResponse.json({ ok: false, message }, { status });
   }
 }

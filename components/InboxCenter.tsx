@@ -34,6 +34,7 @@ import {
   History,
 } from "lucide-react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
+import { commandStatusLabel } from "@/lib/company/commandStatusLabel";
 import Link from "next/link";
 
 type InboxItem = {
@@ -329,6 +330,8 @@ export default function InboxCenter() {
 
       <section style={{ margin: "8px 0 28px" }}>
         <h2 style={{ fontSize: "1.15rem", margin: "0 0 12px" }}>أوامر رئيس مجلس الإدارة</h2>
+        <p className="page-sub" style={{ margin: "0 0 12px" }}>يُكتب الأمر من مساحة العمل، وتُفتح بطاقته في صفحة الأوامر.</p>
+        <p style={{ margin: "0 0 16px" }}><Link href="/commands">فتح الأوامر</Link></p>
         {commands.length === 0 ? (
           <p className="page-sub">لا أوامر مسجّلة.</p>
         ) : (
@@ -339,7 +342,7 @@ export default function InboxCenter() {
                 <span>
                   {command.ownerName}
                   {" · "}
-                  {command.status === "CLOSED" ? "مغلق" : command.status === "BLOCKED" ? "متوقف" : command.status === "AWAITING_CHAIRMAN" ? "بانتظار الاعتماد" : command.status === "IN_SPEND_CHAIN" ? "في سلسلة الصرف" : "قيد العمل"}
+                  {commandStatusLabel(command.status)}
                   {" · "}
                   {command.currentStep}
                 </span>

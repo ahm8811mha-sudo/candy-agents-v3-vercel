@@ -268,3 +268,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .file-field:has(.file-field__input:focus-visible){outline:3px solid #9b631f;outline-offset:3px}
 .executive-shell .request-copy h1{font-size:clamp(26px,2.75vw,40px);letter-spacing:-.04em;line-height:1.6;font-weight:750;margin:5px 0 8px;color:var(--text-strong)}
 .executive-shell .request-copy p{font-size:12px;line-height:1.9;color:var(--muted)}
+
+.executive-shell .shell-sidebar{overflow-y:auto}
+.chairman-order{display:grid;gap:14px;margin:0 0 28px;padding:20px 18px 18px;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--primary)}
+.chairman-order h2{margin:0;font-size:22px;line-height:1.6}
+.chairman-order p{margin:6px 0 0;max-width:40rem;font-size:12px;line-height:1.8;color:var(--muted)}
+.chairman-order .field-label{margin:0;color:var(--text);font-size:12px}
+.chairman-order .order-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.chairman-order textarea.input{min-height:120px}
+.chairman-order .primary-btn{width:fit-content;min-height:48px}
+.chairman-order .order-feedback{margin:0;color:var(--text);font-size:13px;line-height:1.7}
+.chairman-order .order-feedback[role="alert"]{color:var(--red)}
+.chairman-order .order-feedback a{color:var(--primary);font-weight:700}
+.command-list{border-top:1px solid var(--line)}
+.command-card{padding:18px 0 20px;border-bottom:1px solid var(--line);scroll-margin-top:88px}
+.command-card.is-current{background:#e5e9de;padding-inline:12px}
+.command-card h3{margin:0 0 12px;font-size:16px;line-height:1.7;font-weight:700;overflow-wrap:anywhere}
+.command-facts{display:grid;gap:10px;margin:0}
+.command-facts div{display:grid;grid-template-columns:8.5rem minmax(0,1fr);gap:8px 12px;align-items:start}
+.command-facts dt{margin:0;color:var(--muted);font-size:12px}
+.command-facts dd{margin:0;font-size:13px;line-height:1.7;overflow-wrap:anywhere;color:var(--text)}
+.command-result{white-space:pre-wrap}
+@media(max-width:650px){
+  .chairman-order{padding:16px 14px}
+  .chairman-order .order-fields{grid-template-columns:minmax(0,1fr)}
+  .chairman-order .primary-btn{width:100%}
+  .command-facts div{grid-template-columns:minmax(0,1fr);gap:2px}
+  .command-card.is-current{padding-inline:10px}
+}

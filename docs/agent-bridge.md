@@ -10,8 +10,8 @@ Set these in Vercel. Do not commit them.
 
 | Name | Who it admits |
 |---|---|
-| `AGENT_BRIDGE_KEY` | Every `/api/bridge/agents` route, and the Chairman digest |
-| `AGENT_BRIDGE_KEY_SARA` (optional, one per employee, upper case id) | Only that employee's routes. Not the digest and not another employee |
+| `AGENT_BRIDGE_KEY` | Every `/api/bridge/agents` route, `GET /api/bridge/commands`, and the Chairman digest |
+| `AGENT_BRIDGE_KEY_SARA` (optional, one per employee, upper case id) | Only that employee's routes. Not the command poll, not the digest, and not another employee |
 | `CHAIRMAN_DIGEST_KEY` (optional) | `GET /api/bridge/chairman/digest` only |
 
 Header names: `x-agent-bridge-key` and `x-chairman-digest-key`. A wrong key is rejected. The owner cookie alone is not enough for these routes.
@@ -76,10 +76,28 @@ Spend order: department, then Abdulrahman (`موافق` / `مشروط` / `غير
 `POST /api/commands` with the owner session:
 
 ```json
-{ "command": "جهزي عرض سعر للعميل الحالي بدون إرسال" }
+{ "command": "جهزي عرض سعر للعميل الحالي بدون إرسال", "assignee": "automatic" }
 ```
 
+`assignee` is optional. Omit it, or send `automatic`, and the text is routed by name first (`خالد: …`, `يا سارة …`, or `@sara`) and then by subject. A real employee id such as `khalid` overrides the text. `owner` is not an assignee.
+
+The Chairman writes the order at the top of مساحة العمل, and again on `/commands`. The form has the text, an employee menu that defaults to تلقائي, a priority, and one submit button. After it is saved, the page names the employee and links to that command’s card. `/commands` lists every command from `GET /api/commands` and refreshes itself. Both pages require the owner session. The same `POST` body is sent.
+
+Each command is written to `chairman_commands`. A later read on another instance loads that row, so `GET /api/commands` and `/api/bridge/agents/{id}/inbox` see it. If the table is missing, the command stays in the current process only.
+
 `GET /api/commands` and the inbox page show the owner, the current step, blockers, and the result. Money goes through the spend chain. External sends stay blocked until the Chairman approves them. Rayyan tracks each command until it closes with evidence.
+
+## Open-command poll
+
+`GET /api/bridge/commands?since=2026-10-26T00:00:00.000Z`
+
+Authorized only by `AGENT_BRIDGE_KEY`. One dispatcher can poll this instead of every employee inbox. The response lists open commands whose `updatedAt` or `createdAt` is at or after `since`:
+
+```json
+{ "ok": true, "since": "2026-10-26T00:00:00.000Z", "commands": [{ "id": "cmd-example", "subject": "خالد: جهّز مقارنة موردين", "status": "IN_PROGRESS", "ownerAgentId": "khalid", "updatedAt": "2026-10-26T08:00:00.000Z" }] }
+```
+
+Closed commands are left out. A missing or unparseable `since` is 400. The call does not write, does not approve spend, and does not send anything outside the company.
 
 ## Chairman digest
 
