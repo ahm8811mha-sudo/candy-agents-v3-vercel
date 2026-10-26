@@ -66,6 +66,9 @@ vi.mock("../supabase", async (importOriginal) => {
         not() {
           return api;
         },
+        range() {
+          return api;
+        },
         gte() {
           return api;
         },
@@ -90,6 +93,7 @@ vi.mock("../supabase", async (importOriginal) => {
               .map((row) => ({ payload: row.payload }));
             return Promise.resolve({ data, error: null }).then(resolve);
           }
+          if (state.op === "select") return Promise.resolve({ data: [], error: null }).then(resolve);
           return Promise.resolve({ data: null, error: { message: "table unavailable in test", code: "42P01" } }).then(resolve);
         },
       };
