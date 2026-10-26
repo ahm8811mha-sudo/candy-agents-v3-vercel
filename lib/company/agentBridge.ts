@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { COMPANY_AGENTS, getAgent } from "./agents";
-import { listApprovals, writeApproval, type ApprovalItem } from "../approvals";
+import { hydrateApprovals, listApprovals, writeApprovalCritical, type ApprovalItem } from "../approvals";
 import {
   advanceSpendChain,
   agentMayApproveSpend,
@@ -79,6 +79,15 @@ export function listBridgeMessages(agentId?: string): BridgeMessage[] {
   return messages.filter((message) => !agentId || message.agentId === agentId).slice(0, 50);
 }
 
+/** Raised when a durable write fails; routes map it to HTTP 500 so callers never see a false 200. */
+export class DurableWriteError extends Error {
+  readonly durable = true;
+  constructor(message: string, readonly causeError?: unknown) { super(message); this.name = "DurableWriteError"; }
+}
+export function isDurableWriteError(error: unknown): boolean {
+  return error instanceof Error && (error as { durable?: boolean }).durable === true;
+}
+
 export async function postBridgeMessage(agentId: string, input: unknown): Promise<BridgeMessage> {
   if (!isBridgeAgent(agentId)) throw new Error("موظف غير معروف.");
   const body = messageSchema.parse(input);
@@ -106,7 +115,7 @@ export async function postBridgeMessage(agentId: string, input: unknown): Promis
     if (error) {
       const text = `${error.code || ""} ${error.message || ""}`;
       if (!/42P01|PGRST205|does not exist|schema cache|Could not find the table/i.test(text)) {
-        throw new Error("تعذر حفظ الرسالة.");
+        throw new DurableWriteError("تعذر حفظ الرسالة.", error);
       }
     }
   }
@@ -240,13 +249,20 @@ export async function postBridgeAction(agentId: string, input: unknown) {
     return { kind: "command" as const, command: publicCommandStatus(command) };
   }
   if (!body.approvalId) throw new Error("يلزم معرّف طلب الصرف.");
+  // Always read the current state from the DB; never trust this instance's memory.
+  await hydrateApprovals();
   const item = listApprovals().find((approval) => approval.id === body.approvalId);
   if (!item) throw new Error("طلب الصرف غير موجود.");
   const state = readSpendChain(item);
   if (!state) throw new Error("هذا العنصر ليس طلباً مالياً.");
   const next = advanceSpendChain(state, agentId, asAdvance(agentId, body));
   if (next.decision) throw new Error("لا يملك أي موظف صلاحية اعتماد الصرف.");
-  const saved = writeApproval({ ...item, metadata: { ...item.metadata, spendChain: next } });
+  let saved: ApprovalItem;
+  try {
+    saved = await writeApprovalCritical({ ...item, metadata: { ...item.metadata, spendChain: next } });
+  } catch (error) {
+    throw new DurableWriteError("تعذر حفظ إجراء الصرف في قاعدة البيانات؛ لم يُعتمد التغيير. أعد المحاولة.", error);
+  }
   return {
     kind: "spend" as const,
     approvalId: saved.id,

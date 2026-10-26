@@ -1,3 +1,4 @@
+import { isDurableWriteError } from "@/lib/company/agentBridge";
 import { NextRequest, NextResponse } from "next/server";
 import { listBridgeMessages, postBridgeMessage } from "@/lib/company/agentBridge";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
@@ -33,6 +34,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentK
     const message = await postBridgeMessage(agentKey, body);
     return NextResponse.json({ ok: true, message });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر حفظ الرسالة." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر حفظ الرسالة." }, { status: isDurableWriteError(error) ? 500 : 400 });
   }
 }

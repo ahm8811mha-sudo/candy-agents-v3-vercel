@@ -168,6 +168,15 @@ function spendMetadata(input: CreateApprovalInput): Record<string, unknown> {
   };
 }
 
+/** Durable write: resolves only after the DB upsert succeeds; memory is updated afterwards. */
+export async function writeApprovalCritical(item: ApprovalItem): Promise<ApprovalItem> {
+  if (hasSupabaseEnv()) await persistCritical("company_approvals", toRow(item));
+  const index = store.findIndex((approval) => approval.id === item.id);
+  if (index >= 0) store[index] = item;
+  else store.unshift(item);
+  return item;
+}
+
 export function writeApproval(item: ApprovalItem): ApprovalItem {
   const index = store.findIndex((approval) => approval.id === item.id);
   if (index >= 0) store[index] = item;
