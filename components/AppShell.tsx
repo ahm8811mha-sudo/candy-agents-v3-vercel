@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Inbox, ClipboardCheck, FolderKanban, FileText, Menu, X, ArrowUpLeft } from "lucide-react";
+import { LayoutDashboard, Inbox, ClipboardCheck, FolderKanban, FileText, ScrollText, Menu, X, ArrowUpLeft } from "lucide-react";
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
 import SessionControl from "./SessionControl";
 
 const primary = [
   { href: "/", label: "مساحة العمل", icon: LayoutDashboard },
+  { href: "/commands", label: "الأوامر", icon: ScrollText },
   { href: "/ideas", label: "الأفكار والدراسات", icon: FileText },
   { href: "/inbox", label: "مكتب القرار", icon: Inbox },
   { href: "/projects", label: "المشاريع والتنفيذ", icon: FolderKanban },

@@ -16,7 +16,7 @@
  *    reaching for the mouse.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Inbox,
   Loader2,
@@ -34,7 +34,7 @@ import {
   History,
 } from "lucide-react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
-import { COMPANY_AGENTS } from "@/lib/company/agents";
+import { commandStatusLabel } from "@/lib/company/commandStatusLabel";
 import Link from "next/link";
 
 type InboxItem = {
@@ -107,10 +107,6 @@ export default function InboxCenter() {
   const [deferError, setDeferError] = useState("");
   const [showLog, setShowLog] = useState(false);
   const [execMsg, setExecMsg] = useState<{ text: string; ok: boolean; href?: string } | null>(null);
-  const [commandText, setCommandText] = useState("");
-  const [assignee, setAssignee] = useState("automatic");
-  const [issuing, setIssuing] = useState(false);
-  const [commandNotice, setCommandNotice] = useState("");
   const detailRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -315,37 +311,6 @@ export default function InboxCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, busy, move, panel]);
 
-  async function issueCommand(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = commandText.trim();
-    if (text.length < 3) {
-      setCommandNotice("الأمر قصير.");
-      return;
-    }
-    setIssuing(true);
-    setCommandNotice("");
-    try {
-      const res = await fetch("/api/commands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: text, assignee }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.message || "تعذر تسجيل الأمر.");
-      if (json.command?.id) {
-        setCommands((current) => [json.command, ...current.filter((item) => item.id !== json.command.id)]);
-      }
-      setCommandText("");
-      setAssignee("automatic");
-      setCommandNotice("سُجّل الأمر.");
-      await load();
-    } catch (error) {
-      setCommandNotice(error instanceof Error ? error.message : "تعذر تسجيل الأمر.");
-    } finally {
-      setIssuing(false);
-    }
-  }
-
   function select(item: InboxItem) {
     setSelectedId(item.id);
     // On a phone the detail sits under the queue; bring it into view.
@@ -365,32 +330,8 @@ export default function InboxCenter() {
 
       <section style={{ margin: "8px 0 28px" }}>
         <h2 style={{ fontSize: "1.15rem", margin: "0 0 12px" }}>أوامر رئيس مجلس الإدارة</h2>
-        <form onSubmit={issueCommand} style={{ display: "grid", gap: 12, margin: "0 0 18px", maxWidth: 640 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>الأمر</span>
-            <textarea
-              className="textarea compact"
-              name="command"
-              value={commandText}
-              onChange={(event) => setCommandText(event.target.value)}
-              rows={3}
-              placeholder="خالد: جهّز مقارنة موردين"
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span>الموظف المسؤول</span>
-            <select className="input" name="assignee" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-              <option value="automatic">تلقائي</option>
-              {COMPANY_AGENTS.filter((agent) => agent.id !== "owner").map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name}</option>
-              ))}
-            </select>
-          </label>
-          <button className="primary-btn" type="submit" disabled={issuing} style={{ width: "fit-content" }}>
-            إصدار الأمر
-          </button>
-          {commandNotice ? <p className="page-sub" style={{ margin: 0 }}>{commandNotice}</p> : null}
-        </form>
+        <p className="page-sub" style={{ margin: "0 0 12px" }}>يُكتب الأمر من مساحة العمل، وتُفتح بطاقته في صفحة الأوامر.</p>
+        <p style={{ margin: "0 0 16px" }}><Link href="/commands">فتح الأوامر</Link></p>
         {commands.length === 0 ? (
           <p className="page-sub">لا أوامر مسجّلة.</p>
         ) : (
@@ -401,7 +342,7 @@ export default function InboxCenter() {
                 <span>
                   {command.ownerName}
                   {" · "}
-                  {command.status === "CLOSED" ? "مغلق" : command.status === "BLOCKED" ? "متوقف" : command.status === "AWAITING_CHAIRMAN" ? "بانتظار الاعتماد" : command.status === "IN_SPEND_CHAIN" ? "في سلسلة الصرف" : "قيد العمل"}
+                  {commandStatusLabel(command.status)}
                   {" · "}
                   {command.currentStep}
                 </span>

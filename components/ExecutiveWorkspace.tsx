@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpLeft, RefreshCw, Plus, ArrowLeft, CircleAlert } from "lucide-react";
+import ChairmanCommandComposer from "./ChairmanCommandComposer";
 
 type Workspace = {
   asOf: string;
@@ -35,6 +36,7 @@ export default function ExecutiveWorkspace() {
       <div><h1>الشركة، بوضوح.</h1><p className="workspace-intro">ما يحتاج قرارك. ما يوقف التنفيذ. وما يأتي بعده.</p></div>
       <Link className="primary-btn" href="/ideas?new=1"><Plus size={17} /> فتح ملف فكرة</Link>
     </header>
+    <ChairmanCommandComposer />
     <div className="workspace-dateline"><span>النجمة الذهبية <span aria-hidden> / </span> سجل العمل</span><button className="text-action" onClick={() => void load()} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />{loading ? "جارٍ القراءة" : "تحديث البيانات"}</button></div>
     {error ? <div className="workspace-notice is-error" role="alert"><CircleAlert size={20} /><div><strong>لا يمكن تأكيد الحالة الحالية</strong><p>{error}</p>{data ? <small>المعروض أدناه آخر قراءة ناجحة؛ قد لا يكون محدثاً.</small> : null}</div></div> : null}
     {!data && loading ? <p className="workspace-empty" role="status">جارٍ قراءة سجلات الشركة…</p> : null}

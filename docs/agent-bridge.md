@@ -81,7 +81,7 @@ Spend order: department, then Abdulrahman (`موافق` / `مشروط` / `غير
 
 `assignee` is optional. Omit it, or send `automatic`, and the text is routed by name first (`خالد: …`, `يا سارة …`, or `@sara`) and then by subject. A real employee id such as `khalid` overrides the text. `owner` is not an assignee.
 
-The inbox page is where the Chairman writes that order: one text field, an employee picker that defaults to تلقائي, and one submit button. The same `POST` body is sent.
+The Chairman writes the order at the top of مساحة العمل, and again on `/commands`. The form has the text, an employee menu that defaults to تلقائي, a priority, and one submit button. After it is saved, the page names the employee and links to that command’s card. `/commands` lists every command from `GET /api/commands` and refreshes itself. Both pages require the owner session. The same `POST` body is sent.
 
 Each command is written to `chairman_commands`. A later read on another instance loads that row, so `GET /api/commands` and `/api/bridge/agents/{id}/inbox` see it. If the table is missing, the command stays in the current process only.
 
