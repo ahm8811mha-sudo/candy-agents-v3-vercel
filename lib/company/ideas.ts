@@ -96,7 +96,28 @@ export async function readIdeasCritical(tenantId = getTenantId()): Promise<Idea[
 export async function hydrateIdeas() {
   if (!getSupabaseAdmin()) return;
   const rows = await readIdeasCritical();
-  store.splice(0, store.length, ...rows);
+  const durableIds = new Set(rows.map((row) => row.id));
+  store.splice(0, store.length, ...rows, ...store.filter((idea) => !durableIds.has(idea.id)));
+  restoreIdeaApprovals();
+}
+
+/**
+ * A durable idea that is ready for the Chairman's decision must have its
+ * approval. If the approval row never landed (it was only in an instance's
+ * memory), rebuild it from the durable study so the decision is not lost.
+ * Never decides anything: the restored item is PENDING with the same id.
+ */
+export function restoreIdeaApprovals(): string[] {
+  const known = new Set(listApprovals().map((approval) => approval.id));
+  const restored: string[] = [];
+  for (const idea of store) {
+    if (!idea.approvalId || known.has(idea.approvalId) || idea.decisionStatus) continue;
+    if (idea.status !== "PENDING_APPROVAL" || !idea.aggregate?.assessment?.readyForDecision) continue;
+    createApproval({ id: idea.approvalId, type: "IDEA", title: "فكرة: " + idea.title, detail: idea.aggregate.summary, amount: idea.budgetSAR, requestedRole: idea.tierLabel, metadata: { ideaId: idea.id, tier: idea.tier }, dedupeKey: "idea-" + idea.id });
+    restored.push(idea.approvalId);
+  }
+  if (restored.length) console.warn("[orvanta:ideas] restored missing idea approvals", { count: restored.length, ids: restored });
+  return restored;
 }
 function applyDecision(idea: Idea, status?: string) {
   if (!status) return;

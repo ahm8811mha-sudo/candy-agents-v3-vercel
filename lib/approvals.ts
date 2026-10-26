@@ -106,7 +106,21 @@ export async function hydrateApprovals(tenantId = getTenantId()) {
     rows.push(...(data || []).map(fromRow));
     if (!data || data.length < 250) break;
   }
-  store.splice(0, store.length, ...rows);
+  // Merge, never replace: the durable row wins for every id it has, and an item
+  // that only lives in this instance (a fire-and-forget write that has not
+  // landed, or failed) is kept and re-queued for persistence instead of dropped.
+  const durableIds = new Set(rows.map((row) => row.id));
+  const memoryOnly = store.filter((item) => !durableIds.has(item.id));
+  store.splice(0, store.length, ...rows, ...memoryOnly);
+  store.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pendingMemoryOnly = memoryOnly.filter((item) => item.status === "PENDING" || item.status === "DEFERRED");
+  if (pendingMemoryOnly.length) {
+    console.warn("[orvanta:approvals] pending approvals missing from company_approvals; re-persisting", {
+      count: pendingMemoryOnly.length,
+      ids: pendingMemoryOnly.map((item) => item.id),
+    });
+    for (const item of pendingMemoryOnly) persist("company_approvals", toRow(item));
+  }
 }
 
 export type CreateApprovalInput = {
