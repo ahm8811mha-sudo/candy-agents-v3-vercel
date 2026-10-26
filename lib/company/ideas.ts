@@ -243,6 +243,30 @@ function addNote(idea: Idea, agentId: string, verdict: Verdict, note: string) {
   idea.recommendations.push({ agentId, agentName: agent.name, agentTitle: agent.title, verdict, confidence: (idea.aggregate?.assessment?.coverage || 0) / 100, report: note, createdAt: new Date().toISOString(), origin: "OWNER_NOTE" });
   summarize(idea, idea.aggregate?.assessment || assessIdea(idea.budgetSAR));
 }
+/** Normalizes a title for duplicate detection (case, whitespace, punctuation, Arabic diacritics/letter variants). */
+export function normalizeIdeaTitle(title: string): string {
+  return String(title || "").normalize("NFKC").toLowerCase()
+    .replace(/^فكرة:\s*/, "")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+/**
+ * Picks the first signal that duplicates neither an existing idea (any age, by generationKey or
+ * normalized title) nor an open approval/spend request (by normalized title). No time window:
+ * the old 30-day window let the same signals be re-proposed every month.
+ */
+export function pickNewSignal(signals: OperatingSignal[], existing: Pick<Idea, "title" | "aggregate">[], openApprovalTitles: string[] = []) {
+  const keys = new Set(existing.map((i) => i.aggregate?.generationKey).filter(Boolean));
+  const titles = new Set([...existing.map((i) => normalizeIdeaTitle(i.title)), ...openApprovalTitles.map(normalizeIdeaTitle)].filter(Boolean));
+  const skipped: { key: string; title: string; reason: "DUPLICATE_KEY" | "DUPLICATE_TITLE" }[] = [];
+  for (const s of signals) {
+    if (keys.has(s.key)) { skipped.push({ key: s.key, title: s.title, reason: "DUPLICATE_KEY" }); continue; }
+    if (titles.has(normalizeIdeaTitle(s.title))) { skipped.push({ key: s.key, title: s.title, reason: "DUPLICATE_TITLE" }); continue; }
+    return { signal: s, skipped };
+  }
+  return { signal: undefined, skipped };
+}
 export async function generateDailyIdeaCritical(tenantId = getTenantId(), actor = "system", now = new Date()) {
   const existing = await readIdeasCritical(tenantId);
   const dayKey = now.toISOString().slice(0, 10);
@@ -254,10 +278,12 @@ export async function generateDailyIdeaCritical(tenantId = getTenantId(), actor 
     client.from("tasks").select("id,title").eq("tenant_id", tenantId).eq("status", "BLOCKED").order("created_at").limit(100),
   ]);
   if (inventory.error || blocked.error) throw new Error("تعذر قراءة البيانات اللازمة لرصد الفرص. لم يُنشأ اقتراح بديل غير مسند.");
-  const recentKeys = new Set(existing.filter((i) => Date.parse(i.createdAt) >= now.getTime() - 30 * 86_400_000).map((i) => i.aggregate?.generationKey));
   const signals = opportunitiesFromRecords({ inventory: (inventory.data || []).map((r) => ({ ...r, on_hand: Number(r.on_hand), reorder_point: Number(r.reorder_point), unit_cost: Number(r.unit_cost) })), blockedTasks: blocked.data || [] });
-  const signal = signals.find((s) => !recentKeys.has(s.key));
-  if (!signal) return { idea: null, created: false, reason: "لا توجد إشارة تشغيلية جديدة كافية في بيانات المخزون والمهام. أضف بيانات أو قدّم فكرة لدراستها." };
+  const openApprovals = await client.from("company_approvals").select("id,title,status").eq("tenant_id", tenantId).eq("status", "PENDING").limit(1000);
+  if (openApprovals.error) throw new Error("تعذر قراءة طلبات الاعتماد المفتوحة. لم يُنشأ اقتراح لتجنب التكرار.");
+  const { signal, skipped } = pickNewSignal(signals, existing, (openApprovals.data || []).map((a) => String(a.title || "")));
+  if (skipped.length) console.info("[daily-idea] skipped duplicate signals", { tenantId, dayKey, skipped });
+  if (!signal) return { idea: null, created: false, skipped, reason: "لا توجد إشارة تشغيلية جديدة كافية في بيانات المخزون والمهام. أضف بيانات أو قدّم فكرة لدراستها." };
   const idea = await submitIdeaCritical(signalInput(signal, dayKey, tenantId), tenantId, actor);
   return { idea, created: true, reason: "رُصد اقتراح من بيانات الشركة، ويحتاج استكمال الدراسة قبل الاعتماد." };
 }
@@ -285,7 +311,8 @@ export function ensureDailyIdea(now = new Date(), signals: OperatingSignal[] = [
   const dayKey = now.toISOString().slice(0, 10);
   const existing = store.find((i) => i.source === "TEAM" && i.dayKey === dayKey);
   if (existing) return existing;
-  const signal = signals.find((s) => !store.some((i) => i.aggregate?.generationKey === s.key));
+  const openTitles = listApprovals().filter((a) => a.status === "PENDING").map((a) => a.title);
+  const { signal } = pickNewSignal(signals, store, openTitles);
   return signal ? submitIdea(signalInput(signal, dayKey)) : null;
 }
 export function addRecommendation(id: string, agentId: string, verdict: Verdict, note: string): Idea | null {
