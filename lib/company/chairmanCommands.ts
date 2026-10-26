@@ -6,7 +6,7 @@
  * Rayyan (diwan) keeps a commitment until the command closes with evidence.
  */
 
-import { getAgent } from "./agents";
+import { COMPANY_AGENTS, getAgent } from "./agents";
 import { createApproval } from "../approvals";
 import { advanceCommitment, openDecisionCommitment } from "./executiveSecretariat";
 import { EMPLOYEE_SOPS } from "../employee-runtime/sops";
@@ -63,7 +63,7 @@ export type ChairmanCommand = {
 };
 
 const store: ChairmanCommand[] = [];
-let hydrated = false;
+const EMPLOYEE_IDS = new Set(COMPANY_AGENTS.filter((agent) => agent.id !== "owner").map((agent) => agent.id));
 
 function missingTable(error: { code?: string; message?: string } | null) {
   const text = `${error?.code || ""} ${error?.message || ""}`;
@@ -90,7 +90,6 @@ async function persistCommand(command: ChairmanCommand) {
 
 export async function hydrateChairmanCommands() {
   // Refresh on every request: the DB is the source of truth, not this instance's memory.
-  hydrated = true;
   const client = getSupabaseAdmin();
   if (!client) return;
   const { data, error } = await client.from("chairman_commands").select("payload").eq("tenant_id", getTenantId())
@@ -103,7 +102,11 @@ export async function hydrateChairmanCommands() {
     const payload = (row as { payload?: ChairmanCommand }).payload;
     if (!payload?.id) continue;
     const index = store.findIndex((item) => item.id === payload.id);
-    if (index >= 0) store[index] = payload; else store.push(payload);
+    if (index === -1) {
+      store.push(payload);
+      continue;
+    }
+    if (payload.updatedAt > store[index].updatedAt) store[index] = payload;
   }
 }
 
@@ -125,7 +128,66 @@ export function mentionedAmountSAR(text: string): number | null {
   return isMonetarySpend(amount) ? amount : null;
 }
 
-export function routeChairmanCommand(text: string): { ownerAgentId: string; collaborators: string[]; sopId: string | null } {
+type CommandRoute = { ownerAgentId: string; collaborators: string[]; sopId: string | null };
+
+const ADDRESS_NAMES: Array<{ id: string; pattern: string }> = [
+  { id: "abdulrahman", pattern: "عبد\\s*الرحمن" },
+  { id: "sultan", pattern: "سلطان" },
+  { id: "noura", pattern: "نوره" },
+  { id: "fahad", pattern: "فهد" },
+  { id: "sara", pattern: "ساره" },
+  { id: "khalid", pattern: "خالد" },
+  { id: "majed", pattern: "ماجد" },
+  { id: "rased", pattern: "راصد" },
+  { id: "ameen", pattern: "امين" },
+  { id: "hares", pattern: "حارس" },
+  { id: "diwan", pattern: "ريان" },
+];
+
+function normalizeAddress(text: string) {
+  return text
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .trim();
+}
+
+function explicitEmployee(assignee?: string | null) {
+  if (assignee == null) return null;
+  const id = assignee.trim().toLowerCase();
+  if (!id || id === "automatic" || id === "auto") return null;
+  if (!EMPLOYEE_IDS.has(id)) throw new Error("الموظف غير معروف.");
+  return id;
+}
+
+function addressedEmployee(text: string) {
+  const normalized = normalizeAddress(text);
+  for (const name of ADDRESS_NAMES) {
+    const vocative = new RegExp(`^يا\\s+${name.pattern}(?![\\u0600-\\u06FF])`);
+    if (vocative.test(normalized)) return name.id;
+  }
+  for (const name of ADDRESS_NAMES) {
+    const directed = new RegExp(`^${name.pattern}\\s*[:،,]`);
+    if (directed.test(normalized)) return name.id;
+  }
+  const mentions = normalized.matchAll(/(?:^|[^a-z0-9])@([a-z][a-z0-9-]*)\b/gi);
+  for (const mention of mentions) {
+    const id = mention[1].toLowerCase();
+    if (EMPLOYEE_IDS.has(id)) return id;
+  }
+  return null;
+}
+
+function assignOwner(ownerAgentId: string, keyword: CommandRoute): CommandRoute {
+  return {
+    ownerAgentId,
+    collaborators: Array.from(new Set([...keyword.collaborators, keyword.ownerAgentId].filter((id) => id !== ownerAgentId))),
+    sopId: keyword.ownerAgentId === ownerAgentId ? keyword.sopId : null,
+  };
+}
+
+function keywordRoute(text: string): CommandRoute {
   const rules: Array<{ test: RegExp; ownerAgentId: string; collaborators: string[]; sopId: string | null }> = [
     { test: /ترخيص|حكوم|امتثال|نظام|سجل تجاري/, ownerAgentId: "majed", collaborators: ["hares"], sopId: null },
     { test: /خطر|حوكمة|صلاحية|تدقيق/, ownerAgentId: "hares", collaborators: ["majed"], sopId: "SOP-GOV-001" },
@@ -140,6 +202,15 @@ export function routeChairmanCommand(text: string): { ownerAgentId: string; coll
   const hit = rules.find((rule) => rule.test.test(text));
   if (hit) return { ownerAgentId: hit.ownerAgentId, collaborators: hit.collaborators, sopId: hit.sopId };
   return { ownerAgentId: "sultan", collaborators: ["fahad"], sopId: null };
+}
+
+export function routeChairmanCommand(text: string, options: { assignee?: string | null } = {}): CommandRoute {
+  const keyword = keywordRoute(text);
+  const explicit = explicitEmployee(options.assignee);
+  if (explicit) return assignOwner(explicit, keyword);
+  const addressed = addressedEmployee(text);
+  if (addressed) return assignOwner(addressed, keyword);
+  return keyword;
 }
 
 function planSteps(command: Pick<ChairmanCommand, "id" | "text" | "ownerAgentId" | "sopId">, amount: number | null, external: boolean): CommandStep[] {
@@ -272,10 +343,10 @@ async function closeDiwan(command: ChairmanCommand, evidence: string) {
   }, { actor: "diwan" });
 }
 
-export async function issueChairmanCommand(text: string, options: { now?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT" } = {}): Promise<ChairmanCommand> {
+export async function issueChairmanCommand(text: string, options: { now?: string; priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT"; assignee?: string | null } = {}): Promise<ChairmanCommand> {
   const commandText = text.trim();
   if (commandText.length < 3) throw new Error("الأمر قصير.");
-  const route = routeChairmanCommand(commandText);
+  const route = routeChairmanCommand(commandText, { assignee: options.assignee });
   const createdAt = options.now || nowIso();
   const amount = mentionedAmountSAR(commandText);
   const money = MONEY.test(commandText);
@@ -360,6 +431,21 @@ export async function issueChairmanCommand(text: string, options: { now?: string
 
 export function listChairmanCommands(): ChairmanCommand[] {
   return [...store].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function listOpenCommandsSince(since: string) {
+  const sinceMs = Date.parse(since);
+  if (!Number.isFinite(sinceMs)) throw new Error("since يجب أن يكون تاريخاً بصيغة ISO.");
+  return listChairmanCommands()
+    .filter((command) => command.status !== "CLOSED")
+    .filter((command) => Date.parse(command.updatedAt) >= sinceMs || Date.parse(command.createdAt) >= sinceMs)
+    .map((command) => ({
+      id: command.id,
+      subject: command.text,
+      status: command.status,
+      ownerAgentId: command.ownerAgentId,
+      updatedAt: command.updatedAt,
+    }));
 }
 
 export function getChairmanCommand(id: string): ChairmanCommand | undefined {
@@ -462,7 +548,6 @@ export function publicCommandStatus(command: ChairmanCommand) {
 
 export function _clearChairmanCommands() {
   store.length = 0;
-  hydrated = false;
 }
 
 export function _setCommandDue(id: string, dueAt: string) {

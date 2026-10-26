@@ -51,6 +51,14 @@ export function authorizeBridgeHeaders(input: {
     return denied(401, "المفتاح غير مقبول لهذا المسار.");
   }
 
+  if (input.pathname === "/api/bridge/commands") {
+    if (input.agentBridgeKey && secureEqual(input.agentBridgeKey, master)) {
+      return { ok: true, scope: "master" };
+    }
+    if (!presented) return denied(401, "يلزم مفتاح جسر الوكلاء.");
+    return denied(401, "المفتاح غير مقبول لهذا المسار.");
+  }
+
   if (!input.pathname.startsWith("/api/bridge/agents")) {
     return denied(403, "مسار غير معروف.");
   }

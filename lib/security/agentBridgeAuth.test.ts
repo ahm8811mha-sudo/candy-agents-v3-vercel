@@ -51,6 +51,30 @@ describe("bridge keys", () => {
       chairmanDigestKey: "digest-key-value",
       env,
     }).ok).toBe(false);
+    expect(authorizeBridgeHeaders({
+      pathname: "/api/bridge/commands",
+      agentBridgeKey: "master-key-value",
+      chairmanDigestKey: null,
+      env,
+    })).toMatchObject({ ok: true, scope: "master" });
+    expect(authorizeBridgeHeaders({
+      pathname: "/api/bridge/commands",
+      agentBridgeKey: "sara-key-value",
+      chairmanDigestKey: null,
+      env,
+    })).toMatchObject({ ok: false, status: 401 });
+    expect(authorizeBridgeHeaders({
+      pathname: "/api/bridge/commands",
+      agentBridgeKey: null,
+      chairmanDigestKey: "digest-key-value",
+      env,
+    })).toMatchObject({ ok: false, presented: true, status: 401 });
+    expect(authorizeBridgeHeaders({
+      pathname: "/api/bridge/commands",
+      agentBridgeKey: null,
+      chairmanDigestKey: null,
+      env,
+    })).toMatchObject({ ok: false, presented: false, status: 401 });
   });
 
   it("rejects a presented wrong key and reports a missing key separately", () => {
