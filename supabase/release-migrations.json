@@ -12,7 +12,8 @@
     "20261022000200_journal_amount_scale.sql",
     "20261022000300_inventory_shopify_link_columns.sql",
     "20261022000400_journal_entry_number_per_tenant.sql",
-    "20261022000500_inventory_movements_tenant.sql"
+    "20261022000500_inventory_movements_tenant.sql",
+    "20261026000100_owner_spend_chain_and_bridge.sql"
   ],
   "suites": [
     "supabase/tests/document_access_regression.sql",

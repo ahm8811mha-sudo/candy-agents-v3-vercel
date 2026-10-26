@@ -89,10 +89,11 @@ describe("evaluateBusiness", () => {
       transactionCount: 5,
     });
 
-    expect(result.approval.gate).toBe("AUTO");
+    expect(result.approval.gate).toBe("OWNER");
+    expect(result.approval.requiredRole).toBe("OWNER");
   });
 
-  it("sets CEO approval for T1 budgets (authority matrix)", () => {
+  it("sets Chairman approval for every positive budget", () => {
     const result = evaluateBusiness("مشروع بميزانية 20000", {
       income: 100000,
       expenses: 40000,
@@ -100,7 +101,7 @@ describe("evaluateBusiness", () => {
       transactionCount: 10,
     });
 
-    expect(result.approval.gate).toBe("CEO");
+    expect(result.approval.gate).toBe("OWNER");
   });
 
   it("sets OWNER approval above the CEO tier (authority matrix)", () => {

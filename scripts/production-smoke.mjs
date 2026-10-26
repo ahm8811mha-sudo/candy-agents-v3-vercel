@@ -61,8 +61,28 @@ try {
     assert(response.status === 200 && body.ok === true, "Health endpoint is not public and healthy.");
   });
 
-  await run("anonymous-redirect", async () => {
+  await run("public-home", async () => {
     const response = await fetch(`${baseUrl}/`, { redirect: "manual" });
+    const html = await response.text();
+    assert(response.status === 200, `Public home did not return 200 (${response.status}).`);
+    assert(!response.headers.get("location"), "Public home redirected.");
+    assert(html.includes("نظام تشغيل أعمال داخلي") && html.includes("orvantacompany@gmail.com"), "Public home is missing its identity or contact.");
+    assert(!html.includes("shell-sidebar"), "Public home rendered the private office shell.");
+  });
+
+  await run("public-privacy-and-terms", async () => {
+    for (const path of ["/privacy", "/terms"]) {
+      const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
+      const html = await response.text();
+      assert(response.status === 200, `${path} did not return 200 (${response.status}).`);
+      assert(html.includes("gmail.compose") && html.includes("spreadsheets") && html.includes("drive.file"), `${path} does not name the Google scopes.`);
+      assert(html.includes("orvantacompany@gmail.com"), `${path} is missing the contact address.`);
+      assert(!html.includes("shell-sidebar"), `${path} rendered the private office shell.`);
+    }
+  });
+
+  await run("anonymous-private-page", async () => {
+    const response = await fetch(`${baseUrl}/inbox`, { redirect: "manual" });
     assert(response.status >= 300 && response.status < 400, `Expected redirect, received ${response.status}.`);
     assert(response.headers.get("location")?.includes("/login"), "Anonymous browser was not redirected to login.");
   });

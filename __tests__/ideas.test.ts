@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { submitIdea, listIdeas, ensureDailyIdea, addRecommendation, enrichIdea, syncIdeasWithApprovals, ideaStats, _clearIdeas } from "../lib/company/ideas";
 import { assessIdea, opportunitiesFromRecords } from "../lib/company/ideaAssessment";
 import { listApprovals, decideApproval, _clearApprovals } from "../lib/approvals";
+import { readySpendForDecision } from "./fixtures/readySpend";
 import { completeStudy } from "./fixtures/idea-study";
 const signals = opportunitiesFromRecords({ inventory: [{ id: "item-1", name: "صنف الاختبار", on_hand: 2, reorder_point: 10, unit_cost: 20 }], blockedTasks: [] });
 
@@ -52,6 +53,7 @@ describe("evidence-based ideas", () => {
   });
   it.each(["APPROVED", "REJECTED"] as const)("reflects the %s decision", (status) => {
     const idea = submitIdea({ title: "قرار الفكرة", hypothesis: "اختبار ربط القرار بالفكرة", budgetSAR: 50000, horizonDays: 30, study: completeStudy });
+    readySpendForDecision(idea.approvalId!);
     decideApproval(idea.approvalId!, status, "المالك"); syncIdeasWithApprovals();
     expect(listIdeas()[0].status).toBe(status);
   });

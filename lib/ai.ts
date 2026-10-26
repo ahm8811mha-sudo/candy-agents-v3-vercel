@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { recordAiUsage } from "./aiUsage";
+import { composeAgentSystemPrompt } from "./company/agentManuals";
 
 type AgentOptions = {
   agentName: string;
@@ -194,7 +195,16 @@ function providerErrorMessage(provider: ProviderName, error: unknown) {
  * fallback, not a real model answer — surface that to users, never hide it.
  * Throws on provider errors; use runAgent for the message-flavored contract.
  */
+/** Manual first, then the task instructions. Safe to call without a provider. */
+export function prepareAgentCall(options: AgentOptions): AgentOptions {
+  return {
+    ...options,
+    system: composeAgentSystemPrompt(options.agentName, options.system || DEFAULT_SYSTEM),
+  };
+}
+
 export async function runAgentRaw(prompt: string, options: AgentOptions): Promise<RawAgentResult> {
+  options = prepareAgentCall(options);
   const provider = selectedProvider();
   const startedAt = Date.now();
 

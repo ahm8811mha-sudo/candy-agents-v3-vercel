@@ -77,8 +77,8 @@ export function defaultOwnerAbsencePolicy(tenantId: string): OwnerAbsencePolicy 
     strategicGuidance:
       "يحافظ الوكلاء على التشغيل القائم ضمن الميزانيات المعتمدة. يعود للمالك فقط تغيير الاستراتيجية أو الالتزام القانوني أو المالي الجوهري.",
     prohibitedActions: [...DEFAULT_PROHIBITED_OWNER_ABSENCE_ACTIONS],
-    routineAutoLimitSAR: 5_000,
-    executiveAgentLimitSAR: 25_000,
+    routineAutoLimitSAR: 0,
+    executiveAgentLimitSAR: 0,
     maxAutonomousRisk: "MEDIUM",
     allowExternalActions: false,
     requireCompletionEvidence: true,
@@ -171,6 +171,7 @@ export function evaluateOwnerAbsenceAuthority(
     reasons.push("RISK_EXCEEDS_AUTONOMOUS_LIMIT");
   }
   if (external && !policy.allowExternalActions) reasons.push("EXTERNAL_ACTIONS_DISABLED_DURING_ABSENCE");
+  if (amountSAR > 0) reasons.push("SPEND_REQUIRES_CHAIRMAN");
   if (amountSAR > policy.executiveAgentLimitSAR) reasons.push("COMMITMENT_EXCEEDS_EXECUTIVE_AGENT_LIMIT");
 
   if (reasons.length > 0) {

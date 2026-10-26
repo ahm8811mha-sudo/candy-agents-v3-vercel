@@ -89,6 +89,7 @@ function triageOrder(a: InboxItem, b: InboxItem) {
 
 export default function InboxCenter() {
   const [items, setItems] = useState<InboxItem[]>([]);
+  const [commands, setCommands] = useState<Array<{ id: string; subject: string; status: string; ownerName: string; currentStep: string; blockers: string[] }>>([]);
   const [pending, setPending] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -113,6 +114,7 @@ export default function InboxCenter() {
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "تعذر تحميل الاعتمادات.");
       setItems(json.items || []);
+      setCommands(Array.isArray(json.commands) ? json.commands : []);
       setPending(json.pending || 0);
       setLoadError("");
     } catch (error) {
@@ -324,6 +326,29 @@ export default function InboxCenter() {
           <p className="page-sub">كل ما ينتظر اعتمادك من كل الأقسام والأنظمة، مرتّباً بالأهم: المتأخر أولاً، ثم الأعلى مبلغاً.</p>
         </div>
       </header>
+
+      <section style={{ margin: "8px 0 28px" }}>
+        <h2 style={{ fontSize: "1.15rem", margin: "0 0 12px" }}>أوامر رئيس مجلس الإدارة</h2>
+        {commands.length === 0 ? (
+          <p className="page-sub">لا أوامر مسجّلة.</p>
+        ) : (
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 16 }}>
+            {commands.map((command) => (
+              <li key={command.id} style={{ display: "grid", gap: 4 }}>
+                <strong>{command.subject}</strong>
+                <span>
+                  {command.ownerName}
+                  {" · "}
+                  {command.status === "CLOSED" ? "مغلق" : command.status === "BLOCKED" ? "متوقف" : command.status === "AWAITING_CHAIRMAN" ? "بانتظار الاعتماد" : command.status === "IN_SPEND_CHAIN" ? "في سلسلة الصرف" : "قيد العمل"}
+                  {" · "}
+                  {command.currentStep}
+                </span>
+                {(command.blockers || []).length > 0 ? <span>{command.blockers.join(" · ")}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="decide-summary">
         <div>

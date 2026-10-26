@@ -42,7 +42,7 @@ type TierRule = {
 const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 const rankMeta: Record<Agent["rank"], { label: string; icon: typeof Crown }> = {
-  OWNER: { label: "السلطة العليا", icon: Crown },
+  OWNER: { label: "رئيس مجلس الإدارة", icon: Crown },
   CEO: { label: "الإدارة التنفيذية", icon: ShieldCheck },
   DEPARTMENT_HEAD: { label: "رئيس قسم", icon: Building2 },
   FUNCTIONAL: { label: "وحدة مساندة", icon: Users },
@@ -138,7 +138,7 @@ function AgentCard({
       <span className="bento-foot" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
         <BadgeCheck size={13} />
         {agent.rank === "OWNER"
-          ? "صلاحية غير محدودة"
+          ? "اطلاع واعتماد نهائي"
           : agent.authorityLimitSAR > 0
             ? `صلاحية ذاتية حتى ${sar.format(agent.authorityLimitSAR)}`
             : "بدون صلاحية صرف ذاتية"}

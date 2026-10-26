@@ -35,13 +35,13 @@ describe("authority enforcement (F2)", () => {
 
   it("maps tiers to minimum roles", () => {
     expect(minRoleForTier("T0")).toBe("MANAGER");
-    expect(minRoleForTier("T1")).toBe("CEO");
+    expect(minRoleForTier("T1")).toBe("ADMIN");
     expect(minRoleForTier("T2")).toBe("ADMIN");
     expect(minRoleForTier("T3")).toBe("ADMIN");
   });
 
   it("persists owner escalation when a high-risk amount alone would be T0", () => {
-    expect(effectiveTier(500, "LOW").tier).toBe("T0");
+    expect(effectiveTier(500, "LOW").tier).toBe("T2");
     const tier = effectiveTier(500, "HIGH").tier;
     expect(tier).toBe("T2");
     expect(approvalTierForDecision(500, { governanceTier: tier })).toBe("T2");
@@ -50,7 +50,7 @@ describe("authority enforcement (F2)", () => {
   it("role check respects the hierarchy", () => {
     expect(canApproveTier("ADMIN", "T2")).toBe(true);
     expect(canApproveTier("CEO", "T2")).toBe(false);
-    expect(canApproveTier("CEO", "T1")).toBe(true);
+    expect(canApproveTier("CEO", "T1")).toBe(false);
     expect(canApproveTier("VIEWER", "T0")).toBe(false);
     expect(canApproveTier("MANAGER", "T0")).toBe(true);
   });

@@ -14,6 +14,8 @@ import { listApprovals as listSystemApprovals, reviveDueDeferrals } from "./appr
 import { listApprovals as listCompanyApprovals } from "./repository";
 import { decisionMap } from "./decisions";
 import { hydrateCompany } from "./company/hydrate";
+import { hydrateChairmanCommands, listChairmanCommands, publicCommandStatus } from "./company/chairmanCommands";
+import { approvalVisibleToChairman, formatDecisionMemo, isOwnerReadySpend, readSpendChain, toDecisionMemo } from "./company/spendChain";
 
 export type InboxChannel = "SYSTEM" | "COMPANY";
 
@@ -55,20 +57,31 @@ export function decisionAge(createdAt: string, now: Date = new Date()): { hours:
   return { hours: rounded, label, stale: hours >= STALE_AFTER_HOURS };
 }
 
-export async function getInbox(): Promise<{ items: InboxItem[]; pending: number; stale: number; oldestPendingHours: number }> {
+export async function getInbox(): Promise<{
+  items: InboxItem[];
+  pending: number;
+  stale: number;
+  oldestPendingHours: number;
+  commands: ReturnType<typeof publicCommandStatus>[];
+}> {
   await hydrateCompany();
   await reviveDueDeferrals();
+  await hydrateChairmanCommands();
   const items: InboxItem[] = [];
 
-  // 1) System approvals (trades, budget gates) — actionable via /api/approvals/decisions.
+  // 1) System approvals. Pending money stays with the review chain until the
+  // memo is complete. Non-financial decisions and already decided rows stay.
   for (const a of listSystemApprovals()) {
+    if (!approvalVisibleToChairman(a)) continue;
+    const chain = readSpendChain(a);
+    const detail = chain && isOwnerReadySpend(chain) ? formatDecisionMemo(toDecisionMemo(a.id, chain)) : a.detail;
     items.push({
       id: a.id,
       channel: "SYSTEM",
       actionsVia: "approvals",
       type: a.type,
       title: a.title,
-      detail: a.detail,
+      detail,
       amount: a.amount,
       requestedBy: a.requestedRole,
       status: a.status,
@@ -128,5 +141,6 @@ export async function getInbox(): Promise<{ items: InboxItem[]; pending: number;
     pending: pendingItems.length,
     stale: pendingItems.filter((i) => i.stale).length,
     oldestPendingHours: pendingItems.reduce((max, i) => Math.max(max, i.ageHours ?? 0), 0),
+    commands: listChairmanCommands().map(publicCommandStatus),
   };
 }

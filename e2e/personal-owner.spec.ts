@@ -18,8 +18,13 @@ test("only the top-level health endpoint is public", async ({ request }) => {
   await expect(detailedDatabaseHealth.json()).resolves.toMatchObject({ code: "OWNER_ACCESS_REQUIRED" });
 });
 
-test("anonymous visitors are redirected and the trusted owner device unlocks", async ({ page }) => {
+test("anonymous visitors see the public home, and the trusted owner device unlocks", async ({ page }) => {
   await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "أورفانتا" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "الخصوصية" })).toBeVisible();
+
+  await page.goto("/status");
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: /فتح Orvanta على هذا الجهاز/ })).toBeVisible();
 

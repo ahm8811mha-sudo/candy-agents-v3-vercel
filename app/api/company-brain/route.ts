@@ -49,7 +49,7 @@ const planSchema = z.object({
   horizonDays: z.number().int().min(14).max(365).optional(),
   budgetLimit: z.number().finite().positive().optional(),
   owner: z.string().min(2).max(160).optional(),
-  assumptions: z.record(z.unknown()).optional(),
+  assumptions: z.record(z.string(), z.unknown()).optional(),
 });
 
 const learningSchema = z.object({
@@ -57,11 +57,11 @@ const learningSchema = z.object({
   subjectType: z.string().min(2).max(80),
   subjectId: z.string().min(1).max(240),
   eventType: z.string().min(2).max(80),
-  expected: z.record(z.unknown()).optional(),
-  actual: z.record(z.unknown()).optional(),
+  expected: z.record(z.string(), z.unknown()).optional(),
+  actual: z.record(z.string(), z.unknown()).optional(),
   outcomeScore: z.number().finite().min(-100).max(100).optional(),
   lessons: z.array(z.string().min(2).max(500)).max(50).optional(),
-  featureUpdates: z.record(z.unknown()).optional(),
+  featureUpdates: z.record(z.string(), z.unknown()).optional(),
 });
 
 const nodeSchema = z.object({
@@ -70,7 +70,7 @@ const nodeSchema = z.object({
   entityId: z.string().min(1).max(240),
   title: z.string().min(2).max(300),
   summary: z.string().max(3000).optional(),
-  attributes: z.record(z.unknown()).optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
   source: z.string().min(2).max(80).optional(),
   confidence: z.number().min(0).max(1).optional(),
 });

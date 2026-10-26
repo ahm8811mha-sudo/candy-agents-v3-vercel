@@ -4,7 +4,7 @@
  * shown as it came, which keeps a new server value visible instead of blank.
  */
 const RISK: Record<string, string> = { LOW: "منخفضة", MEDIUM: "متوسطة", HIGH: "مرتفعة", CRITICAL: "حرجة" };
-const APPROVAL_GATE: Record<string, string> = { AUTO: "تلقائي ضمن الحدود", CEO: "الرئيس التنفيذي", OWNER: "المالك", RISK: "وكيل المخاطر" };
+const APPROVAL_GATE: Record<string, string> = { AUTO: "تلقائي ضمن الحدود", CEO: "الرئيس التنفيذي", OWNER: "رئيس مجلس الإدارة", RISK: "وكيل المخاطر" };
 const FINANCIAL_STATE: Record<string, string> = { PROFITABLE: "رابح", LOSS_MAKING: "خاسر", READY: "جاهز" };
 const WORK_STATUS: Record<string, string> = {
   TODO: "لم تبدأ", QUEUED: "في الانتظار", PENDING: "معلّق", IN_PROGRESS: "قيد التنفيذ", RUNNING: "قيد التشغيل",

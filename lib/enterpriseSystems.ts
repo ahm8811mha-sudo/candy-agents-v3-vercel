@@ -70,7 +70,7 @@ const commercialStrategy = {
   capital_rules: {
     pilot_budget_ratio: 0.15,
     self_execution_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T0")!.maxSAR,
-    ceo_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T1")!.maxSAR,
+    ceo_ceiling: 0,
     owner_ceiling: AUTHORITY_MATRIX.find((rule) => rule.tier === "T2")!.maxSAR,
     stop_loss_rule: "أوقف الصرف إذا تجاوزت تكلفة اكتساب العميل المستهدف أو نزل الهامش الإجمالي عن 30%.",
   },

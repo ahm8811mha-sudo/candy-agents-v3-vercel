@@ -8,23 +8,18 @@ import {
 } from "@/lib/employee-runtime/runtime";
 import type { ApprovalTier } from "@/lib/company/governance";
 import type { UserRole } from "@/lib/auth";
+import { isOwnerReadySpend, parseSpendChain } from "@/lib/company/spendChain";
+import type { WorkOrder } from "@/lib/employee-runtime/types";
 
 export const dynamic = "force-dynamic";
 
-function canApproveTier(
-  role: UserRole,
-  tier: ApprovalTier,
-  feasibilityConfirmed: boolean
-) {
-  if (tier === "T0" || tier === "T1") {
-    return ["ADMIN", "OWNER", "CEO"].includes(role);
-  }
-  if (tier === "T2") {
-    return role === "ADMIN" || role === "OWNER";
-  }
-  return (
-    (role === "ADMIN" || role === "OWNER") && feasibilityConfirmed
-  );
+function canApproveTier(role: UserRole, tier: ApprovalTier) {
+  if (tier === "T0") return ["ADMIN", "OWNER", "CEO"].includes(role);
+  return role === "ADMIN" || role === "OWNER";
+}
+
+function spendCommitment(workOrder: WorkOrder) {
+  return workOrder.steps.reduce((max, step) => Math.max(max, Number(step.input?.commitmentSAR || 0)), 0);
 }
 
 export async function GET(req: NextRequest) {
@@ -90,20 +85,28 @@ export async function POST(req: NextRequest) {
         );
       }
       const feasibilityConfirmed = body.feasibilityConfirmed === true;
+      const commitment = spendCommitment(current);
+      if (commitment > 0) {
+        const chain = parseSpendChain(current.context.spendChain, commitment, current.title);
+        const chairman = auth.context.actor.role === "OWNER" || auth.context.actor.role === "ADMIN";
+        if (!chairman || !isOwnerReadySpend(chain)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "الالتزام المالي ينتظر سلسلة المراجعة ثم اعتماد رئيس مجلس الإدارة. لا يعتمده موظف.",
+              requestId: auth.context.requestId,
+            },
+            { status: 403 }
+          );
+        }
+      }
       if (
-        !canApproveTier(
-          auth.context.actor.role,
-          current.approvalTier,
-          feasibilityConfirmed
-        )
+        !canApproveTier(auth.context.actor.role, current.approvalTier)
       ) {
         return NextResponse.json(
           {
             ok: false,
-            error:
-              current.approvalTier === "T3" && !feasibilityConfirmed
-                ? "T3 requires owner approval and a confirmed three-department feasibility study."
-                : `Role ${auth.context.actor.role} cannot approve ${current.approvalTier}.`,
+            error: `Role ${auth.context.actor.role} cannot approve ${current.approvalTier}.`,
             requestId: auth.context.requestId,
           },
           { status: 403 }
