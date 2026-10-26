@@ -202,14 +202,42 @@ export function isOwnerReadySpend(state: SpendChainState | null): boolean {
     && Boolean(state.sultanRecommendation);
 }
 
+export type SpendStop = { by: "finance" | "governance" | "sultan"; result: string; note: string; at: string; label: string };
+
+/**
+ * A negative review (finance "غير موافق", governance "موقوف", Sultan "رفض") ends the reviewers' work.
+ * The item leaves their queue and goes to the Chairman, who alone closes it. It is never auto-rejected.
+ */
+export function spendStop(state: SpendChainState | null): SpendStop | null {
+  if (!state || state.decision || state.stage === "decided") return null;
+  const wait = " — بانتظار إقفال رئيس مجلس الإدارة";
+  if (state.governanceReview?.result === "موقوف") return { by: "governance", ...pick(state.governanceReview), label: "موقوف من الحوكمة" + wait };
+  if (state.financeReview?.result === "غير موافق") return { by: "finance", ...pick(state.financeReview), label: "غير موافق من المالية" + wait };
+  if (state.sultanRecommendation?.result === "رفض") return { by: "sultan", ...pick(state.sultanRecommendation), label: "رفض من الرئيس التنفيذي" + wait };
+  return null;
+}
+function pick(r: SpendReview) { return { result: r.result, note: r.note, at: r.at }; }
+
+/** Items the Chairman can act on: a complete memo, or a stop that is waiting for him to close it. */
+export function isChairmanActionable(state: SpendChainState | null): boolean {
+  return isOwnerReadySpend(state) || Boolean(spendStop(state));
+}
+
+export function spendReviewHistory(state: SpendChainState | null) {
+  if (!state) return [];
+  const row = (stage: string, r: SpendReview | null) => r ? [{ stage, result: r.result, note: r.note, by: r.by, at: r.at }] : [];
+  return [...row("finance", state.financeReview), ...row("governance", state.governanceReview), ...row("ceo", state.sultanRecommendation)];
+}
+
 export function approvalVisibleToChairman(item: ApprovalLike): boolean {
   if (!isMonetarySpend(item.amount)) return true;
   if (item.status && item.status !== "PENDING" && item.status !== "DEFERRED") return true;
-  return isOwnerReadySpend(readSpendChain(item));
+  return isChairmanActionable(readSpendChain(item));
 }
 
 export function spendStageAgent(state: SpendChainState): string | null {
   if (state.decision || state.stage === "decided") return null;
+  if (spendStop(state)) return SPEND_ACTORS.owner;
   if (state.stage === "department") return state.preparingAgentId;
   if (state.stage === "finance") return SPEND_ACTORS.finance;
   if (state.stage === "governance") return SPEND_ACTORS.governance;
@@ -285,7 +313,7 @@ export function advanceSpendChain(state: SpendChainState, actorId: string, advan
     if (actorId !== SPEND_ACTORS.finance) throw new Error("المراجعة المالية لعبدالرحمن فقط.");
     return {
       ...next,
-      stage: "governance",
+      stage: advance.result === "غير موافق" ? "owner" : "governance",
       needsChainReview: false,
       financeReview: { result: advance.result, note: requireNote(advance.note, "المراجعة المالية"), by: actorId, at: now },
     };
@@ -296,7 +324,7 @@ export function advanceSpendChain(state: SpendChainState, actorId: string, advan
     if (actorId !== SPEND_ACTORS.governance) throw new Error("فحص الحوكمة لحارس فقط.");
     const review = { result: advance.result, note: requireNote(advance.note, "فحص الحوكمة"), by: actorId, at: now };
     if (advance.result === "موقوف") {
-      return { ...next, stage: "governance", governanceReview: review, note: "موقوف عند حارس. لا يُرفع لسلطان ولا لرئيس مجلس الإدارة." };
+      return { ...next, stage: "owner", governanceReview: review, note: "موقوف من الحوكمة — بانتظار إقفال رئيس مجلس الإدارة. لا يُرفع لسلطان." };
     }
     return { ...next, stage: "sultan", governanceReview: review };
   }
@@ -312,7 +340,11 @@ export function advanceSpendChain(state: SpendChainState, actorId: string, advan
     };
   }
 
-  if (state.stage !== "owner" || !isOwnerReadySpend(state)) {
+  const stop = spendStop(state);
+  if (stop && actorId === "owner" && advance.action === "owner_decision" && advance.decision === "APPROVED") {
+    throw new Error("لا يُعتمد طلب أوقفته سلسلة المراجعة. يمكن لرئيس مجلس الإدارة إقفاله بالرفض أو إعادته للمراجعة.");
+  }
+  if (!stop && (state.stage !== "owner" || !isOwnerReadySpend(state))) {
     throw new Error("الطلب لم يكتمل في سلسلة المراجعة، ولن يُعرض لرئيس مجلس الإدارة قبل ذلك.");
   }
   if (actorId !== "owner") throw new Error("لا يملك أي موظف صلاحية اعتماد الصرف.");
@@ -325,7 +357,7 @@ export function chairmanSpendBlock(role: string | null | undefined, item: Approv
   if (!role || !CHAIRMAN_ROLES.has(role)) {
     return "لا يملك أي موظف صلاحية اعتماد الصرف. الاعتماد لرئيس مجلس الإدارة فقط.";
   }
-  if (!isOwnerReadySpend(readSpendChain(item))) {
+  if (!isChairmanActionable(readSpendChain(item))) {
     return "الطلب المالي بانتظار سلسلة المراجعة (القسم، عبدالرحمن، حارس، سلطان) ولن يصل لرئيس مجلس الإدارة قبل اكتمالها.";
   }
   return null;

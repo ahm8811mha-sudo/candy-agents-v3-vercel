@@ -8,6 +8,8 @@ import {
   isOwnerReadySpend,
   readSpendChain,
   spendStageAgent,
+  spendReviewHistory,
+  spendStop,
   toDecisionMemo,
   type SpendAdvance,
 } from "./spendChain";
@@ -169,6 +171,8 @@ export async function agentWorkspace(agentId: string) {
       amountSAR: item.amount,
       stage: readSpendChain(item)?.stage,
       needsChainReview: readSpendChain(item)?.needsChainReview === true,
+      reviews: spendReviewHistory(readSpendChain(item)),
+      stopped: spendStop(readSpendChain(item))?.label || null,
     })),
     messages: listBridgeMessages(agentId),
     tables: { tasks, commitments },
@@ -190,6 +194,8 @@ export function agentInbox(agentId: string) {
         needsChainReview: chain?.needsChainReview === true,
         legacy: chain?.legacy === true,
         ownerReady: isOwnerReadySpend(chain),
+        stopped: spendStop(chain)?.label || null,
+        reviews: spendReviewHistory(chain),
       };
     }),
     messages: listBridgeMessages(agentId),
