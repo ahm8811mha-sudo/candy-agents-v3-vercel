@@ -229,10 +229,45 @@ export function spendReviewHistory(state: SpendChainState | null) {
   return [...row("finance", state.financeReview), ...row("governance", state.governanceReview), ...row("ceo", state.sultanRecommendation)];
 }
 
+/**
+ * Pending money reaches the Chairman only after the full chain (department ->
+ * Abdulrahman -> Hares -> Sultan) completed without a stop. A stopped item goes
+ * back to its department (see returnedToDepartment); the Chairman can still
+ * close it from the action endpoints, but it is not "awaiting his decision".
+ */
 export function approvalVisibleToChairman(item: ApprovalLike): boolean {
   if (!isMonetarySpend(item.amount)) return true;
   if (item.status && item.status !== "PENDING" && item.status !== "DEFERRED") return true;
-  return isChairmanActionable(readSpendChain(item));
+  return isOwnerReadySpend(readSpendChain(item));
+}
+
+/** A pending spend request a reviewer stopped: returned to its department, not on the Chairman's desk. */
+export function returnedToDepartment(item: ApprovalLike): SpendStop | null {
+  if (!isMonetarySpend(item.amount)) return null;
+  if (item.status && item.status !== "PENDING" && item.status !== "DEFERRED") return null;
+  const stop = spendStop(readSpendChain(item));
+  return stop ? { ...stop, label: stop.label.replace(" — بانتظار إقفال رئيس مجلس الإدارة", " — أُعيد للقسم") } : null;
+}
+
+function duplicateKey(item: ApprovalLike) {
+  const title = String(item.title || "").replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/\s+/g, " ").trim();
+  return `${title}|${isMonetarySpend(item.amount) ? Number(item.amount) : ""}`;
+}
+
+/** Collapse repeats (same title and amount, e.g. the same daily idea on several days) into the first item. */
+export function collapseDuplicates<T extends ApprovalLike>(items: T[]): Array<T & { duplicateCount: number; duplicateIds: string[] }> {
+  const groups = new Map<string, T & { duplicateCount: number; duplicateIds: string[] }>();
+  for (const item of items) {
+    const key = duplicateKey(item);
+    const group = groups.get(key);
+    if (group) {
+      group.duplicateCount += 1;
+      if (item.id) group.duplicateIds.push(item.id);
+    } else {
+      groups.set(key, { ...item, duplicateCount: 1, duplicateIds: item.id ? [item.id] : [] });
+    }
+  }
+  return [...groups.values()];
 }
 
 export function spendStageAgent(state: SpendChainState): string | null {
