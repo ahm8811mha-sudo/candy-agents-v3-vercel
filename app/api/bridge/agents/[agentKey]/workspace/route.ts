@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { agentWorkspace } from "@/lib/company/agentBridge";
 import { hydrateChairmanCommands } from "@/lib/company/chairmanCommands";
+import { hydrateCompany } from "@/lib/company/hydrate";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +24,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ agentKe
   const gate = await authorize(req, agentKey);
   if (gate.response) return gate.response;
   try {
-    await hydrateChairmanCommands();
+    // Read approvals and ideas from the DB here too; never trust a cold instance's memory.
+    await Promise.all([hydrateChairmanCommands(), hydrateCompany()]);
     const workspace = await agentWorkspace(agentKey);
     return NextResponse.json({ ok: true, workspace });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر فتح مساحة الموظف." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر فتح مساحة الموظف." }, { status: 500 });
   }
 }
