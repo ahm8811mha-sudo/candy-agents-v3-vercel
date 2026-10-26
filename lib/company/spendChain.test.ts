@@ -40,9 +40,11 @@ describe("owner-only spend chain", () => {
     });
     expect(state.stage).toBe("finance");
     expect(() => advanceSpendChain(state, "sultan", { action: "finance_review", result: "موافق", note: "ملاحظة كافية للمراجعة." })).toThrow(/عبدالرحمن/);
-    state = advanceSpendChain(state, "abdulrahman", { action: "finance_review", result: "غير موافق", note: "السيولة لا تتحمل هذا الشراء الآن." });
+    const refused = advanceSpendChain(state, "abdulrahman", { action: "finance_review", result: "غير موافق", note: "السيولة لا تتحمل هذا الشراء الآن." });
+    expect(refused.stage).toBe("owner"); // a finance refusal goes to the Chairman to close
+    state = advanceSpendChain(state, "abdulrahman", { action: "finance_review", result: "موافق", note: "السيولة تتحمل هذا الشراء الآن." });
     const held = advanceSpendChain(state, "hares", { action: "governance_review", result: "موقوف", note: "الطلب يقف عند الحوكمة ولا يُرفع." });
-    expect(held.stage).toBe("governance");
+    expect(held.stage).toBe("owner"); // waiting for the Chairman to close it, never for Sultan
     expect(() => advanceSpendChain(held, "sultan", { action: "sultan_recommendation", result: "موافقة", note: "أوصي بالعرض على رئيس مجلس الإدارة." })).toThrow(/بعد فحص/);
   });
 

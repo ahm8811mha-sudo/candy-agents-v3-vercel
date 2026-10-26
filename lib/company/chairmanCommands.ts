@@ -81,20 +81,29 @@ async function persistCommand(command: ChairmanCommand) {
     payload: command,
     updated_at: command.updatedAt,
   }, { onConflict: "id" });
-  if (error && !missingTable(error)) return;
+  if (error && !missingTable(error)) {
+    const failure = new Error("تعذر حفظ الأمر في قاعدة البيانات؛ لم يُعتمد التغيير.") as Error & { durable: boolean };
+    failure.durable = true;
+    throw failure;
+  }
 }
 
 export async function hydrateChairmanCommands() {
-  if (hydrated) return;
+  // Refresh on every request: the DB is the source of truth, not this instance's memory.
   hydrated = true;
   const client = getSupabaseAdmin();
   if (!client) return;
-  const { data, error } = await client.from("chairman_commands").select("payload").eq("tenant_id", getTenantId()).limit(200);
-  if (error || !data) return;
-  for (const row of data) {
+  const { data, error } = await client.from("chairman_commands").select("payload").eq("tenant_id", getTenantId())
+    .order("updated_at", { ascending: false }).limit(500);
+  if (error) {
+    if (missingTable(error)) return;
+    throw new Error("تعذر قراءة الأوامر من قاعدة البيانات.");
+  }
+  for (const row of data || []) {
     const payload = (row as { payload?: ChairmanCommand }).payload;
-    if (!payload?.id || store.some((item) => item.id === payload.id)) continue;
-    store.push(payload);
+    if (!payload?.id) continue;
+    const index = store.findIndex((item) => item.id === payload.id);
+    if (index >= 0) store[index] = payload; else store.push(payload);
   }
 }
 

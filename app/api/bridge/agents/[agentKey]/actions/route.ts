@@ -1,3 +1,4 @@
+import { isDurableWriteError } from "@/lib/company/agentBridge";
 import { NextRequest, NextResponse } from "next/server";
 import { postBridgeAction } from "@/lib/company/agentBridge";
 import { hydrateChairmanCommands } from "@/lib/company/chairmanCommands";
@@ -22,6 +23,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentK
     const result = await postBridgeAction(agentKey, body);
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ الإجراء." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر تنفيذ الإجراء." }, { status: isDurableWriteError(error) ? 500 : 400 });
   }
 }

@@ -1,3 +1,5 @@
+import { hydrateApprovals } from "@/lib/approvals";
+import { isDurableWriteError } from "@/lib/company/agentBridge";
 import { NextRequest, NextResponse } from "next/server";
 import { agentInbox } from "@/lib/company/agentBridge";
 import { hydrateChairmanCommands } from "@/lib/company/chairmanCommands";
@@ -17,9 +19,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ agentKe
     return NextResponse.json({ ok: false, error: "المفتاح لا يغطي هذا الموظف." }, { status: 403 });
   }
   try {
-    await hydrateChairmanCommands();
+    await Promise.all([hydrateChairmanCommands(), hydrateApprovals()]);
     return NextResponse.json({ ok: true, inbox: agentInbox(agentKey) });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر فتح الوارد." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر فتح الوارد." }, { status: isDurableWriteError(error) ? 500 : 400 });
   }
 }

@@ -15,7 +15,7 @@ import { listApprovals as listCompanyApprovals } from "./repository";
 import { decisionMap } from "./decisions";
 import { hydrateCompany } from "./company/hydrate";
 import { hydrateChairmanCommands, listChairmanCommands, publicCommandStatus } from "./company/chairmanCommands";
-import { approvalVisibleToChairman, formatDecisionMemo, isOwnerReadySpend, readSpendChain, toDecisionMemo } from "./company/spendChain";
+import { approvalVisibleToChairman, formatDecisionMemo, isOwnerReadySpend, readSpendChain, spendReviewHistory, spendStop, toDecisionMemo } from "./company/spendChain";
 
 export type InboxChannel = "SYSTEM" | "COMPANY";
 
@@ -74,7 +74,9 @@ export async function getInbox(): Promise<{
   for (const a of listSystemApprovals()) {
     if (!approvalVisibleToChairman(a)) continue;
     const chain = readSpendChain(a);
-    const detail = chain && isOwnerReadySpend(chain) ? formatDecisionMemo(toDecisionMemo(a.id, chain)) : a.detail;
+    const stop = spendStop(chain);
+    const memo = chain && (isOwnerReadySpend(chain) || stop) ? formatDecisionMemo(toDecisionMemo(a.id, chain)) : a.detail;
+    const detail = stop ? `${stop.label}\nالسبب: ${stop.note}\n\n${memo}` : memo;
     items.push({
       id: a.id,
       channel: "SYSTEM",
@@ -86,7 +88,7 @@ export async function getInbox(): Promise<{
       requestedBy: a.requestedRole,
       status: a.status,
       createdAt: a.createdAt,
-      metadata: a.metadata,
+      metadata: { ...a.metadata, chainStatus: stop ? { stopped: true, by: stop.by, label: stop.label } : undefined, reviewHistory: spendReviewHistory(chain) },
     });
   }
 
