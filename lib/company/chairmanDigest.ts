@@ -2,6 +2,8 @@ import { listApprovals } from "../approvals";
 import { listChairmanCommands, publicCommandStatus } from "./chairmanCommands";
 import {
   approvalVisibleToChairman,
+  collapseDuplicates,
+  returnedToDepartment,
   formatDecisionMemo,
   isMonetarySpend,
   isOwnerReadySpend,
@@ -19,7 +21,10 @@ export type ChairmanDigest = {
     amountSAR: number;
     sultanRecommendation: string;
     approvePath: string;
+    duplicateCount: number;
+    duplicateIds: string[];
   }>;
+  returned: Array<{ id: string; subject: string; amountSAR: number; stoppedBy: string; note: string; label: string; duplicateCount: number }>;
   commands: Array<{
     id: string;
     subject: string;
@@ -44,7 +49,8 @@ function changedSince(updatedAt: string, sinceMs: number) {
 export function buildChairmanDigest(since: string, now = new Date()): ChairmanDigest {
   const sinceMs = Date.parse(since);
   if (!Number.isFinite(sinceMs)) throw new Error("since يجب أن يكون تاريخاً بصيغة ISO.");
-  const memos = listApprovals().filter((item) => (item.status === "PENDING" || item.status === "DEFERRED") && approvalVisibleToChairman(item) && isMonetarySpend(item.amount)).map((item) => {
+  const pending = listApprovals().filter((item) => item.status === "PENDING" || item.status === "DEFERRED");
+  const memos = collapseDuplicates(pending.filter((item) => approvalVisibleToChairman(item) && isMonetarySpend(item.amount))).map((item) => {
     const chain = readSpendChain(item)!;
     const memo = toDecisionMemo(item.id, chain);
     return {
@@ -53,7 +59,13 @@ export function buildChairmanDigest(since: string, now = new Date()): ChairmanDi
       amountSAR: memo.amountSAR,
       sultanRecommendation: memo.sultanRecommendation,
       approvePath: `/inbox?decision=${encodeURIComponent(item.id)}`,
+      duplicateCount: item.duplicateCount,
+      duplicateIds: item.duplicateIds,
     };
+  });
+  const returned = collapseDuplicates(pending.filter((item) => returnedToDepartment(item))).map((item) => {
+    const stop = returnedToDepartment(item)!;
+    return { id: item.id, subject: item.title, amountSAR: Number(item.amount), stoppedBy: stop.by, note: stop.note, label: stop.label, duplicateCount: item.duplicateCount };
   });
   const commands = listChairmanCommands().filter((command) => {
     const overdue = command.status !== "CLOSED" && Date.parse(command.dueAt) < now.getTime();
@@ -93,7 +105,8 @@ export function buildChairmanDigest(since: string, now = new Date()): ChairmanDi
       });
     }
   }
-  return { ok: true, since, generatedAt: now.toISOString(), memos, commands, alerts };
+  const recentAlerts = alerts.filter((alert) => changedSince(alert.at, sinceMs));
+  return { ok: true, since, generatedAt: now.toISOString(), memos, returned, commands, alerts: recentAlerts };
 }
 
 export function memoTextForApproval(id: string) {

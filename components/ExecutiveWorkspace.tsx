@@ -7,9 +7,9 @@ import ChairmanCommandComposer from "./ChairmanCommandComposer";
 
 type Workspace = {
   asOf: string;
-  counts: { decisions: number; projects: number; blocked: number; proof: number };
+  counts: { decisions: number; returned?: number; projects: number; blocked: number; proof: number };
   stages: { study: number; decision: number; approved: number; execution: number };
-  approvals: Array<{ id: string; title: string; amount: number | null; requested_role: string; type: string }>;
+  approvals: Array<{ id: string; title: string; amount: number | null; requested_role: string; type: string; duplicateCount?: number }>;
   projects: Array<{ id: string; name: string; project_number: number | null; budget: number | null }>;
   blockers: Array<{ id: string; title: string; status: string; project_id: string | null }>;
 };
@@ -44,11 +44,12 @@ export default function ExecutiveWorkspace() {
       <section className="workspace-metrics" aria-label="حالة العمل">
         {[[data.counts.decisions, "قرار ينتظر المراجعة", "/inbox"], [data.counts.blocked, "خطوة متوقفة", "/projects"], [data.counts.projects, "مشروع نشط", "/projects"], [data.counts.proof, "مهمة فعلية قيد المراجعة", "/projects"]].map(([value, label, href]) => <Link href={String(href)} key={String(label)}><span>{String(label)}</span><strong>{number.format(Number(value))}</strong><ArrowUpLeft size={18} /></Link>)}
       </section>
+      {data.counts.returned ? <p className="workspace-empty" role="note">موقوف — أُعيد للقسم: {number.format(data.counts.returned)} طلب (لا ينتظر قرارك)</p> : null}
       <div className="workspace-columns">
         <div className="workspace-primary">
           <section className="priority-dossier" aria-labelledby="priority-title">
             <div className="section-caption"><span>01 / على مكتبك</span><span>الأقدم أولاً</span></div>
-            <h2 id="priority-title">{first ? first.title : "مساحة للخطوة التالية."}</h2>
+            <h2 id="priority-title">{first ? first.title : "مساحة للخطوة التالية."}{first?.duplicateCount && first.duplicateCount > 1 ? ` (مكرر ×${first.duplicateCount})` : ""}</h2>
             <p>{first ? "هذا الطلب لم يصدر قراره بعد. راجع سياقه وتكلفته قبل الاعتماد." : "لا توجد اعتمادات معلّقة في السجل. يمكنك مراجعة التنفيذ أو استكمال دراسة فكرة."}</p>
             {first ? <div className="dossier-amount"><span>المبلغ المطلوب</span><strong>{money(first.amount)}</strong><small>اعتماد الطلب لا يعني صرف المبلغ</small></div> : null}
             <Link href={first ? `/inbox?decision=${encodeURIComponent(first.id)}` : "/ideas"} className="primary-btn">{first ? "فتح ملف القرار" : "مراجعة الأفكار"}<ArrowLeft size={16} /></Link>

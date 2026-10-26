@@ -15,7 +15,8 @@ import { listApprovals as listCompanyApprovals } from "./repository";
 import { decisionMap } from "./decisions";
 import { hydrateCompany } from "./company/hydrate";
 import { hydrateChairmanCommands, listChairmanCommands, publicCommandStatus } from "./company/chairmanCommands";
-import { approvalVisibleToChairman, formatDecisionMemo, isOwnerReadySpend, readSpendChain, spendReviewHistory, spendStop, toDecisionMemo } from "./company/spendChain";
+import { approvalVisibleToChairman,
+  collapseDuplicates, formatDecisionMemo, isOwnerReadySpend, readSpendChain, spendReviewHistory, spendStop, toDecisionMemo } from "./company/spendChain";
 
 export type InboxChannel = "SYSTEM" | "COMPANY";
 
@@ -71,8 +72,14 @@ export async function getInbox(): Promise<{
 
   // 1) System approvals. Pending money stays with the review chain until the
   // memo is complete. Non-financial decisions and already decided rows stay.
-  for (const a of listSystemApprovals()) {
-    if (!approvalVisibleToChairman(a)) continue;
+  // Repeats of the same request (same title + amount) are shown once with a count.
+  const systemVisible = listSystemApprovals().filter((a) => approvalVisibleToChairman(a));
+  const isOpen = (a: { status: string }) => a.status === "PENDING" || a.status === "DEFERRED";
+  const systemRows: Array<(typeof systemVisible)[number] & { duplicateCount?: number; duplicateIds?: string[] }> = [
+    ...collapseDuplicates(systemVisible.filter(isOpen)),
+    ...systemVisible.filter((a) => !isOpen(a)),
+  ];
+  for (const a of systemRows) {
     const chain = readSpendChain(a);
     const stop = spendStop(chain);
     const memo = chain && (isOwnerReadySpend(chain) || stop) ? formatDecisionMemo(toDecisionMemo(a.id, chain)) : a.detail;
@@ -82,13 +89,13 @@ export async function getInbox(): Promise<{
       channel: "SYSTEM",
       actionsVia: "approvals",
       type: a.type,
-      title: a.title,
+      title: a.duplicateCount && a.duplicateCount > 1 ? `${a.title} (مكرر ×${a.duplicateCount})` : a.title,
       detail,
       amount: a.amount,
       requestedBy: a.requestedRole,
       status: a.status,
       createdAt: a.createdAt,
-      metadata: { ...a.metadata, chainStatus: stop ? { stopped: true, by: stop.by, label: stop.label } : undefined, reviewHistory: spendReviewHistory(chain) },
+      metadata: { ...a.metadata, chainStatus: stop ? { stopped: true, by: stop.by, label: stop.label } : undefined, reviewHistory: spendReviewHistory(chain), duplicateCount: a.duplicateCount, duplicateIds: a.duplicateIds },
     });
   }
 
