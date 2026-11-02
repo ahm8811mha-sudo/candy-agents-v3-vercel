@@ -60,6 +60,7 @@ export type ChairmanCommand = {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  history?: { at: string; by: string; action: string; note: string }[];
 };
 
 const store: ChairmanCommand[] = [];
@@ -372,11 +373,10 @@ export async function issueChairmanCommand(text: string, options: { now?: string
   };
   command.steps = planSteps(command, amount, external);
   const owner = getAgent(route.ownerAgentId);
-  for (const step of command.steps) {
-    if (step.kind !== "INTERNAL") continue;
-    step.status = "DONE";
-    step.evidence = `أنجز ${owner?.name || route.ownerAgentId} داخل دوره: ${step.title}. لا رسالة خارجية ولا صرف.`;
-  }
+  // Internal steps stay PENDING until the owner reports real progress through
+  // the bridge. Marking them DONE here closed every plain command at birth,
+  // so it never reached the employee's inbox or the bridge feed.
+  void owner;
   if (money && !amount) {
     const spend = command.steps.find((step) => step.kind === "SPEND");
     if (spend) {
@@ -457,7 +457,7 @@ export function commandsForAgent(agentId: string): ChairmanCommand[] {
 }
 
 export type CommandUpdate = {
-  action: "progress" | "block" | "close" | "evidence";
+  action: "progress" | "block" | "close" | "evidence" | "reopen";
   stepId?: string;
   note: string;
   evidence?: string;
@@ -470,6 +470,22 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
   if (!involved) throw new Error("هذا الأمر ليس في نطاق هذا الموظف.");
   const note = update.note.trim();
   if (note.length < 3) throw new Error("أضف ملاحظة.");
+  if (update.action === "reopen") {
+    if (command.status !== "CLOSED") throw new Error("الأمر ليس مغلقاً.");
+    for (const step of command.steps) {
+      if (step.kind === "INTERNAL") {
+        step.status = "PENDING";
+        step.evidence = null;
+      }
+    }
+    command.closedAt = null;
+    refreshStatus(command);
+    command.history = [...(command.history || []), { at: nowIso(), by: agentId, action: "reopen", note }];
+    command.updatedAt = nowIso();
+    command.resultReport = reportFor(command);
+    await persistCommand(command);
+    return command;
+  }
   if (update.action === "close") {
     const evidence = (update.evidence || note).trim();
     if (evidence.length < 10) throw new Error("الإغلاق يحتاج دليلاً من عشر أحرف على الأقل.");

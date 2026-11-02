@@ -246,7 +246,7 @@ export async function postBridgeAction(agentId: string, input: unknown) {
   if (body.kind === "command") {
     if (!body.commandId) throw new Error("يلزم معرّف الأمر.");
     const update: CommandUpdate = {
-      action: body.action === "block" ? "block" : body.action === "close" ? "close" : body.action === "evidence" ? "evidence" : "progress",
+      action: body.action === "block" ? "block" : body.action === "close" ? "close" : body.action === "evidence" ? "evidence" : body.action === "reopen" ? "reopen" : "progress",
       stepId: body.stepId,
       note: body.note || body.evidence || "",
       evidence: body.evidence,
