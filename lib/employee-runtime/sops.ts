@@ -144,6 +144,28 @@ export const EMPLOYEE_SOPS: EmployeeSop[] = [
     kpiIds: ["unauthorized_action_count"],
   },
   {
+    id: "SOP-RESEARCH-001",
+    title: "بحث فرص الاستثمار والنمو",
+    ownerEmployeeId: "sultan",
+    backupEmployeeId: "rased",
+    trigger: "طلب من رئيس مجلس الإدارة لدراسة فرص استثمار أو نمو",
+    objective: "تقديم فرص مدروسة قابلة للتنفيذ بعد مراجعة مالية ونظامية وتوصية تنفيذية.",
+    requiredInputs: ["commandId"],
+    steps: [
+      "بحث الفرص",
+      "المراجعة المالية",
+      "المراجعة النظامية",
+      "توصية الرئيس التنفيذي",
+      "قرار الرئيس",
+    ],
+    acceptanceCriteria: [
+      "كل فرصة لها مصدر وتقدير عائد ومخاطر",
+      "لا التزام مالي قبل قرار رئيس مجلس الإدارة",
+    ],
+    controls: ["finance-review", "compliance-review", "audit"],
+    kpiIds: ["owner_intervention_rate", "first_time_success"],
+  },
+  {
     id: "SOP-CONTINUITY-001",
     title: "استمرارية العمل وبديل الموظف",
     ownerEmployeeId: "sultan",

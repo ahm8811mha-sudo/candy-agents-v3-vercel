@@ -188,11 +188,15 @@ function assignOwner(ownerAgentId: string, keyword: CommandRoute): CommandRoute 
   };
 }
 
+const RESEARCH_SOP_ID = "SOP-RESEARCH-001";
+const RESEARCH_COLLABORATORS = ["fahad", "rased", "abdulrahman", "majed"];
+
 function keywordRoute(text: string): CommandRoute {
   const rules: Array<{ test: RegExp; ownerAgentId: string; collaborators: string[]; sopId: string | null }> = [
+    { test: /استثمار|استثمر|فرص|عائد/, ownerAgentId: "sultan", collaborators: RESEARCH_COLLABORATORS, sopId: RESEARCH_SOP_ID },
     { test: /ترخيص|حكوم|امتثال|نظام|سجل تجاري/, ownerAgentId: "majed", collaborators: ["hares"], sopId: null },
     { test: /خطر|حوكمة|صلاحية|تدقيق/, ownerAgentId: "hares", collaborators: ["majed"], sopId: "SOP-GOV-001" },
-    { test: /فرصة|منافس|استخبارات/, ownerAgentId: "rased", collaborators: ["noura"], sopId: null },
+    { test: /منافس|استخبارات/, ownerAgentId: "rased", collaborators: ["noura"], sopId: null },
     { test: /قيد|فاتورة|محاسبة|إقفال/, ownerAgentId: "ameen", collaborators: ["abdulrahman"], sopId: null },
     { test: /شراء|مورد|مخزون|توريد|مشتريات/, ownerAgentId: "khalid", collaborators: ["fahad", "abdulrahman"], sopId: "SOP-P2P-001" },
     { test: /مبيعات|عميل|تحصيل|صفقة|عرض سعر/, ownerAgentId: "sara", collaborators: ["noura"], sopId: "SOP-OTC-001" },
@@ -215,8 +219,12 @@ export function routeChairmanCommand(text: string, options: { assignee?: string 
 }
 
 function planSteps(command: Pick<ChairmanCommand, "id" | "text" | "ownerAgentId" | "sopId">, amount: number | null, external: boolean): CommandStep[] {
-  const sop = EMPLOYEE_SOPS.find((item) => item.id === command.sopId) || EMPLOYEE_SOPS.find((item) => item.ownerEmployeeId === command.ownerAgentId);
-  const titles = (sop?.steps || ["فهم الطلب وتحديد المخرج", "جمع بيانات القسم", "تنفيذ العمل غير المالي", "كتابة تقرير النتيجة"]).slice(0, 4);
+  // Sultan's own SOPs (continuity, exception) are internal controls, not a plan
+  // for a chairman command, so they are never used as a fallback.
+  const sop = EMPLOYEE_SOPS.find((item) => item.id === command.sopId)
+    || (command.ownerAgentId === "sultan" ? undefined : EMPLOYEE_SOPS.find((item) => item.ownerEmployeeId === command.ownerAgentId));
+  const generic = ["فهم الطلب وتحديد المخرج", "جمع بيانات القسم", "تنفيذ العمل غير المالي", "كتابة تقرير النتيجة"];
+  const titles = sop?.id === RESEARCH_SOP_ID ? sop.steps : (sop?.steps || generic).slice(0, 4);
   const steps: CommandStep[] = titles.map((title, index) => ({
     id: `${command.id}-step-${index + 1}`,
     title,
@@ -313,6 +321,7 @@ function reportFor(command: ChairmanCommand) {
     done.length ? `ما أُنجز:\n${done.join("\n")}` : "ما أُنجز: لا شيء بعد.",
     waiting.length ? `ما ينتظر:\n${waiting.join("\n")}` : "ما ينتظر: لا شيء.",
     command.blockers.length ? `العوائق: ${command.blockers.join("؛ ")}` : "العوائق: لا عوائق.",
+    ...(command.history?.length ? [`آخر التحديثات:\n${command.history.slice(-5).map((item) => `- ${item.at.slice(0, 16).replace("T", " ")} ${agentName(item.by)}: ${item.note}`).join("\n")}`] : []),
   ].join("\n");
 }
 
@@ -329,6 +338,20 @@ async function trackWithDiwan(command: ChairmanCommand) {
     dueAt: command.dueAt,
   }, { actor: "diwan" });
   if (opened.ok && opened.commitment) command.diwan.id = opened.commitment.id;
+}
+
+async function reopenDiwan(command: ChairmanCommand, note: string) {
+  if (command.diwan.status !== "COMPLETED") return;
+  command.diwan.status = "OPEN";
+  command.diwan.closedAt = null;
+  command.diwan.evidence = null;
+  if (!command.diwan.id) {
+    // Commands closed at birth never got a follow-up record; open one now.
+    await trackWithDiwan(command);
+    return;
+  }
+  await advanceCommitment({ id: command.diwan.id, status: "IN_PROGRESS" }, { actor: "diwan" });
+  void note;
 }
 
 async function closeDiwan(command: ChairmanCommand, evidence: string) {
@@ -403,13 +426,9 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     }
   }
   refreshStatus(command);
-  if (command.status === "CLOSED") {
-    command.resultReport = reportFor(command);
-    await closeDiwan(command, command.resultReport);
-  } else {
-    command.resultReport = reportFor(command);
-    await trackWithDiwan(command);
-  }
+  // A brand-new command is never complete: Rayyan's follow-up always opens.
+  command.resultReport = reportFor(command);
+  await trackWithDiwan(command);
   command.updatedAt = nowIso();
   store.unshift(command);
   try {
@@ -448,6 +467,15 @@ export function listOpenCommandsSince(since: string) {
     }));
 }
 
+/** Read-only audit: commands closed within a minute of creation with no recorded owner activity. */
+export function listAutoClosedCommands() {
+  return listChairmanCommands()
+    .filter((command) => command.status === "CLOSED" && command.closedAt)
+    .filter((command) => Math.abs(Date.parse(command.closedAt as string) - Date.parse(command.createdAt)) < 60_000)
+    .filter((command) => !(command.history || []).length)
+    .map((command) => ({ id: command.id, subject: command.text, ownerAgentId: command.ownerAgentId, createdAt: command.createdAt, closedAt: command.closedAt }));
+}
+
 export function getChairmanCommand(id: string): ChairmanCommand | undefined {
   return store.find((command) => command.id === id);
 }
@@ -457,7 +485,7 @@ export function commandsForAgent(agentId: string): ChairmanCommand[] {
 }
 
 export type CommandUpdate = {
-  action: "progress" | "block" | "close" | "evidence" | "reopen";
+  action: "progress" | "block" | "close" | "evidence" | "reopen" | "replan";
   stepId?: string;
   note: string;
   evidence?: string;
@@ -481,6 +509,23 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     command.closedAt = null;
     refreshStatus(command);
     command.history = [...(command.history || []), { at: nowIso(), by: agentId, action: "reopen", note }];
+    await reopenDiwan(command, note);
+    command.updatedAt = nowIso();
+    command.resultReport = reportFor(command);
+    await persistCommand(command);
+    return command;
+  }
+  if (update.action === "replan") {
+    if (command.status === "CLOSED") throw new Error("أعد فتح الأمر أولاً.");
+    const route = routeChairmanCommand(command.text);
+    const preserved = command.steps.filter((step) => step.evidence).map((step) => ({ at: command.updatedAt, by: step.ownerAgentId, action: "archived-step", note: `${step.title}: ${step.evidence}` }));
+    const others = command.steps.filter((step) => step.kind !== "INTERNAL");
+    command.sopId = route.sopId;
+    if (route.ownerAgentId === command.ownerAgentId) command.collaborators = route.collaborators;
+    command.steps = [...planSteps(command, null, false), ...others];
+    refreshStatus(command);
+    command.history = [...(command.history || []), ...preserved, { at: nowIso(), by: agentId, action: "replan", note }];
+    await reopenDiwan(command, note);
     command.updatedAt = nowIso();
     command.resultReport = reportFor(command);
     await persistCommand(command);
@@ -519,8 +564,10 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     step.evidence = update.evidence?.trim() || note;
     refreshStatus(command);
   }
+  command.history = [...(command.history || []), { at: nowIso(), by: agentId, action: update.action, note }];
   command.updatedAt = nowIso();
-  command.resultReport = command.resultReport || reportFor(command);
+  // Refresh the report so progress notes reach the chairman and the digest.
+  if (update.action !== "close") command.resultReport = reportFor(command);
   await persistCommand(command);
   return command;
 }
