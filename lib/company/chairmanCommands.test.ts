@@ -144,4 +144,23 @@ describe("chairman commands", () => {
     expect(listOpenCommandsSince(new Date(Date.now() + 60_000).toISOString())).toEqual([]);
     expect(() => listOpenCommandsSince("tomorrow")).toThrow(/ISO/);
   });
+  it("routes investment research to the research procedure and shows progress in the report", async () => {
+    const command = await issueChairmanCommand("اجتمعوا وعطوني أكبر الفرص القابلة للاستثمار مع عائد ٥٪ سنوياً");
+    expect(command.ownerAgentId).toBe("sultan");
+    expect(command.collaborators).toEqual(["fahad", "rased", "abdulrahman", "majed"]);
+    expect(command.steps.map((step) => step.title)).toEqual(["بحث الفرص", "المراجعة المالية", "المراجعة النظامية", "توصية الرئيس التنفيذي", "قرار الرئيس"]);
+    expect(command.currentStep).toBe("بحث الفرص");
+    expect(command.diwan.status).toBe("OPEN");
+    const updated = await updateChairmanCommand("sultan", command.id, { action: "progress", note: "جمعنا ثلاث فرص أولية من راصد." });
+    expect(updated.resultReport).toContain("جمعنا ثلاث فرص أولية");
+    expect(updated.resultReport).not.toContain("ما أُنجز: لا شيء بعد");
+  });
+
+  it("replans an open command and keeps earlier progress in history", async () => {
+    const command = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", command.id, { action: "progress", note: "أنهيت الخطوة الأولى." });
+    const replanned = await updateChairmanCommand("sara", command.id, { action: "replan", note: "تصحيح الإجراء." });
+    expect(replanned.steps.every((step) => step.kind !== "INTERNAL" || step.status === "PENDING")).toBe(true);
+    expect(replanned.history?.some((item) => item.note.includes("أنهيت الخطوة الأولى"))).toBe(true);
+  });
 });

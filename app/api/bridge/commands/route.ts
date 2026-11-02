@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hydrateChairmanCommands, listOpenCommandsSince } from "@/lib/company/chairmanCommands";
+import { hydrateChairmanCommands, listAutoClosedCommands, listOpenCommandsSince } from "@/lib/company/chairmanCommands";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,10 @@ export async function GET(req: NextRequest) {
     const status = access.ok ? 403 : access.status;
     const error = access.ok ? "هذا المسار لمفتاح الجسر الرئيسي فقط." : access.error;
     return NextResponse.json({ ok: false, error }, { status });
+  }
+  if (req.nextUrl.searchParams.get("audit") === "auto-closed") {
+    await hydrateChairmanCommands();
+    return NextResponse.json({ ok: true, commands: listAutoClosedCommands() });
   }
   const since = req.nextUrl.searchParams.get("since") || "";
   if (!Number.isFinite(Date.parse(since))) {
