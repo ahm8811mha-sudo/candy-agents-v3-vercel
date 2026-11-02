@@ -20,6 +20,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentK
   try {
     await hydrateChairmanCommands();
     const body = await req.json().catch(() => ({}));
+    if ((body as { action?: unknown }).action === "reopen" && access.scope !== "master") {
+      return NextResponse.json({ ok: false, error: "إعادة فتح الأمر لمفتاح الجسر الرئيسي فقط." }, { status: 403 });
+    }
     const result = await postBridgeAction(agentKey, body);
     return NextResponse.json({ ok: true, result });
   } catch (error) {

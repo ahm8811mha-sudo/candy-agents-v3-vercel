@@ -3,6 +3,7 @@ import { _clearApprovals, decideApproval, listApprovals } from "../approvals";
 import { postBridgeAction, _clearBridgeMessages } from "./agentBridge";
 import {
   _clearChairmanCommands,
+  commandsForAgent,
   getChairmanCommand,
   issueChairmanCommand,
   listOpenCommandsSince,
@@ -22,10 +23,24 @@ describe("chairman commands", () => {
     expect(routeChairmanCommand("راجع عرض السعر للعميل").ownerAgentId).toBe("sara");
     const command = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
     expect(command.ownerAgentId).toBe("sara");
-    expect(command.steps.filter((step) => step.kind === "INTERNAL").every((step) => step.status === "DONE" && (step.evidence || "").length > 9)).toBe(true);
+    // A new command must stay open for its owner; nothing is auto-completed.
+    expect(command.steps.filter((step) => step.kind === "INTERNAL").every((step) => step.status === "PENDING")).toBe(true);
+    expect(command.status).toBe("IN_PROGRESS");
+    expect(command.diwan.status).toBe("OPEN");
+    expect(commandsForAgent("sara").map((item) => item.id)).toContain(command.id);
+    expect(listOpenCommandsSince(new Date(Date.now() - 60_000).toISOString()).map((item) => item.id)).toContain(command.id);
+  });
+
+  it("reopens a closed command with a logged note and puts it back in the feed", async () => {
+    const command = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", command.id, { action: "close", note: "أُنجز الملخص", evidence: "أُرسل الملخص الداخلي للمراجعة." });
     expect(command.status).toBe("CLOSED");
-    expect(command.diwan.status).toBe("COMPLETED");
-    expect((command.resultReport || "").length).toBeGreaterThan(9);
+    expect(listOpenCommandsSince("2000-01-01T00:00:00Z").map((item) => item.id)).not.toContain(command.id);
+    const reopened = await updateChairmanCommand("sara", command.id, { action: "reopen", note: "أُعيد فتحه لأنه أُغلق خطأً." });
+    expect(reopened.status).toBe("IN_PROGRESS");
+    expect(reopened.closedAt).toBeNull();
+    expect(reopened.history?.at(-1)).toMatchObject({ action: "reopen", by: "sara" });
+    expect(listOpenCommandsSince("2000-01-01T00:00:00Z").map((item) => item.id)).toContain(command.id);
   });
 
   it("sends money through the chain and refuses to close or approve it from an employee", async () => {
@@ -118,6 +133,7 @@ describe("chairman commands", () => {
     const since = new Date(Date.now() - 60_000).toISOString();
     const open = await issueChairmanCommand("أرسل بريداً للعميل بتأكيد الموعد");
     const closed = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", closed.id, { action: "close", note: "أُنجز الملخص", evidence: "أُرسل الملخص الداخلي للمراجعة." });
     const listed = listOpenCommandsSince(since);
     expect(listed.map((item) => item.id)).toContain(open.id);
     expect(listed.map((item) => item.id)).not.toContain(closed.id);
