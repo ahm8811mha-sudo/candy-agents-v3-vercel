@@ -1,7 +1,11 @@
 import GoldenStarOffice from "@/components/GoldenStarOffice";
+import LiveOfficeFloor from "@/components/LiveOfficeFloor";
 
 export const dynamic = "force-dynamic";
 
 export default function OfficePage() {
-  return <GoldenStarOffice />;
+  return <>
+    <LiveOfficeFloor />
+    <GoldenStarOffice />
+  </>;
 }
