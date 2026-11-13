@@ -21,7 +21,7 @@ type Agent = {
   id: string;
   name: string;
   title: string;
-  rank: "OWNER" | "CEO" | "DEPARTMENT_HEAD" | "FUNCTIONAL";
+  rank: "OWNER" | "CEO" | "SECTOR_LEAD" | "DEPARTMENT_HEAD" | "FUNCTIONAL";
   department: string;
   href?: string;
   responsibilities: string[];
@@ -44,6 +44,7 @@ const sar = new Intl.NumberFormat("ar-SA-u-nu-latn", { style: "currency", curren
 const rankMeta: Record<Agent["rank"], { label: string; icon: typeof Crown }> = {
   OWNER: { label: "رئيس مجلس الإدارة", icon: Crown },
   CEO: { label: "الإدارة التنفيذية", icon: ShieldCheck },
+  SECTOR_LEAD: { label: "قائد قطاع", icon: Building2 },
   DEPARTMENT_HEAD: { label: "رئيس قسم", icon: Building2 },
   FUNCTIONAL: { label: "وحدة مساندة", icon: Users },
 };
@@ -209,7 +210,7 @@ export default function OrgStructure() {
   }
 
   const leadership = agents.filter((a) => a.rank === "OWNER" || a.rank === "CEO");
-  const heads = agents.filter((a) => a.rank === "DEPARTMENT_HEAD");
+  const heads = agents.filter((a) => a.rank === "SECTOR_LEAD" || a.rank === "DEPARTMENT_HEAD");
   const functional = agents.filter((a) => a.rank === "FUNCTIONAL");
 
   return (
@@ -235,14 +236,14 @@ export default function OrgStructure() {
       </section>
 
       <section style={{ display: "grid", gap: 10 }}>
-        <strong className="shell-group" style={{ padding: 0 }}>رؤساء الأقسام (يرفعون لسلطان)</strong>
+        <strong className="shell-group" style={{ padding: 0 }}>قادة القطاعات (يرفعون لسلطان)</strong>
         <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(3, 240, 14) }}>
           {heads.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>
       </section>
 
       <section style={{ display: "grid", gap: 10 }}>
-        <strong className="shell-group" style={{ padding: 0 }}>الوحدات المساندة</strong>
+        <strong className="shell-group" style={{ padding: 0 }}>الفريق ومكتب سلطان والحوكمة المستقلة</strong>
         <div className="bento-grid" style={{ gridTemplateColumns: fluidColumns(Math.min(functional.length, 4), 220, 14) }}>
           {functional.map((a) => <AgentCard key={a.id} agent={a} onCustomize={customize} />)}
         </div>

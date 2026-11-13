@@ -34,7 +34,7 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
   },
   {
     id: "noura", name: "نورة", title: "مديرة التسويق", department: "التسويق",
-    reportsTo: "sultan", backupEmployeeId: "sara", authorityLimitSAR: 0, maxAutonomousRisk: "MEDIUM",
+    reportsTo: "sara", backupEmployeeId: "sara", authorityLimitSAR: 0, maxAutonomousRisk: "MEDIUM",
     capabilities: ["CREATE_CAMPAIGN_PLAN", "CREATE_MARKETING_ASSET", "SEGMENT_CUSTOMER", "MEASURE_ROAS", "OPTIMIZE_CAMPAIGN", "PAUSE_CAMPAIGN"],
     sopIds: ["SOP-MKT-001", "SOP-MKT-002", "SOP-OTC-001"],
     kpis: [kpi("roas", "العائد على الإنفاق الإعلاني", "RATIO", "HIGHER_IS_BETTER", 4, 2.5, 1.5), kpi("cac", "تكلفة اكتساب العميل", "SAR", "LOWER_IS_BETTER", 40, 60, 90)],
@@ -55,7 +55,7 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
   },
   {
     id: "khalid", name: "خالد", title: "مدير المشتريات وسلاسل الإمداد", department: "المشتريات",
-    reportsTo: "sultan", backupEmployeeId: "fahad", authorityLimitSAR: 0, maxAutonomousRisk: "MEDIUM",
+    reportsTo: "fahad", backupEmployeeId: "fahad", authorityLimitSAR: 0, maxAutonomousRisk: "MEDIUM",
     capabilities: ["RESERVE_INVENTORY", "DECREMENT_INVENTORY", "CREATE_PURCHASE_REQUEST", "COMPARE_SUPPLIERS", "CREATE_PURCHASE_ORDER", "REORDER_STOCK"],
     sopIds: ["SOP-PROC-001", "SOP-INV-001", "SOP-OTC-001", "SOP-P2P-001"],
     kpis: [kpi("stockout_rate", "نفاد المخزون", "PERCENT", "LOWER_IS_BETTER", 1, 3, 5), kpi("inventory_accuracy", "دقة المخزون", "PERCENT", "HIGHER_IS_BETTER", 99, 97, 94)],
@@ -76,10 +76,17 @@ export const EMPLOYEE_PROFILES: EmployeeProfile[] = [
   },
   {
     id: "hares", name: "حارس", title: "مسؤول المخاطر والحوكمة", department: "الحوكمة",
-    reportsTo: "sultan", backupEmployeeId: "majed", authorityLimitSAR: 0, maxAutonomousRisk: "LOW",
+    reportsTo: "owner", backupEmployeeId: "majed", authorityLimitSAR: 0, maxAutonomousRisk: "LOW",
     capabilities: ["CHECK_POLICY", "CHECK_AUTHORITY", "VERIFY_EVIDENCE", "BLOCK_UNAUTHORIZED_ACTION", "CREATE_AUDIT_EVENT", "ESCALATE_RISK"],
     sopIds: ["SOP-GOV-001", "SOP-GOV-002", "SOP-CONTINUITY-001", "SOP-IDEA-001"],
     kpis: [kpi("unauthorized_action_count", "إجراءات غير مصرح بها", "COUNT", "LOWER_IS_BETTER", 0, 1, 1), kpi("evidence_completion_rate", "اكتمال أدلة التنفيذ", "PERCENT", "HIGHER_IS_BETTER", 100, 98, 95)],
+  },
+  {
+    id: "diwan", name: "ريّان", title: "مكتب المتابعة والفرز", department: "الإدارة التنفيذية",
+    reportsTo: "sultan", backupEmployeeId: "sultan", authorityLimitSAR: 0, maxAutonomousRisk: "LOW",
+    capabilities: ["ROUTE_WORK", "ASSIGN_TASK", "VERIFY_EVIDENCE", "ESCALATE_RISK"],
+    sopIds: ["SOP-EXEC-001"],
+    kpis: [kpi("triage_within_hour", "الفرز خلال ساعة", "PERCENT", "HIGHER_IS_BETTER", 100, 90, 75), kpi("unescalated_overdue", "متأخرات بلا تصعيد", "COUNT", "LOWER_IS_BETTER", 0, 1, 3)],
   },
 ];
 

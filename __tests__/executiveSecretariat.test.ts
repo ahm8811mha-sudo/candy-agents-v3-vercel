@@ -12,7 +12,8 @@ describe("Executive Secretariat agent", () => {
   it("رئيس الديوان is a real agent in the registry", () => {
     const diwan = getAgent("diwan");
     expect(diwan).toBeDefined();
-    expect(diwan?.department).toBe("الديوان التنفيذي");
+    expect(diwan?.department).toBe("الإدارة التنفيذية");
+    expect(diwan?.title).toBe("مكتب المتابعة والفرز");
     expect(diwan?.reportsTo).toBe("sultan");
     // The office cannot spend on its own; it only tracks.
     expect(diwan?.authorityLimitSAR).toBe(0);

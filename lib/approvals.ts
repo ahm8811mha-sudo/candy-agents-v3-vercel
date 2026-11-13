@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { persist, persistCritical, hasSupabaseEnv, getSupabaseAdmin } from "./supabase";
 import { getTenantId } from "./tenant";
 import { emitWebhook } from "./company/webhooks";
-import { blankSpendChain, employeeActorBlocked, isMonetarySpend, isOwnerReadySpend, readSpendChain } from "./company/spendChain";
+import { blankSpendChain, duplicateKey, employeeActorBlocked, isArchived, isMonetarySpend, isOwnerReadySpend, readSpendChain, type ArchiveMark } from "./company/spendChain";
 
 export type ApprovalType = "TRADE" | "BUDGET" | "DECISION" | "IDEA" | "INCOME" | "SALES_CHANGE" | "GENERAL";
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "DEFERRED";
@@ -233,15 +233,37 @@ export function createApproval(input: CreateApprovalInput): ApprovalItem {
  * is accepted into the store, so success is never reported ahead of persistence.
  * Falls back to in-memory-only when Supabase is not configured (dev/demo mode).
  */
+/** Same title and amount still open within this window is a duplicate, not a new request (G5). */
+export const DUPLICATE_WINDOW_DAYS = 30;
+
+async function findOpenDuplicate(input: CreateApprovalInput, tenantId = getTenantId()): Promise<ApprovalItem | null> {
+  if (!isMonetarySpend(input.amount)) return null;
+  const key = duplicateKey({ title: input.title, amount: input.amount });
+  const since = new Date(Date.now() - DUPLICATE_WINDOW_DAYS * 86_400_000).toISOString();
+  const local = store.find((a) => (a.status === "PENDING" || a.status === "DEFERRED") && !isArchived(a) && a.createdAt >= since && duplicateKey(a) === key);
+  if (local) return local;
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("company_approvals").select("*").eq("tenant_id", tenantId)
+    .eq("amount", input.amount as number).in("status", ["PENDING", "DEFERRED"]).gte("created_at", since).limit(50);
+  if (error || !data) return null;
+  const match = (data as Record<string, unknown>[]).map(fromRow).find((row) => !isArchived(row) && duplicateKey(row) === key);
+  return match || null;
+}
+
 export async function createApprovalCritical(input: CreateApprovalInput): Promise<ApprovalItem> {
   const client = getSupabaseAdmin();
   if (!client) {
     if (process.env.NODE_ENV === "production") throw new Error("Durable approval storage is unavailable.");
+    const duplicate = await findOpenDuplicate(input);
+    if (duplicate) return duplicate;
     return createApproval(input);
   }
   const item = buildApproval(input);
   const durable = await findDurableApproval(item.id, item.dedupeKey);
   if (durable) return rememberDurableApprovalRow(toRow(durable));
+  const duplicate = await findOpenDuplicate(input);
+  if (duplicate) return rememberDurableApprovalRow(toRow(duplicate));
   // DO NOTHING protects a concurrent decision from being reset to PENDING.
   const { error } = await client.from("company_approvals").upsert({ ...toRow(item), tenant_id: getTenantId() }, { onConflict: "id", ignoreDuplicates: true });
   if (error) throw error;
@@ -250,9 +272,20 @@ export async function createApprovalCritical(input: CreateApprovalInput): Promis
   return rememberDurableApprovalRow(toRow(saved));
 }
 
-export function listApprovals(status?: ApprovalStatus): ApprovalItem[] {
-  const items = status ? store.filter((a) => a.status === status) : store;
+/** Archived items (merged duplicates, expired returns) stay in the database but leave every queue. */
+export function listApprovals(status?: ApprovalStatus, options: { includeArchived?: boolean } = {}): ApprovalItem[] {
+  const visible = options.includeArchived ? store : store.filter((a) => !isArchived(a));
+  const items = status ? visible.filter((a) => a.status === status) : visible;
   return [...items];
+}
+
+/** Archive, never delete: the row keeps its status and gains metadata.archived. */
+export async function archiveApprovalCritical(id: string, mark: Omit<ArchiveMark, "at"> & { at?: string }): Promise<ApprovalItem | null> {
+  const item = store.find((a) => a.id === id) || await getApprovalCritical(id);
+  if (!item) return null;
+  if (isArchived(item)) return item;
+  const archived: ApprovalItem = { ...item, metadata: { ...item.metadata, archived: { ...mark, at: mark.at || new Date().toISOString() } } };
+  return writeApprovalCritical(archived);
 }
 
 export function decideApproval(
@@ -326,12 +359,13 @@ export async function reopenApprovalCritical(id: string): Promise<ApprovalItem |
 }
 
 export function approvalStats(): { pending: number; approved: number; rejected: number; deferred: number; total: number } {
+  const visible = store.filter((a) => !isArchived(a));
   return {
-    pending: store.filter((a) => a.status === "PENDING").length,
-    approved: store.filter((a) => a.status === "APPROVED").length,
-    rejected: store.filter((a) => a.status === "REJECTED").length,
-    deferred: store.filter((a) => a.status === "DEFERRED").length,
-    total: store.length,
+    pending: visible.filter((a) => a.status === "PENDING").length,
+    approved: visible.filter((a) => a.status === "APPROVED").length,
+    rejected: visible.filter((a) => a.status === "REJECTED").length,
+    deferred: visible.filter((a) => a.status === "DEFERRED").length,
+    total: visible.length,
   };
 }
 

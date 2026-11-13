@@ -8,7 +8,7 @@ export function readySpendForDecision(id: string) {
   let state = readSpendChain(item);
   if (!state) return item;
   if (state.stage === "department") {
-    state = advanceSpendChain(state, "fahad", {
+    state = advanceSpendChain(state, state.preparingAgentId === "department" ? "fahad" : state.preparingAgentId, {
       action: "submit_department",
       subject: item.title,
       options: "البديل الأقل تكلفة",

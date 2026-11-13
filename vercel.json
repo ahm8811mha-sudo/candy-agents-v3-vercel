@@ -46,6 +46,10 @@
     {
       "path": "/api/system/watchdog/cron",
       "schedule": "45 8 * * *"
+    },
+    {
+      "path": "/api/company/desk/cron",
+      "schedule": "0 17 * * *"
     }
   ]
 }

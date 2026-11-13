@@ -48,8 +48,9 @@ describe("chairman commands", () => {
     expect(command.status).toBe("IN_SPEND_CHAIN");
     expect(command.spendApprovalId).toBeTruthy();
     const approval = listApprovals().find((item) => item.id === command.spendApprovalId)!;
-    expect(approval.metadata?.spendChain).toMatchObject({ stage: "owner" });
-    expect(() => decideApproval(approval.id, "APPROVED", "sultan")).toThrow(/لا يملك/);
+    // No canned reviews: the request waits for the department memo, nobody reviewed it yet.
+    expect(approval.metadata?.spendChain).toMatchObject({ stage: "department", preparingAgentId: command.ownerAgentId, financeReview: null, governanceReview: null, sultanRecommendation: null });
+    expect(() => decideApproval(approval.id, "APPROVED", "sultan")).toThrow(/لم يكتمل/);
     await expect(updateChairmanCommand(command.ownerAgentId, command.id, {
       action: "close",
       note: "أُغلق بلا اعتماد",
@@ -69,7 +70,9 @@ describe("chairman commands", () => {
 
   it("blocks an external send and a money request that has no number", async () => {
     const external = await issueChairmanCommand("أرسل بريداً للعميل بتأكيد الموعد");
-    expect(external.status).toBe("AWAITING_CHAIRMAN");
+    // The Chairman's card is raised only after the team finished the internal work.
+    expect(external.status).toBe("IN_PROGRESS");
+    expect(external.decision).toBeNull();
     expect(external.steps.some((step) => step.kind === "EXTERNAL" && step.status === "BLOCKED")).toBe(true);
     await expect(updateChairmanCommand("sara", external.id, {
       action: "progress",
@@ -139,7 +142,7 @@ describe("chairman commands", () => {
     expect(listed.map((item) => item.id)).not.toContain(closed.id);
     expect(listed.find((item) => item.id === open.id)).toMatchObject({
       ownerAgentId: "sara",
-      status: "AWAITING_CHAIRMAN",
+      status: "IN_PROGRESS",
     });
     expect(listOpenCommandsSince(new Date(Date.now() + 60_000).toISOString())).toEqual([]);
     expect(() => listOpenCommandsSince("tomorrow")).toThrow(/ISO/);

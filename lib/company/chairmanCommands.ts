@@ -6,7 +6,7 @@
  * Rayyan (diwan) keeps a commitment until the command closes with evidence.
  */
 
-import { COMPANY_AGENTS, getAgent } from "./agents";
+import { COMPANY_AGENTS, getAgent, sectorLeadOf } from "./agents";
 import { createApproval } from "../approvals";
 import { advanceCommitment, openDecisionCommitment } from "./executiveSecretariat";
 import { EMPLOYEE_SOPS } from "../employee-runtime/sops";
@@ -14,14 +14,15 @@ import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
 import { createTask } from "../repository";
 import {
-  advanceSpendChain,
   blankSpendChain,
   isMonetarySpend,
   type SpendChainState,
 } from "./spendChain";
+import { appendWorkEvent } from "./workEvents";
 
 export type CommandStepStatus = "PENDING" | "DONE" | "BLOCKED";
-export type CommandStepKind = "INTERNAL" | "EXTERNAL" | "SPEND";
+export type CommandStepKind = "INTERNAL" | "EXTERNAL" | "SPEND" | "DECISION";
+export type CommandPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type ChairmanCommandStatus = "OPEN" | "IN_PROGRESS" | "BLOCKED" | "AWAITING_CHAIRMAN" | "IN_SPEND_CHAIN" | "CLOSED";
 
 export type CommandStep = {
@@ -40,6 +41,28 @@ export type DiwanCommitment = {
   evidence: string | null;
   openedAt: string;
   closedAt: string | null;
+};
+
+/** The Chairman's answer to a decision card on a command. Spend is decided on the approval, not here. */
+export type ChairmanDecisionChoice = "approve" | "reject" | "return" | "defer" | "renew";
+
+export type CommandDecision = {
+  status: "PENDING" | "APPROVED" | "REJECTED" | "RETURNED" | "DEFERRED";
+  stepId: string;
+  kind: "decision" | "external";
+  requestedAt: string;
+  deferredUntil: string | null;
+  decidedAt: string | null;
+  note: string | null;
+  returns: number;
+};
+
+export type CommandTriage = {
+  status: "PENDING" | "DONE";
+  confidence: number;
+  suggestedOwnerId: string | null;
+  by: string | null;
+  at: string | null;
 };
 
 export type ChairmanCommand = {
@@ -61,6 +84,9 @@ export type ChairmanCommand = {
   updatedAt: string;
   closedAt: string | null;
   history?: { at: string; by: string; action: string; note: string }[];
+  priority?: CommandPriority;
+  decision?: CommandDecision | null;
+  triage?: CommandTriage | null;
 };
 
 const store: ChairmanCommand[] = [];
@@ -99,17 +125,63 @@ export async function hydrateChairmanCommands() {
     if (missingTable(error)) return;
     throw new Error("تعذر قراءة الأوامر من قاعدة البيانات.");
   }
+  const migrated: ChairmanCommand[] = [];
   for (const row of data || []) {
     const payload = (row as { payload?: ChairmanCommand }).payload;
     if (!payload?.id) continue;
+    if (normalizeCommand(payload)) migrated.push(payload);
     const index = store.findIndex((item) => item.id === payload.id);
     if (index === -1) {
       store.push(payload);
       continue;
     }
-    if (payload.updatedAt > store[index].updatedAt) store[index] = payload;
+    if (payload.updatedAt >= store[index].updatedAt) store[index] = payload;
+  }
+  // A command stored before the decision step existed is saved once in its new shape.
+  for (const command of migrated) {
+    try { await persistCommand(command); } catch { /* the next write retries */ }
   }
 }
+
+const DECISION_TITLE = /قرار\s*الرئيس|قرار\s*رئيس\s*مجلس/;
+
+/**
+ * Bring a stored command up to the current workflow:
+ * the "قرار الرئيس" step becomes a real DECISION step for the Chairman (it was
+ * an internal step in Sultan's name, so no decision card was ever raised), and
+ * pending review steps move to the specialist who owns them.
+ * Returns true when the command changed.
+ */
+export function normalizeCommand(command: ChairmanCommand, now = nowIso()): boolean {
+  let changed = false;
+  command.priority = command.priority || "HIGH";
+  for (const step of command.steps) {
+    if (step.kind === "INTERNAL" && DECISION_TITLE.test(step.title) && step.status !== "DONE") {
+      step.kind = "DECISION";
+      step.ownerAgentId = "owner";
+      changed = true;
+    }
+    if (step.kind === "INTERNAL" && step.status !== "DONE") {
+      const specialist = specialistFor(step.title);
+      if (specialist && specialist !== step.ownerAgentId) {
+        step.ownerAgentId = specialist;
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    const before = command.status;
+    command.collaborators = withStepOwners(command);
+    refreshStatus(command, now);
+    command.history = [...(command.history || []), { at: now, by: "system", action: "workflow-upgrade", note: "حُوّلت خطوة «قرار الرئيس» إلى بطاقة قرار لرئيس مجلس الإدارة، وأُسندت خطوات المراجعة لأصحاب الاختصاص." }];
+    command.updatedAt = now;
+    command.resultReport = reportFor(command);
+    void appendWorkEvent({ entityType: "command", entityId: command.id, actor: "system", action: "workflow-upgrade", fromState: before, toState: command.status, note: "ترقية سير العمل", evidence: null });
+  }
+  return changed;
+}
+
+const PRIORITY_DAYS: Record<CommandPriority, number> = { URGENT: 1, HIGH: 3, MEDIUM: 7, LOW: 7 };
 
 const MONEY = /ريال|ر\.س|\bSAR\b|صرف|ميزانية|شراء|فاتورة|مبلغ|التزام مالي/i;
 const EXTERNAL = /بريد|إيميل|email|واتس|واتساب|راسل|أرسل|ارسلي|رسالة\s+(إلى|الى|ل)|للعملاء|للمورد|جهة حكومية/i;
@@ -129,7 +201,7 @@ export function mentionedAmountSAR(text: string): number | null {
   return isMonetarySpend(amount) ? amount : null;
 }
 
-type CommandRoute = { ownerAgentId: string; collaborators: string[]; sopId: string | null };
+type CommandRoute = { ownerAgentId: string; collaborators: string[]; sopId: string | null; confidence?: number };
 
 const ADDRESS_NAMES: Array<{ id: string; pattern: string }> = [
   { id: "abdulrahman", pattern: "عبد\\s*الرحمن" },
@@ -182,8 +254,9 @@ function addressedEmployee(text: string) {
 
 function assignOwner(ownerAgentId: string, keyword: CommandRoute): CommandRoute {
   return {
+    confidence: 1,
     ownerAgentId,
-    collaborators: Array.from(new Set([...keyword.collaborators, keyword.ownerAgentId].filter((id) => id !== ownerAgentId))),
+    collaborators: Array.from(new Set([...keyword.collaborators, keyword.ownerAgentId].filter((id) => id !== ownerAgentId && id !== "diwan"))),
     sopId: keyword.ownerAgentId === ownerAgentId ? keyword.sopId : null,
   };
 }
@@ -204,9 +277,20 @@ function keywordRoute(text: string): CommandRoute {
     { test: /تشغيل|إنتاج|جودة|شحن|تسليم|مشروع|عمليات/, ownerAgentId: "fahad", collaborators: ["khalid"], sopId: "SOP-IDEA-001" },
     { test: /مالي|ميزانية|سيولة|جدوى|مصروف/, ownerAgentId: "abdulrahman", collaborators: ["ameen"], sopId: null },
   ];
-  const hit = rules.find((rule) => rule.test.test(text));
-  if (hit) return { ownerAgentId: hit.ownerAgentId, collaborators: hit.collaborators, sopId: hit.sopId };
-  return { ownerAgentId: "sultan", collaborators: ["fahad"], sopId: null };
+  // Score every rule by how many of its words appear; the clearest owner wins.
+  // A tie between different owners, or no match, goes to Rayyan for triage.
+  const scored = rules.map((rule, index) => {
+    const words = rule.test.source.split("|");
+    const score = words.filter((word) => new RegExp(word).test(text)).length;
+    return { rule, index, score };
+  }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  const best = scored[0];
+  if (!best) return { ownerAgentId: "diwan", collaborators: ["sultan"], sopId: null, confidence: 0 };
+  const rival = scored.find((item) => item.rule.ownerAgentId !== best.rule.ownerAgentId && item.score === best.score);
+  // The first-listed rule keeps priority on a tie (investment before compliance), but the
+  // command is flagged low-confidence so Rayyan confirms the owner within the hour.
+  const confidence = rival ? 0.5 : Math.min(1, 0.6 + 0.2 * best.score);
+  return { ownerAgentId: best.rule.ownerAgentId, collaborators: best.rule.collaborators, sopId: best.rule.sopId, confidence };
 }
 
 export function routeChairmanCommand(text: string, options: { assignee?: string | null } = {}): CommandRoute {
@@ -218,21 +302,42 @@ export function routeChairmanCommand(text: string, options: { assignee?: string 
   return keyword;
 }
 
+/** Review steps belong to the specialist, not to the command owner (finance to Abdulrahman, legal to Majed). */
+export function specialistFor(title: string): string | null {
+  if (/المراجعة\s*المالية|مراجعة\s*مالية|الجدوى\s*المالية/.test(title)) return "abdulrahman";
+  if (/المراجعة\s*النظامية|مراجعة\s*نظامية|الامتثال/.test(title)) return "majed";
+  if (/فحص\s*الحوكمة|مراجعة\s*الحوكمة/.test(title)) return "hares";
+  if (/توصية\s*الرئيس\s*التنفيذي/.test(title)) return "sultan";
+  return null;
+}
+
+function withStepOwners(command: Pick<ChairmanCommand, "ownerAgentId" | "collaborators" | "steps">) {
+  const ids = [...command.collaborators, ...command.steps.map((step) => step.ownerAgentId)];
+  return Array.from(new Set(ids.filter((id) => id !== command.ownerAgentId && id !== "owner" && EMPLOYEE_IDS.has(id))));
+}
+
+const TRIAGE_STEP = "فرز الأمر وإسناده لصاحب الاختصاص (ريّان خلال ساعة)";
+
 function planSteps(command: Pick<ChairmanCommand, "id" | "text" | "ownerAgentId" | "sopId">, amount: number | null, external: boolean): CommandStep[] {
   // Sultan's own SOPs (continuity, exception) are internal controls, not a plan
   // for a chairman command, so they are never used as a fallback.
   const sop = EMPLOYEE_SOPS.find((item) => item.id === command.sopId)
     || (command.ownerAgentId === "sultan" ? undefined : EMPLOYEE_SOPS.find((item) => item.ownerEmployeeId === command.ownerAgentId));
   const generic = ["فهم الطلب وتحديد المخرج", "جمع بيانات القسم", "تنفيذ العمل غير المالي", "كتابة تقرير النتيجة"];
-  const titles = sop?.id === RESEARCH_SOP_ID ? sop.steps : (sop?.steps || generic).slice(0, 4);
-  const steps: CommandStep[] = titles.map((title, index) => ({
-    id: `${command.id}-step-${index + 1}`,
-    title,
-    ownerAgentId: command.ownerAgentId,
-    kind: "INTERNAL",
-    status: "PENDING",
-    evidence: null,
-  }));
+  const titles = command.ownerAgentId === "diwan" && !sop
+    ? [TRIAGE_STEP]
+    : sop?.id === RESEARCH_SOP_ID ? sop.steps : (sop?.steps || generic).slice(0, 4);
+  const steps: CommandStep[] = titles.map((title, index) => {
+    const decision = DECISION_TITLE.test(title);
+    return {
+      id: `${command.id}-step-${index + 1}`,
+      title,
+      ownerAgentId: decision ? "owner" : specialistFor(title) || command.ownerAgentId,
+      kind: decision ? "DECISION" as const : "INTERNAL" as const,
+      status: "PENDING" as const,
+      evidence: null,
+    };
+  });
   if (MONEY.test(command.text) || amount) {
     steps.push({
       id: `${command.id}-spend`,
@@ -260,52 +365,53 @@ function agentName(agentId: string) {
   return getAgent(agentId)?.name || agentId;
 }
 
-function walkSpendChain(ownerAgentId: string, text: string, amount: number): SpendChainState {
-  const subject = text.slice(0, 180);
-  let state = blankSpendChain({ preparingAgentId: ownerAgentId, subject, amountSAR: amount, stage: "department" });
-  state = advanceSpendChain(state, ownerAgentId, {
-    action: "submit_department",
-    subject,
-    options: "تنفيذ داخلي بلا التزام خارجي، أو تأجيل الصرف، أو البديل الأقل تكلفة الذي يذكره الطلب.",
-    expectedReturn: "أثر تشغيلي داخل الشركة دون صرف قبل اعتماد رئيس مجلس الإدارة.",
-    risks: "أي التزام مالي قبل الاعتماد يخالف صلاحية الموظفين.",
+/**
+ * A money command opens a real spend request in the preparing department's
+ * queue. No review is written for anyone: Abdulrahman and Hares review it in
+ * parallel from their own queues, then Sultan recommends, then the Chairman.
+ */
+function openSpendChain(ownerAgentId: string, text: string, amount: number): SpendChainState {
+  return blankSpendChain({
+    preparingAgentId: ownerAgentId,
+    subject: text.slice(0, 180),
     amountSAR: amount,
+    stage: "department",
+    note: "بانتظار مذكرة القسم (الموضوع، البدائل، العائد، المخاطر). لم يراجعها أحد بعد.",
   });
-  state = advanceSpendChain(state, "abdulrahman", {
-    action: "finance_review",
-    result: "مشروط",
-    note: "راجعت الميزانية والسيولة والبدائل. لا يُصرف المبلغ قبل اعتماد رئيس مجلس الإدارة، والبديل هو تأجيل الالتزام.",
-  });
-  state = advanceSpendChain(state, "hares", {
-    action: "governance_review",
-    result: "سليم",
-    note: "السلسلة مكتملة الترتيب، ولا صلاحية صرف لأي موظف بما فيهم سلطان. يُرفع لسلطان ثم لرئيس مجلس الإدارة.",
-  });
-  state = advanceSpendChain(state, "sultan", {
-    action: "sultan_recommendation",
-    result: "موافقة",
-    note: "أوصي بعرض المذكرة على رئيس مجلس الإدارة. لا أعتمد الصرف. التوصية مشروطة بمراجعة عبدالرحمن وفحص حارس.",
-  });
-  return state;
 }
 
-function refreshStatus(command: ChairmanCommand) {
+function refreshStatus(command: ChairmanCommand, now = nowIso()) {
   const openInternal = command.steps.some((step) => step.kind === "INTERNAL" && step.status !== "DONE");
-  const externalBlocked = command.steps.some((step) => step.kind === "EXTERNAL" && step.status !== "DONE");
+  const externalOpen = command.steps.some((step) => step.kind === "EXTERNAL" && step.status !== "DONE");
   const spendOpen = command.steps.some((step) => step.kind === "SPEND" && step.status !== "DONE");
-  const current = command.steps.find((step) => step.status !== "DONE");
-  command.currentStep = current?.title || "مغلق";
-  command.blockers = command.steps.filter((step) => step.status === "BLOCKED").map((step) => step.title);
+  const decisionStep = command.steps.find((step) => step.kind === "DECISION" && step.status !== "DONE");
+  const current = command.steps.find((step) => step.status !== "DONE" && step.kind !== "EXTERNAL" && step.kind !== "DECISION")
+    || command.steps.find((step) => step.status !== "DONE");
+  command.blockers = command.steps.filter((step) => step.status === "BLOCKED" && step.kind !== "EXTERNAL").map((step) => step.title);
   if (spendOpen && !command.blockers.some((item) => item.includes("صرف") || item.includes("سلسلة"))) {
     command.blockers.push("بانتظار اعتماد رئيس مجلس الإدارة على الصرف");
   }
-  if (!openInternal && !externalBlocked && !spendOpen) {
+  if (!openInternal && !externalOpen && !spendOpen && !decisionStep) {
+    command.currentStep = "مغلق";
     command.status = "CLOSED";
-    command.closedAt = command.closedAt || nowIso();
+    command.closedAt = command.closedAt || now;
     return;
   }
-  if (externalBlocked) command.status = "AWAITING_CHAIRMAN";
-  else if (spendOpen) command.status = "IN_SPEND_CHAIN";
+  // The Chairman's card is raised only when the team finished everything before it.
+  const awaitingChairman = !openInternal && !spendOpen && (Boolean(decisionStep) || externalOpen);
+  if (awaitingChairman) {
+    const step = decisionStep || command.steps.find((item) => item.kind === "EXTERNAL" && item.status !== "DONE")!;
+    if (!command.decision || command.decision.stepId !== step.id || command.decision.status === "APPROVED" || command.decision.status === "REJECTED") {
+      command.decision = { status: "PENDING", stepId: step.id, kind: step.kind === "EXTERNAL" ? "external" : "decision", requestedAt: now, deferredUntil: null, decidedAt: null, note: null, returns: command.decision?.returns || 0 };
+    } else if (command.decision.status === "RETURNED") {
+      command.decision = { ...command.decision, status: "PENDING", requestedAt: now };
+    }
+    command.currentStep = step.kind === "EXTERNAL" ? "بانتظار اعتماد رئيس مجلس الإدارة على الإرسال الخارجي" : "بانتظار قرار رئيس مجلس الإدارة";
+    command.status = "AWAITING_CHAIRMAN";
+    return;
+  }
+  command.currentStep = current?.title || "مغلق";
+  if (spendOpen) command.status = "IN_SPEND_CHAIN";
   else if (command.blockers.length) command.status = "BLOCKED";
   else command.status = "IN_PROGRESS";
 }
@@ -379,7 +485,7 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     id: newId("cmd"),
     text: commandText,
     ownerAgentId: route.ownerAgentId,
-    collaborators: money ? Array.from(new Set([...route.collaborators, "abdulrahman", "hares", "sultan"])) : route.collaborators,
+    collaborators: money ? Array.from(new Set([...route.collaborators, "abdulrahman", "hares", "sultan"].filter((id) => id !== route.ownerAgentId))) : route.collaborators,
     sopId: route.sopId,
     status: "IN_PROGRESS",
     currentStep: "",
@@ -389,12 +495,22 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     spendApprovalId: null,
     taskId: null,
     diwan: { id: null, status: "OPEN", assigneeId: route.ownerAgentId, evidence: null, openedAt: createdAt, closedAt: null },
-    dueAt: new Date(Date.parse(createdAt) + 3 * 86_400_000).toISOString(),
+    dueAt: new Date(Date.parse(createdAt) + PRIORITY_DAYS[options.priority || "HIGH"] * 86_400_000).toISOString(),
     createdAt,
     updatedAt: createdAt,
     closedAt: null,
+    priority: options.priority || "HIGH",
+    decision: null,
+    triage: {
+      status: route.ownerAgentId === "diwan" || (route.confidence ?? 1) < 0.6 ? "PENDING" : "DONE",
+      confidence: route.confidence ?? 1,
+      suggestedOwnerId: route.ownerAgentId === "diwan" ? null : route.ownerAgentId,
+      by: route.ownerAgentId === "diwan" || (route.confidence ?? 1) < 0.6 ? null : "system",
+      at: route.ownerAgentId === "diwan" || (route.confidence ?? 1) < 0.6 ? null : createdAt,
+    },
   };
   command.steps = planSteps(command, amount, external);
+  command.collaborators = withStepOwners(command);
   const owner = getAgent(route.ownerAgentId);
   // Internal steps stay PENDING until the owner reports real progress through
   // the bridge. Marking them DONE here closed every plain command at birth,
@@ -409,11 +525,11 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     command.blockers.push("طلب مالي بلا مبلغ محدد");
   }
   if (money && amount) {
-    const chain = walkSpendChain(route.ownerAgentId, commandText, amount);
+    const chain = openSpendChain(route.ownerAgentId, commandText, amount);
     const approval = createApproval({
       type: "BUDGET",
       title: commandText.slice(0, 140),
-      detail: "طلب صرف نشأ من أمر رئيس مجلس الإدارة ومرّ بالسلسلة.",
+      detail: "طلب صرف نشأ من أمر رئيس مجلس الإدارة. يجهّز القسم مذكرته، ثم المالية والحوكمة بالتوازي، ثم توصية سلطان، ثم قرار رئيس مجلس الإدارة.",
       amount,
       requestedRole: "رئيس مجلس الإدارة",
       metadata: { spendChain: chain, commandId: command.id, source: "chairman-command" },
@@ -422,7 +538,7 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     const spend = command.steps.find((step) => step.kind === "SPEND");
     if (spend) {
       spend.status = "BLOCKED";
-      spend.evidence = `المذكرة ${approval.id} عند رئيس مجلس الإدارة. لم يعتمدها موظف.`;
+      spend.evidence = `طلب الصرف ${approval.id} عند ${agentName(route.ownerAgentId)} لتجهيز المذكرة، ثم عبدالرحمن وحارس. لا يعتمده أي موظف.`;
     }
   }
   refreshStatus(command);
@@ -445,6 +561,7 @@ export async function issueChairmanCommand(text: string, options: { now?: string
     command.taskId = null;
   }
   await persistCommand(command);
+  await appendWorkEvent({ entityType: "command", entityId: command.id, actor: "owner", action: "issued", fromState: null, toState: command.status, note: `أُسند إلى ${agentName(command.ownerAgentId)}`, evidence: null });
   return command;
 }
 
@@ -485,19 +602,66 @@ export function commandsForAgent(agentId: string): ChairmanCommand[] {
 }
 
 export type CommandUpdate = {
-  action: "progress" | "block" | "close" | "evidence" | "reopen" | "replan";
+  action: "progress" | "block" | "close" | "evidence" | "reopen" | "replan" | "note" | "assign";
   stepId?: string;
   note: string;
   evidence?: string;
+  /** For "assign" (Rayyan's triage): the employee who owns the command from now on. */
+  assignee?: string;
 };
+
+function record(command: ChairmanCommand, by: string, action: string, note: string, fromState: string, evidence?: string | null) {
+  const at = nowIso();
+  command.history = [...(command.history || []), { at, by, action, note }];
+  command.updatedAt = at;
+  void appendWorkEvent({ entityType: "command", entityId: command.id, actor: by, action, fromState, toState: command.status, note, evidence: evidence || null, at });
+}
+
+function assignCommand(command: ChairmanCommand, agentId: string, assignee: string | undefined, note: string) {
+  if (agentId !== "diwan" && agentId !== "sultan") throw new Error("الفرز والإسناد لريّان (أو سلطان) فقط.");
+  const ownerId = explicitEmployee(assignee || "");
+  if (!ownerId) throw new Error("حدّد الموظف المسؤول (assignee).");
+  if (command.status === "CLOSED") throw new Error("أعد فتح الأمر أولاً.");
+  const keyword = keywordRoute(command.text);
+  const route = assignOwner(ownerId, keyword);
+  const kept = command.steps.filter((step) => step.kind !== "INTERNAL" && step.kind !== "DECISION");
+  const preserved = command.steps.filter((step) => step.evidence && step.kind === "INTERNAL").map((step) => ({ at: command.updatedAt, by: step.ownerAgentId, action: "archived-step", note: `${step.title}: ${step.evidence}` }));
+  command.ownerAgentId = ownerId;
+  command.sopId = route.sopId;
+  command.collaborators = route.collaborators;
+  const planned = planSteps({ id: command.id, text: command.text, ownerAgentId: ownerId, sopId: route.sopId }, null, false);
+  for (const step of kept) if (step.kind === "SPEND" && command.spendApprovalId) step.ownerAgentId = "abdulrahman";
+  command.steps = [...planned.filter((step) => step.kind !== "SPEND" && step.kind !== "EXTERNAL"), ...kept];
+  command.collaborators = withStepOwners(command);
+  command.diwan.assigneeId = ownerId;
+  command.triage = { status: "DONE", confidence: 1, suggestedOwnerId: ownerId, by: agentId, at: nowIso() };
+  command.history = [...(command.history || []), ...preserved];
+  refreshStatus(command);
+  void note;
+}
 
 export async function updateChairmanCommand(agentId: string, commandId: string, update: CommandUpdate): Promise<ChairmanCommand> {
   const command = getChairmanCommand(commandId);
   if (!command) throw new Error("الأمر غير موجود.");
-  const involved = command.ownerAgentId === agentId || command.collaborators.includes(agentId) || agentId === "diwan";
+  const involved = command.ownerAgentId === agentId || command.collaborators.includes(agentId) || agentId === "diwan"
+    || command.steps.some((step) => step.ownerAgentId === agentId);
   if (!involved) throw new Error("هذا الأمر ليس في نطاق هذا الموظف.");
   const note = update.note.trim();
   if (note.length < 3) throw new Error("أضف ملاحظة.");
+  const before = command.status;
+  if (update.action === "note") {
+    record(command, agentId, "note", note, before, update.evidence);
+    command.resultReport = reportFor(command);
+    await persistCommand(command);
+    return command;
+  }
+  if (update.action === "assign") {
+    assignCommand(command, agentId, update.assignee, note);
+    record(command, agentId, "assign", `${note} (المالك الجديد: ${agentName(command.ownerAgentId)})`, before);
+    command.resultReport = reportFor(command);
+    await persistCommand(command);
+    return command;
+  }
   if (update.action === "reopen") {
     if (command.status !== "CLOSED") throw new Error("الأمر ليس مغلقاً.");
     for (const step of command.steps) {
@@ -508,9 +672,8 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     }
     command.closedAt = null;
     refreshStatus(command);
-    command.history = [...(command.history || []), { at: nowIso(), by: agentId, action: "reopen", note }];
+    record(command, agentId, "reopen", note, before);
     await reopenDiwan(command, note);
-    command.updatedAt = nowIso();
     command.resultReport = reportFor(command);
     await persistCommand(command);
     return command;
@@ -519,14 +682,15 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     if (command.status === "CLOSED") throw new Error("أعد فتح الأمر أولاً.");
     const route = routeChairmanCommand(command.text);
     const preserved = command.steps.filter((step) => step.evidence).map((step) => ({ at: command.updatedAt, by: step.ownerAgentId, action: "archived-step", note: `${step.title}: ${step.evidence}` }));
-    const others = command.steps.filter((step) => step.kind !== "INTERNAL");
-    command.sopId = route.sopId;
+    const others = command.steps.filter((step) => step.kind !== "INTERNAL" && step.kind !== "DECISION");
+    command.sopId = route.ownerAgentId === command.ownerAgentId ? route.sopId : command.sopId;
     if (route.ownerAgentId === command.ownerAgentId) command.collaborators = route.collaborators;
-    command.steps = [...planSteps(command, null, false), ...others];
+    command.steps = [...planSteps(command, null, false).filter((step) => step.kind !== "SPEND" && step.kind !== "EXTERNAL"), ...others];
+    command.collaborators = withStepOwners(command);
     refreshStatus(command);
-    command.history = [...(command.history || []), ...preserved, { at: nowIso(), by: agentId, action: "replan", note }];
+    command.history = [...(command.history || []), ...preserved];
+    record(command, agentId, "replan", note, before);
     await reopenDiwan(command, note);
-    command.updatedAt = nowIso();
     command.resultReport = reportFor(command);
     await persistCommand(command);
     return command;
@@ -539,6 +703,9 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     }
     if (command.steps.some((step) => step.kind === "SPEND" && step.status !== "DONE")) {
       throw new Error("لا يُغلق أمر فيه صرف قبل اعتماد رئيس مجلس الإدارة.");
+    }
+    if (command.steps.some((step) => step.kind === "DECISION" && step.status !== "DONE")) {
+      throw new Error("لا يُغلق الأمر قبل قرار رئيس مجلس الإدارة على بطاقته.");
     }
     for (const step of command.steps) {
       if (step.kind === "INTERNAL" && step.status !== "DONE") {
@@ -556,25 +723,186 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     command.blockers = Array.from(new Set([...command.blockers, note]));
     command.currentStep = note;
   } else {
-    const step = command.steps.find((item) => item.id === update.stepId) || command.steps.find((item) => item.status !== "DONE" && item.kind === "INTERNAL");
-    if (!step) throw new Error("لا خطوة داخلية مفتوحة.");
+    const explicit = update.stepId ? command.steps.find((item) => item.id === update.stepId) : undefined;
+    if (update.stepId && !explicit) throw new Error("الخطوة غير موجودة في هذا الأمر.");
+    const open = command.steps.filter((item) => item.status !== "DONE" && item.kind === "INTERNAL");
+    const step = explicit
+      || open.find((item) => item.ownerAgentId === agentId)
+      || (agentId === command.ownerAgentId ? open.find((item) => item.ownerAgentId === command.ownerAgentId) : undefined);
+    if (!step) {
+      const next = open[0];
+      if (!next) throw new Error("لا خطوة داخلية مفتوحة.");
+      throw new Error(`الخطوة المفتوحة «${next.title}» عند ${agentName(next.ownerAgentId)}، وليست لهذا الموظف.`);
+    }
     if (step.kind === "EXTERNAL") throw new Error("لا يُرسل شيء للخارج قبل اعتماد رئيس مجلس الإدارة.");
     if (step.kind === "SPEND") throw new Error("الصرف يتحرك في سلسلة الاعتماد، لا يُغلق من هنا.");
+    if (step.kind === "DECISION") throw new Error("هذه الخطوة قرار لرئيس مجلس الإدارة فقط، تُتخذ من مكتبه.");
+    if (step.status === "DONE") throw new Error("هذه الخطوة أُنجزت.");
+    // A specialist step (finance, legal, governance, Sultan's recommendation) is done by its owner only.
+    if (step.ownerAgentId !== agentId && step.ownerAgentId !== command.ownerAgentId) {
+      throw new Error(`هذه الخطوة لـ${agentName(step.ownerAgentId)}.`);
+    }
+    if (step.ownerAgentId !== agentId && specialistFor(step.title)) {
+      throw new Error(`هذه الخطوة لـ${agentName(step.ownerAgentId)}.`);
+    }
     step.status = "DONE";
     step.evidence = update.evidence?.trim() || note;
     refreshStatus(command);
   }
-  command.history = [...(command.history || []), { at: nowIso(), by: agentId, action: update.action, note }];
-  command.updatedAt = nowIso();
+  record(command, agentId, update.action, note, before, update.evidence);
   // Refresh the report so progress notes reach the chairman and the digest.
   if (update.action !== "close") command.resultReport = reportFor(command);
   await persistCommand(command);
   return command;
 }
 
+/** The step whose evidence is Sultan's recommendation, if the command has one. */
+export function recommendationFor(command: ChairmanCommand): string | null {
+  const step = [...command.steps].reverse().find((item) => item.status === "DONE" && /توصية/.test(item.title) && item.evidence);
+  return step?.evidence || null;
+}
+
+function stepEvidence(command: ChairmanCommand, pattern: RegExp) {
+  return command.steps.find((item) => pattern.test(item.title) && item.status === "DONE")?.evidence || null;
+}
+
+export function commandReviewLines(command: ChairmanCommand) {
+  return {
+    finance: stepEvidence(command, /المالية/),
+    legal: stepEvidence(command, /النظامية|الامتثال/),
+    governance: stepEvidence(command, /الحوكمة/),
+  };
+}
+
+/** A decision card is open when the team finished its work and the Chairman's step is next. */
+export function isAwaitingChairmanDecision(command: ChairmanCommand, now = new Date()) {
+  if (command.status !== "AWAITING_CHAIRMAN" || !command.decision) return false;
+  if (command.decision.status === "DEFERRED" && command.decision.deferredUntil && Date.parse(command.decision.deferredUntil) > now.getTime()) return false;
+  return command.decision.status === "PENDING" || command.decision.status === "DEFERRED";
+}
+
+/**
+ * The Chairman decides a command's card. Only the owner calls this (from his desk);
+ * no employee path reaches it. Spend is never decided here: it stays on its approval.
+ */
+export async function decideChairmanCommand(commandId: string, input: { decision: ChairmanDecisionChoice; note?: string }, actor = "owner"): Promise<ChairmanCommand> {
+  if (actor !== "owner") throw new Error("القرار لرئيس مجلس الإدارة فقط.");
+  const command = getChairmanCommand(commandId);
+  if (!command) throw new Error("الأمر غير موجود.");
+  const decision = command.decision;
+  if (command.status !== "AWAITING_CHAIRMAN" || !decision) throw new Error("لا توجد بطاقة قرار مفتوحة على هذا الأمر.");
+  const step = command.steps.find((item) => item.id === decision.stepId);
+  if (!step || step.status === "DONE") throw new Error("لا توجد بطاقة قرار مفتوحة على هذا الأمر.");
+  const note = (input.note || "").trim();
+  const before = command.status;
+  const at = nowIso();
+  const external = step.kind === "EXTERNAL";
+  if (input.decision === "approve") {
+    step.status = "DONE";
+    step.evidence = external
+      ? `اعتمد رئيس مجلس الإدارة الإرسال الخارجي${note ? `: ${note}` : "."}`
+      : `اعتمد رئيس مجلس الإدارة التوصية${note ? `: ${note}` : "."}`;
+    command.decision = { ...decision, status: "APPROVED", decidedAt: at, note: note || null, deferredUntil: null };
+    // Approved work is executed and closed with evidence; Rayyan follows it up.
+    command.steps.push({
+      id: `${command.id}-post-${command.steps.length + 1}`,
+      title: external ? "تنفيذ الإرسال المعتمد وتسجيل الدليل" : "تنفيذ ما بعد القرار وإغلاقه بدليل",
+      ownerAgentId: command.ownerAgentId,
+      kind: "INTERNAL",
+      status: "PENDING",
+      evidence: null,
+    });
+    refreshStatus(command, at);
+    record(command, "owner", "decide-approve", step.evidence, before);
+  } else if (input.decision === "reject") {
+    step.status = "DONE";
+    step.evidence = external ? `رفض رئيس مجلس الإدارة الإرسال. لا إرسال${note ? `: ${note}` : "."}` : `رفض رئيس مجلس الإدارة التوصية${note ? `: ${note}` : "."}`;
+    command.decision = { ...decision, status: "REJECTED", decidedAt: at, note: note || null, deferredUntil: null };
+    for (const item of command.steps) {
+      if (item.status !== "DONE" && item.kind !== "SPEND") { item.status = "DONE"; item.evidence = item.evidence || "أُغلق برفض رئيس مجلس الإدارة."; }
+    }
+    refreshStatus(command, at);
+    record(command, "owner", "decide-reject", step.evidence, before);
+    if ((command.status as ChairmanCommandStatus) === "CLOSED") {
+      command.resultReport = reportFor(command);
+      await closeDiwan(command, command.resultReport);
+    }
+  } else if (input.decision === "return") {
+    if (note.length < 3) throw new Error("الإعادة تحتاج ملاحظة توضح المطلوب.");
+    // Back to the step before the card (Sultan's recommendation), with the note.
+    const index = command.steps.indexOf(step);
+    const previous = [...command.steps.slice(0, index)].reverse().find((item) => item.kind === "INTERNAL");
+    if (previous) {
+      previous.status = "PENDING";
+      previous.evidence = null;
+    }
+    command.decision = { ...decision, status: "RETURNED", decidedAt: at, note, returns: decision.returns + 1, deferredUntil: null };
+    refreshStatus(command, at);
+    record(command, "owner", "decide-return", `أعاده رئيس مجلس الإدارة بملاحظة: ${note}`, before);
+  } else if (input.decision === "defer") {
+    const until = new Date(Date.parse(at) + 7 * 86_400_000).toISOString();
+    command.decision = { ...decision, status: "DEFERRED", deferredUntil: until, note: note || null };
+    record(command, "owner", "decide-defer", `أجّله رئيس مجلس الإدارة أسبوعاً حتى ${until.slice(0, 10)}${note ? `: ${note}` : ""}`, before);
+  } else if (input.decision === "renew") {
+    command.decision = { ...decision, status: "PENDING", requestedAt: at, deferredUntil: null };
+    record(command, "owner", "decide-renew", "أعاد رئيس مجلس الإدارة فتح البطاقة.", before);
+  } else {
+    throw new Error("القرار: approve أو reject أو return أو defer.");
+  }
+  command.resultReport = reportFor(command);
+  await persistCommand(command);
+  return command;
+}
+
+export type CommandSla = {
+  state: "triage" | "in_progress" | "no_update" | "awaiting_chairman" | "spend_chain" | "blocked" | "closed";
+  responsible: string;
+  dueAt: string | null;
+  overdue: boolean;
+  /** Escalation ladder: owner, then sector lead at 150%, then Sultan at 200%. */
+  escalateTo: string | null;
+  level: 0 | 1 | 2 | 3;
+  label: string;
+};
+
+const HOUR = 3_600_000;
+
+/** Per-state deadlines and the escalation ladder, computed on every read (no hourly cron needed). */
+export function commandSla(command: ChairmanCommand, now = new Date()): CommandSla {
+  const t = now.getTime();
+  if (command.status === "CLOSED") return { state: "closed", responsible: command.ownerAgentId, dueAt: null, overdue: false, escalateTo: null, level: 0, label: "مغلق" };
+  if (command.status === "AWAITING_CHAIRMAN" && command.decision) {
+    const requested = Date.parse(command.decision.requestedAt);
+    const remind = new Date(requested + 48 * HOUR).toISOString();
+    const late = t > requested + 48 * HOUR;
+    return { state: "awaiting_chairman", responsible: "owner", dueAt: remind, overdue: late, escalateTo: null, level: late ? 1 : 0, label: late ? "تذكير: بطاقة قرار منذ أكثر من 48 ساعة" : "بطاقة قرار في مكتبك" };
+  }
+  if (command.triage?.status === "PENDING") {
+    const due = Date.parse(command.createdAt) + HOUR;
+    const late = t > due;
+    return { state: "triage", responsible: "diwan", dueAt: new Date(due).toISOString(), overdue: late, escalateTo: late ? "sultan" : null, level: late ? 3 : 0, label: late ? "تأخر الفرز أكثر من ساعة: تصعيد لسلطان" : "بانتظار فرز ريّان خلال ساعة" };
+  }
+  const start = Date.parse(command.createdAt);
+  const due = Date.parse(command.dueAt);
+  const span = Math.max(HOUR, due - start);
+  const owner = command.steps.find((step) => step.status !== "DONE" && step.kind === "INTERNAL")?.ownerAgentId || command.ownerAgentId;
+  const lead = sectorLeadOf(owner) || "sultan";
+  let level: CommandSla["level"] = 0;
+  let escalateTo: string | null = null;
+  if (t > start + span * 2) { level = 3; escalateTo = "sultan"; }
+  else if (t > start + span * 1.5) { level = 2; escalateTo = lead === owner ? "sultan" : lead; }
+  else if (t > due) { level = 1; escalateTo = owner; }
+  const lastUpdate = Date.parse(command.updatedAt);
+  const stale = t - lastUpdate > 24 * HOUR;
+  const state: CommandSla["state"] = command.status === "BLOCKED" ? "blocked" : command.status === "IN_SPEND_CHAIN" ? "spend_chain" : stale ? "no_update" : "in_progress";
+  const labels = ["في الموعد", "تجاوز الموعد: تذكير للمالك", `تجاوز 150%: تصعيد إلى ${agentName(escalateTo || lead)}`, "تجاوز 200%: تصعيد إلى سلطان"];
+  return { state, responsible: owner, dueAt: command.dueAt, overdue: t > due, escalateTo, level, label: stale && level === 0 ? "بلا تحديث منذ 24 ساعة: تنبيه لريّان" : labels[level] };
+}
+
 export async function settleChairmanCommandForSpend(approvalId: string, decision: "APPROVED" | "REJECTED") {
   const command = store.find((item) => item.spendApprovalId === approvalId);
   if (!command) return null;
+  const before = command.status;
   const spend = command.steps.find((step) => step.kind === "SPEND");
   if (spend) {
     spend.status = "DONE";
@@ -584,13 +912,15 @@ export async function settleChairmanCommandForSpend(approvalId: string, decision
   }
   refreshStatus(command);
   command.resultReport = reportFor(command);
-  command.updatedAt = nowIso();
+  record(command, "owner", decision === "APPROVED" ? "spend-approved" : "spend-rejected", spend?.evidence || decision, before);
   if (command.status === "CLOSED") await closeDiwan(command, command.resultReport);
   await persistCommand(command);
   return command;
 }
 
-export function publicCommandStatus(command: ChairmanCommand) {
+export function publicCommandStatus(command: ChairmanCommand, nowInput?: unknown) {
+  // Also used as an Array.map callback, so the second argument can be an index.
+  const now = nowInput instanceof Date ? nowInput : new Date();
   return {
     id: command.id,
     subject: command.text,
@@ -606,6 +936,14 @@ export function publicCommandStatus(command: ChairmanCommand) {
     dueAt: command.dueAt,
     updatedAt: command.updatedAt,
     closedAt: command.closedAt,
+    createdAt: command.createdAt,
+    priority: command.priority || "HIGH",
+    steps: command.steps.map((step) => ({ id: step.id, title: step.title, ownerAgentId: step.ownerAgentId, ownerName: step.ownerAgentId === "owner" ? "رئيس مجلس الإدارة" : agentName(step.ownerAgentId), kind: step.kind, status: step.status, evidence: step.evidence })),
+    decision: command.decision || null,
+    awaitingDecision: isAwaitingChairmanDecision(command, now),
+    triage: command.triage || null,
+    sla: commandSla(command, now),
+    history: (command.history || []).slice(-20),
   };
 }
 
