@@ -34,7 +34,7 @@ function composeDigestValues(now: Date, revenue: number, vatPayable: number): Di
     : "لا قرارات معلّقة.";
 
   const text = [
-    `📊 ملخص شركة النجمة الذهبية عبر Orvanta · ${date}`,
+    `📊 ملخص أورفانتا · ${date}`,
     "",
     `${headline}.`,
     ...(topPending.length ? ["", "أهم ما ينتظرك:", ...topPending] : []),

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpLeft, RefreshCw, Plus, ArrowLeft, CircleAlert } from "lucide-react";
+import DecisionDeskPanel from "./DecisionDeskPanel";
 import ChairmanCommandComposer from "./ChairmanCommandComposer";
 
 type Workspace = {
@@ -31,20 +32,21 @@ export default function ExecutiveWorkspace() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const first = data?.approvals[0];
-  return <main className="workspace workspace-home">
+  return <main className="workspace workspace-home ov-home">
     <header className="workspace-heading">
       <div><h1>الشركة، بوضوح.</h1><p className="workspace-intro">ما يحتاج قرارك. ما يوقف التنفيذ. وما يأتي بعده.</p></div>
       <Link className="primary-btn" href="/ideas?new=1"><Plus size={17} /> فتح ملف فكرة</Link>
     </header>
     <ChairmanCommandComposer />
-    <div className="workspace-dateline"><span>النجمة الذهبية <span aria-hidden> / </span> سجل العمل</span><button className="text-action" onClick={() => void load()} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />{loading ? "جارٍ القراءة" : "تحديث البيانات"}</button></div>
+    <DecisionDeskPanel />
+    <div className="workspace-dateline"><span>أورفانتا <span aria-hidden> / </span> سجل العمل</span><button className="text-action" onClick={() => void load()} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} />{loading ? "جارٍ القراءة" : "تحديث البيانات"}</button></div>
     {error ? <div className="workspace-notice is-error" role="alert"><CircleAlert size={20} /><div><strong>لا يمكن تأكيد الحالة الحالية</strong><p>{error}</p>{data ? <small>المعروض أدناه آخر قراءة ناجحة؛ قد لا يكون محدثاً.</small> : null}</div></div> : null}
     {!data && loading ? <p className="workspace-empty" role="status">جارٍ قراءة سجلات الشركة…</p> : null}
     {data ? <>
       <section className="workspace-metrics" aria-label="حالة العمل">
         {[[data.counts.decisions, "قرار ينتظر المراجعة", "/inbox"], [data.counts.blocked, "خطوة متوقفة", "/projects"], [data.counts.projects, "مشروع نشط", "/projects"], [data.counts.proof, "مهمة فعلية قيد المراجعة", "/projects"]].map(([value, label, href]) => <Link href={String(href)} key={String(label)}><span>{String(label)}</span><strong>{number.format(Number(value))}</strong><ArrowUpLeft size={18} /></Link>)}
       </section>
-      {data.counts.returned ? <p className="workspace-empty" role="note">موقوف — أُعيد للقسم: {number.format(data.counts.returned)} طلب (لا ينتظر قرارك)</p> : null}
+      {data.counts.returned ? <p className="workspace-empty" role="note">موقوف وأُعيد للقسم: {number.format(data.counts.returned)} طلب (لا ينتظر قرارك)</p> : null}
       <div className="workspace-columns">
         <div className="workspace-primary">
           <section className="priority-dossier" aria-labelledby="priority-title">

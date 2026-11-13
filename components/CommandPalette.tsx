@@ -39,15 +39,16 @@ type Entry = {
 };
 
 const DESTINATIONS: Entry[] = [
-  { id: "nav-home", title: "نظرة عامة", hint: "الصفحة الرئيسية", href: "/", group: "الوجهات", icon: LayoutDashboard },
-  { id: "nav-control-room", title: "مركز قيادة الشركة", hint: "الدورة والحوكمة والمجلس والهندسة", href: "/control-room", group: "الوجهات", icon: Radar },
-  { id: "nav-inbox", title: "مركز القرار", hint: "اعتماد ورفض القرارات", href: "/inbox", group: "الوجهات", icon: Inbox },
+  { id: "nav-home", title: "مكتبي", hint: "مكتب القرار والأوامر", href: "/", group: "الوجهات", icon: LayoutDashboard },
+  { id: "nav-office", title: "المكتب الحي", hint: "الموظفون على مكاتبهم الآن", href: "/office", group: "الوجهات", icon: Building2 },
+  { id: "nav-commands", title: "الأوامر", hint: "محطات كل أمر ومسؤوله", href: "/commands", group: "الوجهات", icon: Send },
+  { id: "nav-meetings", title: "الاجتماعات", hint: "اجتماع القرار والمحاضر", href: "/meetings", group: "الوجهات", icon: Users },
+  { id: "nav-archive", title: "الأرشيف", hint: "المغلق والمؤرشف", href: "/archive", group: "الوجهات", icon: ShieldCheck },
+  { id: "nav-inbox", title: "ملفات القرار التفصيلية", hint: "اعتماد ورفض القرارات", href: "/inbox", group: "الوجهات", icon: Inbox },
   { id: "nav-ideas", title: "الأفكار", hint: "تقديم فكرة · دراسات الجدوى", href: "/ideas", group: "الوجهات", icon: Lightbulb },
-  { id: "nav-office", title: "المكتب الحيّ", hint: "نبض الوكلاء الآن", href: "/office", group: "الوجهات", icon: Building2 },
-  { id: "nav-operations", title: "التشغيل", hint: "تشغيل طلب شركة كامل", href: "/operations", group: "الوجهات", icon: Send },
+  { id: "nav-operations", title: "التشغيل", hint: "تشغيل طلب شركة كامل", href: "/operations", group: "الوجهات", icon: Radar },
   { id: "nav-status", title: "حالة النظام", hint: "التكاملات والجاهزية", href: "/status", group: "الوجهات", icon: Activity },
   { id: "nav-company", title: "الهيكل الإداري", hint: "الوكلاء والصلاحيات", href: "/company", group: "الوجهات", icon: Users },
-  { id: "nav-dashboard", title: "لوحة الرئيس التنفيذي", hint: "المشاريع والمهام", href: "/dashboard", group: "الوجهات", icon: ShieldCheck },
   { id: "nav-bi", title: "مركز الذكاء BI", hint: "قرار اليوم والتحليلات", href: "/bi-center", group: "الوجهات", icon: BarChart3 },
   { id: "nav-sales", title: "نظام المبيعات", hint: "المتجر والمداخيل", href: "/sales", group: "الوجهات", icon: ShoppingBag },
   { id: "nav-finance", title: "المالية", hint: "القيود والفواتير", href: "/departments/finance", group: "الوجهات", icon: Calculator },

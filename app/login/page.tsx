@@ -65,7 +65,7 @@ export default function LoginPage() {
               <p id="entry-session-note" className="entry-session-note">يبقى هذا الجهاز معتمداً لمدة سنة. يمكنك قفله في أي وقت من داخل مساحة العمل.</p>
             </form>
           )}
-          <footer className="entry-footer"><span>مكتب إدارة الأعمال</span><span>النجمة الذهبية</span></footer>
+          <footer className="entry-footer"><span>مكتب إدارة الأعمال</span><span>أورفانتا</span></footer>
         </div>
       </section>
     </main>
