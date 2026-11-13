@@ -42,3 +42,14 @@ describe("chairman digest", () => {
     expect(() => buildChairmanDigest("yesterday")).toThrow(/ISO/);
   });
 });
+
+describe("decision desk in the digest", () => {
+  it("lists an overdue command in overdue even when it did not change", async () => {
+    const command = await issueChairmanCommand("راجع رخصة السجل التجاري للمرة الثانية");
+    _setCommandDue(command.id, "2026-10-01T00:00:00.000Z");
+    const digest = buildChairmanDigest("2099-01-01T00:00:00.000Z", new Date("2026-10-26T12:00:00.000Z"));
+    expect(digest.overdue.some((item) => item.id === command.id)).toBe(true);
+    expect(digest.decisionCards.length).toBeLessThanOrEqual(7);
+    expect(digest.desk.digestAt).toBe("2026-10-26T17:00:00.000Z");
+  });
+});

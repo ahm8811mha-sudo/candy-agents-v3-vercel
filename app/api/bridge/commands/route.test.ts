@@ -38,7 +38,7 @@ describe("GET /api/bridge/commands", () => {
       expect.objectContaining({
         id: open.id,
         subject: open.text,
-        status: "AWAITING_CHAIRMAN",
+        status: "IN_PROGRESS",
         ownerAgentId: "khalid",
       }),
     ]);

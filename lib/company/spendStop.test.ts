@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApproval, decideApproval, listApprovals, writeApproval, _clearApprovals } from "../approvals";
 import { getInbox } from "../inbox";
 import { agentInbox, spendQueueForAgent } from "./agentBridge";
-import { returnedToDepartment, advanceSpendChain, blankSpendChain, chairmanSpendBlock, readSpendChain, spendStageAgent, spendStop } from "./spendChain";
+import { returnHolder, returnedToDepartment, advanceSpendChain, blankSpendChain, chairmanSpendBlock, readSpendChain, spendStageAgent, spendStop } from "./spendChain";
 
 const atGovernance = () => advanceSpendChain(blankSpendChain({ amountSAR: 5000, subject: "x", legacy: true, stage: "finance" }), "abdulrahman", { action: "finance_review", result: "موافق", note: "مراجعة مالية سليمة" } as never);
 
@@ -16,10 +16,11 @@ describe("spend chain stops route to the Chairman", () => {
   it("governance موقوف leaves hares' queue and is returned to the department, not counted on the Chairman's desk", async () => {
     const stopped = advanceSpendChain(atGovernance(), "hares", { action: "governance_review", result: "موقوف", note: "طلب مكرر لفكرة سابقة" } as never);
     const item = seed(stopped);
-    expect(spendStageAgent(stopped)).toBe("owner");
+    expect(spendStageAgent(stopped)).toBe("department");
+    expect(returnHolder(item)).toBe("rased");
     expect(spendQueueForAgent("hares").find((a) => a.id === item.id)).toBeUndefined();
     expect(spendStop(stopped)?.label).toBe("موقوف من الحوكمة — بانتظار إقفال رئيس مجلس الإدارة");
-    const inbox = agentInbox("hares");
+    const inbox = await agentInbox("hares");
     expect(inbox.spendQueue).toHaveLength(0);
     const all = await getInbox();
     const row = (all as unknown as { items?: { id: string; detail: string }[] }).items?.find((i) => i.id === item.id) ?? (all as unknown as { id: string; detail: string }[]).find?.((i) => i.id === item.id);

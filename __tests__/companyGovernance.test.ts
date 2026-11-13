@@ -26,9 +26,13 @@ describe("agent registry", () => {
     expect(roots[0].id).toBe("owner");
   });
 
-  it("all non-owner agents report up to sultan", () => {
-    const reports = getDirectReports("sultan");
-    expect(reports.length).toBeGreaterThanOrEqual(9);
+  it("Sultan has the CEO office plus four sector leads, and Hares reports to the Chairman", () => {
+    const reports = getDirectReports("sultan").map((agent) => agent.id).sort();
+    expect(reports).toEqual(["abdulrahman", "diwan", "fahad", "majed", "rased", "sara"]);
+    expect(getDirectReports("owner").map((agent) => agent.id).sort()).toEqual(["hares", "sultan"]);
+    expect(getDirectReports("abdulrahman").map((agent) => agent.id)).toEqual(["ameen"]);
+    expect(getDirectReports("fahad").map((agent) => agent.id)).toEqual(["khalid"]);
+    expect(getDirectReports("sara").map((agent) => agent.id)).toEqual(["noura"]);
   });
 });
 

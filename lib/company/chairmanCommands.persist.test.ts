@@ -147,7 +147,7 @@ describe("chairman commands survive another instance", () => {
     const board = await listCommands();
     const boardJson = await board.json();
     expect(boardJson.commands).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: issued.id, ownerAgentId: "khalid", status: "AWAITING_CHAIRMAN" }),
+      expect.objectContaining({ id: issued.id, ownerAgentId: "khalid", status: "IN_PROGRESS" }),
     ]));
 
     const inbox = await agentInbox(

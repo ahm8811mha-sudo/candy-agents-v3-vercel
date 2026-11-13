@@ -2,9 +2,12 @@
  * Owner-only spend authority.
  *
  * No employee may approve or execute a monetary commitment above 0 SAR.
- * A spend request reaches the Chairman only after this chain, in order:
- * preparing department → Abdulrahman (finance) → Hares (governance) →
- * Sultan (recommendation) → Ahmad (Chairman) approves or rejects.
+ * A spend request reaches the Chairman only after this chain:
+ * preparing department → Abdulrahman (finance) and Hares (governance) in
+ * parallel → Sultan (recommendation) → Ahmad (Chairman) approves or rejects.
+ * A stop (finance "غير موافق", governance "موقوف", Sultan "رفض") returns the
+ * item to its department with a classified reason and seven days to fix it;
+ * after that it is archived. Only the Chairman can override a stop.
  *
  * Existing pending money items that have no chain are not deleted and not
  * approved. They are read as waiting on Abdulrahman's finance review and
@@ -43,6 +46,7 @@ export type SpendReview = {
   note: string;
   by: string;
   at: string;
+  reasonCode?: StopReasonCode;
 };
 
 export type SpendChainState = {
@@ -78,18 +82,54 @@ export type DecisionMemo = {
 
 export type SpendAdvance =
   | { action: "submit_department"; subject: string; options: string; expectedReturn: string; risks: string; amountSAR?: number }
-  | { action: "finance_review"; result: FinanceResult; note: string }
-  | { action: "governance_review"; result: GovernanceResult; note: string }
-  | { action: "sultan_recommendation"; result: SultanResult; note: string }
+  | { action: "finance_review"; result: FinanceResult; note: string; reasonCode?: StopReasonCode }
+  | { action: "governance_review"; result: GovernanceResult; note: string; reasonCode?: StopReasonCode }
+  | { action: "sultan_recommendation"; result: SultanResult; note: string; reasonCode?: StopReasonCode }
+  | { action: "resubmit_department"; subject: string; options: string; expectedReturn: string; risks: string; amountSAR?: number }
+  | { action: "return_to_department"; note: string }
   | { action: "owner_decision"; decision: "APPROVED" | "REJECTED"; note?: string };
 
 type ApprovalLike = {
   id?: string;
   title?: string;
+  type?: string;
   amount?: number | null;
   status?: string;
+  createdAt?: string;
   metadata?: Record<string, unknown> | null;
 };
+
+/** Fixed list of stop reasons (G12): every stop carries one of these. */
+export const STOP_REASONS = {
+  duplicate: "مكرر لطلب سابق",
+  missing_numbers: "أرقام ناقصة أو غير مسندة",
+  no_budget: "لا سيولة أو بند ميزانية",
+  authority: "تجاوز صلاحية أو سياسة",
+  legal: "عائق نظامي أو حكومي",
+  risk: "مخاطرة أعلى من الحد",
+  other: "سبب آخر مذكور في الملاحظة",
+} as const;
+export type StopReasonCode = keyof typeof STOP_REASONS;
+
+export function stopReasonCode(value: unknown): StopReasonCode {
+  return typeof value === "string" && value in STOP_REASONS ? value as StopReasonCode : "other";
+}
+
+/** Days a returned item waits for its department before it is archived. */
+export const RETURNED_DAYS = 7;
+
+export type ArchiveMark = { reason: string; mergedInto?: string | null; at: string; by: string; note?: string };
+
+export function archivedMark(item: ApprovalLike): ArchiveMark | null {
+  const mark = item.metadata?.archived;
+  if (!mark || typeof mark !== "object") return null;
+  const row = mark as Record<string, unknown>;
+  return { reason: String(row.reason || "archived"), mergedInto: row.mergedInto ? String(row.mergedInto) : null, at: String(row.at || ""), by: String(row.by || ""), note: row.note ? String(row.note) : undefined };
+}
+
+export function isArchived(item: ApprovalLike): boolean {
+  return archivedMark(item) !== null;
+}
 
 const CHAIRMAN_ROLES = new Set(["OWNER", "ADMIN"]);
 
@@ -146,6 +186,7 @@ function asReview(value: unknown): SpendReview | null {
     note,
     by: String(row.by || ""),
     at: String(row.at || ""),
+    ...(row.reasonCode ? { reasonCode: stopReasonCode(row.reasonCode) } : {}),
   };
 }
 
@@ -196,13 +237,15 @@ export function isOwnerReadySpend(state: SpendChainState | null): boolean {
   if (!state || state.decision) return false;
   if (state.needsChainReview) return false;
   if (state.governanceReview?.result === "موقوف") return false;
+  // A stopped request is never "awaiting the Chairman's decision" (G6).
+  if (spendStop(state)) return false;
   return state.stage === "owner"
     && Boolean(state.financeReview)
     && Boolean(state.governanceReview)
     && Boolean(state.sultanRecommendation);
 }
 
-export type SpendStop = { by: "finance" | "governance" | "sultan"; result: string; note: string; at: string; label: string };
+export type SpendStop = { by: "finance" | "governance" | "sultan"; result: string; note: string; at: string; label: string; reasonCode: StopReasonCode; reason: string };
 
 /**
  * A negative review (finance "غير موافق", governance "موقوف", Sultan "رفض") ends the reviewers' work.
@@ -216,7 +259,7 @@ export function spendStop(state: SpendChainState | null): SpendStop | null {
   if (state.sultanRecommendation?.result === "رفض") return { by: "sultan", ...pick(state.sultanRecommendation), label: "رفض من الرئيس التنفيذي" + wait };
   return null;
 }
-function pick(r: SpendReview) { return { result: r.result, note: r.note, at: r.at }; }
+function pick(r: SpendReview) { const reasonCode = r.reasonCode || "other"; return { result: r.result, note: r.note, at: r.at, reasonCode, reason: STOP_REASONS[reasonCode] }; }
 
 /** Items the Chairman can act on: a complete memo, or a stop that is waiting for him to close it. */
 export function isChairmanActionable(state: SpendChainState | null): boolean {
@@ -245,11 +288,33 @@ export function approvalVisibleToChairman(item: ApprovalLike): boolean {
 export function returnedToDepartment(item: ApprovalLike): SpendStop | null {
   if (!isMonetarySpend(item.amount)) return null;
   if (item.status && item.status !== "PENDING" && item.status !== "DEFERRED") return null;
+  if (isArchived(item)) return null;
   const stop = spendStop(readSpendChain(item));
   return stop ? { ...stop, label: stop.label.replace(" — بانتظار إقفال رئيس مجلس الإدارة", " — أُعيد للقسم") } : null;
 }
 
-function duplicateKey(item: ApprovalLike) {
+/** Who fixes a returned item: the preparing employee, else the idea pipeline (Rased), else Sultan. */
+export function returnHolder(item: ApprovalLike): string {
+  const chain = readSpendChain(item);
+  const preparing = chain?.preparingAgentId && chain.preparingAgentId !== "department" ? chain.preparingAgentId : "";
+  if (preparing && isEmployeeAgent(preparing)) return preparing;
+  const meta = typeof item.metadata?.preparingAgentId === "string" ? item.metadata.preparingAgentId : "";
+  if (meta && isEmployeeAgent(meta)) return meta;
+  if (item.type === "IDEA" || String(item.title || "").startsWith("فكرة") || String(item.title || "").startsWith("Opportunity radar")) return "rased";
+  return "sultan";
+}
+
+/** When a returned item is archived if its department does not fix it. */
+/** Items stopped before the return policy went live get their seven days from that moment. */
+export const RETURN_POLICY_EFFECTIVE_AT = "2026-11-13T17:00:00.000Z";
+
+export function returnedExpiresAt(stop: SpendStop, item: ApprovalLike): string {
+  const stoppedAt = Date.parse(stop.at) || Date.parse(item.createdAt || "") || Date.now();
+  const base = Math.max(stoppedAt, Date.parse(RETURN_POLICY_EFFECTIVE_AT));
+  return new Date(base + RETURNED_DAYS * 86_400_000).toISOString();
+}
+
+export function duplicateKey(item: ApprovalLike) {
   const title = String(item.title || "").replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/\s+/g, " ").trim();
   return `${title}|${isMonetarySpend(item.amount) ? Number(item.amount) : ""}`;
 }
@@ -257,7 +322,7 @@ function duplicateKey(item: ApprovalLike) {
 /** Collapse repeats (same title and amount, e.g. the same daily idea on several days) into the first item. */
 export function collapseDuplicates<T extends ApprovalLike>(items: T[]): Array<T & { duplicateCount: number; duplicateIds: string[] }> {
   const groups = new Map<string, T & { duplicateCount: number; duplicateIds: string[] }>();
-  for (const item of items) {
+  for (const item of items.filter((entry) => !isArchived(entry))) {
     const key = duplicateKey(item);
     const group = groups.get(key);
     if (group) {
@@ -270,12 +335,22 @@ export function collapseDuplicates<T extends ApprovalLike>(items: T[]): Array<T 
   return [...groups.values()];
 }
 
+/** Finance and governance review in parallel; both are open until each has written its review. */
+export function pendingReviewers(state: SpendChainState): string[] {
+  if (state.decision || state.stage === "decided" || spendStop(state)) return [];
+  if (state.stage !== "finance" && state.stage !== "governance") return [];
+  return [
+    ...(state.financeReview ? [] : [SPEND_ACTORS.finance]),
+    ...(state.governanceReview ? [] : [SPEND_ACTORS.governance]),
+  ];
+}
+
 export function spendStageAgent(state: SpendChainState): string | null {
   if (state.decision || state.stage === "decided") return null;
-  if (spendStop(state)) return SPEND_ACTORS.owner;
+  // A stopped request goes back to the department that prepared it, not to the Chairman.
+  if (spendStop(state)) return state.preparingAgentId && state.preparingAgentId !== "department" ? state.preparingAgentId : "department";
   if (state.stage === "department") return state.preparingAgentId;
-  if (state.stage === "finance") return SPEND_ACTORS.finance;
-  if (state.stage === "governance") return SPEND_ACTORS.governance;
+  if (state.stage === "finance" || state.stage === "governance") return pendingReviewers(state)[0] || SPEND_ACTORS.sultan;
   if (state.stage === "sultan") return SPEND_ACTORS.sultan;
   if (state.stage === "owner") return SPEND_ACTORS.owner;
   return null;
@@ -343,25 +418,46 @@ export function advanceSpendChain(state: SpendChainState, actorId: string, advan
     return { ...next, stage: "finance", subject, options, expectedReturn, risks, amountSAR: amount, preparingAgentId: actorId === "department" ? state.preparingAgentId : actorId };
   }
 
+  if (advance.action === "resubmit_department") {
+    // The department fixed a returned request: the old reviews are kept in the note, the chain restarts.
+    if (!spendStop(state)) throw new Error("إعادة التقديم لطلب أُعيد للقسم فقط.");
+    if (state.preparingAgentId !== "department" && actorId !== state.preparingAgentId) throw new Error("إعادة التقديم من القسم صاحب الطلب فقط.");
+    if (actorId === "owner") throw new Error("رئيس مجلس الإدارة لا يجهّز طلب الصرف. يجهّزه القسم.");
+    const subject = advance.subject.trim(), options = advance.options.trim(), expectedReturn = advance.expectedReturn.trim(), risks = advance.risks.trim();
+    if (subject.length < 3 || options.length < 3 || expectedReturn.length < 3 || risks.length < 3) throw new Error("مذكرة القسم تحتاج الموضوع والبدائل والعائد والمخاطر.");
+    const amount = advance.amountSAR ?? state.amountSAR;
+    if (!isMonetarySpend(amount)) throw new Error("لا سلسلة صرف بلا مبلغ أكبر من صفر.");
+    const stop = spendStop(state)!;
+    return { ...next, stage: "finance", subject, options, expectedReturn, risks, amountSAR: amount, financeReview: null, governanceReview: null, sultanRecommendation: null, needsChainReview: false, note: `أُعيد تقديمه بعد إيقاف سابق (${stop.reason}): ${stop.note}`.slice(0, 600) };
+  }
+
+  if (advance.action === "return_to_department") {
+    // The Chairman returns a memo with a note: it goes back to the department to rework.
+    if (actorId !== "owner") throw new Error("الإعادة من مكتب رئيس مجلس الإدارة فقط.");
+    const note = requireNote(advance.note, "الإعادة");
+    return { ...next, stage: "department", financeReview: null, governanceReview: null, sultanRecommendation: null, note: `أعاده رئيس مجلس الإدارة: ${note}` };
+  }
+
   if (advance.action === "finance_review") {
-    if (state.stage !== "finance") throw new Error("المراجعة المالية تأتي بعد تجهيز القسم، لا قبله ولا بعده.");
+    if (state.stage !== "finance" && state.stage !== "governance") throw new Error("المراجعة المالية تأتي بعد تجهيز القسم، لا قبله ولا بعده.");
     if (actorId !== SPEND_ACTORS.finance) throw new Error("المراجعة المالية لعبدالرحمن فقط.");
-    return {
-      ...next,
-      stage: advance.result === "غير موافق" ? "owner" : "governance",
-      needsChainReview: false,
-      financeReview: { result: advance.result, note: requireNote(advance.note, "المراجعة المالية"), by: actorId, at: now },
-    };
+    if (state.financeReview && !state.needsChainReview) throw new Error("سُجّلت المراجعة المالية على هذا الطلب.");
+    const review: SpendReview = { result: advance.result, note: requireNote(advance.note, "المراجعة المالية"), by: actorId, at: now, ...(advance.result === "غير موافق" ? { reasonCode: stopReasonCode(advance.reasonCode) } : {}) };
+    if (advance.result === "غير موافق") return { ...next, stage: "owner", needsChainReview: false, financeReview: review, note: "غير موافق من المالية، أُعيد للقسم." };
+    const governanceDone = Boolean(state.governanceReview) && state.governanceReview?.result !== "موقوف";
+    return { ...next, stage: governanceDone ? "sultan" : "governance", needsChainReview: false, financeReview: review };
   }
 
   if (advance.action === "governance_review") {
-    if (state.stage !== "governance") throw new Error("فحص الحوكمة يأتي بعد المراجعة المالية.");
+    if (state.stage !== "governance" && state.stage !== "finance") throw new Error("فحص الحوكمة يأتي بعد تجهيز القسم.");
+    if (state.stage === "finance" && state.needsChainReview) throw new Error("فحص الحوكمة يأتي بعد المراجعة المالية لهذا الطلب القائم.");
     if (actorId !== SPEND_ACTORS.governance) throw new Error("فحص الحوكمة لحارس فقط.");
-    const review = { result: advance.result, note: requireNote(advance.note, "فحص الحوكمة"), by: actorId, at: now };
+    if (state.governanceReview) throw new Error("سُجّل فحص الحوكمة على هذا الطلب.");
+    const review: SpendReview = { result: advance.result, note: requireNote(advance.note, "فحص الحوكمة"), by: actorId, at: now, ...(advance.result === "موقوف" ? { reasonCode: stopReasonCode(advance.reasonCode) } : {}) };
     if (advance.result === "موقوف") {
-      return { ...next, stage: "owner", governanceReview: review, note: "موقوف من الحوكمة — بانتظار إقفال رئيس مجلس الإدارة. لا يُرفع لسلطان." };
+      return { ...next, stage: "owner", governanceReview: review, note: "موقوف من الحوكمة، أُعيد للقسم. لا يُرفع لسلطان." };
     }
-    return { ...next, stage: "sultan", governanceReview: review };
+    return { ...next, stage: state.financeReview ? "sultan" : "finance", governanceReview: review };
   }
 
   if (advance.action === "sultan_recommendation") {
@@ -371,7 +467,7 @@ export function advanceSpendChain(state: SpendChainState, actorId: string, advan
     return {
       ...next,
       stage: "owner",
-      sultanRecommendation: { result: advance.result, note: requireNote(advance.note, "توصية سلطان"), by: actorId, at: now },
+      sultanRecommendation: { result: advance.result, note: requireNote(advance.note, "توصية سلطان"), by: actorId, at: now, ...(advance.result === "رفض" ? { reasonCode: stopReasonCode(advance.reasonCode) } : {}) },
     };
   }
 

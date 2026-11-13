@@ -217,7 +217,7 @@ export async function getGovernanceCenter() {
   const integrationData = integrationRows?.data || integrations;
 
   return {
-    roles: COMPANY_AGENTS.filter((agent) => agent.rank === "OWNER" || agent.rank === "CEO" || agent.rank === "DEPARTMENT_HEAD").map(
+    roles: COMPANY_AGENTS.filter((agent) => agent.rank === "OWNER" || agent.rank === "CEO" || agent.rank === "SECTOR_LEAD" || agent.rank === "DEPARTMENT_HEAD").map(
       (agent) => ({
         id: agent.id,
         name: `${agent.name}، ${agent.title}`,

@@ -6,15 +6,22 @@ import {
   agentMayApproveSpend,
   isMonetarySpend,
   isOwnerReadySpend,
+  pendingReviewers,
   readSpendChain,
+  returnHolder,
+  returnedExpiresAt,
+  returnedToDepartment,
   spendStageAgent,
   spendReviewHistory,
   spendStop,
+  stopReasonCode,
   toDecisionMemo,
   type SpendAdvance,
 } from "./spendChain";
+import { appendWorkEvent } from "./workEvents";
 import {
   commandsForAgent,
+  getChairmanCommand,
   publicCommandStatus,
   updateChairmanCommand,
   type CommandUpdate,
@@ -29,6 +36,8 @@ export type BridgeMessage = {
   body: string;
   author: string;
   createdAt: string;
+  /** The command this note belongs to, when the employee linked one. */
+  commandId?: string | null;
 };
 
 const messages: BridgeMessage[] = [];
@@ -37,6 +46,10 @@ const messageSchema = z.object({
   direction: z.enum(["inbound", "outbound", "note"]).default("note"),
   body: z.string().trim().min(1).max(8_000),
   author: z.string().trim().min(1).max(120).optional(),
+  /** Link the note to a command; it then shows on the command's timeline. */
+  commandId: z.string().trim().min(3).max(120).optional(),
+  /** With a commandId: also complete this employee's next open step with the note as evidence. */
+  advance: z.boolean().optional(),
 });
 
 const actionSchema = z.object({
@@ -54,6 +67,10 @@ const actionSchema = z.object({
   stepId: z.string().trim().max(160).optional(),
   evidence: z.string().trim().max(4_000).optional(),
   decision: z.enum(["APPROVED", "REJECTED"]).optional(),
+  /** A stop reason from the fixed list (duplicate, missing_numbers, no_budget, authority, legal, risk, other). */
+  reasonCode: z.string().trim().max(40).optional(),
+  /** Rayyan's triage: the employee who owns the command. */
+  assignee: z.string().trim().max(40).optional(),
 });
 
 export function isBridgeAgent(agentId: string) {
@@ -77,8 +94,38 @@ function newId() {
   return `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function listBridgeMessages(agentId?: string): BridgeMessage[] {
-  return messages.filter((message) => !agentId || message.agentId === agentId).slice(0, 50);
+function memoryMessages(agentId?: string, commandId?: string) {
+  return messages.filter((message) => (!agentId || message.agentId === agentId) && (!commandId || message.commandId === commandId)).slice(0, 50);
+}
+
+/**
+ * Bridge notes are read from the database (G7), so every instance sees the
+ * same notes. This instance's memory is only a fallback when no DB is set.
+ */
+export async function listBridgeMessages(agentId?: string, options: { commandId?: string } = {}): Promise<BridgeMessage[]> {
+  const client = getSupabaseAdmin();
+  if (!client) return memoryMessages(agentId, options.commandId);
+  let query = client.from("agent_bridge_messages").select("id,agent_id,direction,body,author,created_at,metadata").eq("tenant_id", getTenantId());
+  if (agentId) query = query.eq("agent_id", agentId);
+  if (options.commandId) query = query.eq("metadata->>commandId", options.commandId);
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(50);
+  if (error) {
+    const text = `${error.code || ""} ${error.message || ""}`;
+    if (/42P01|PGRST205|does not exist|schema cache|Could not find the table/i.test(text)) return memoryMessages(agentId, options.commandId);
+    throw new DurableWriteError("تعذر قراءة رسائل الجسر من قاعدة البيانات.", error);
+  }
+  return (data || []).map((row: Record<string, unknown>) => {
+    const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      agentId: String(row.agent_id),
+      direction: String(row.direction) as BridgeMessage["direction"],
+      body: String(row.body),
+      author: String(row.author),
+      createdAt: String(row.created_at),
+      commandId: typeof metadata.commandId === "string" ? metadata.commandId : null,
+    };
+  });
 }
 
 /** Raised when a durable write fails; routes map it to HTTP 500 so callers never see a false 200. */
@@ -90,9 +137,10 @@ export function isDurableWriteError(error: unknown): boolean {
   return error instanceof Error && (error as { durable?: boolean }).durable === true;
 }
 
-export async function postBridgeMessage(agentId: string, input: unknown): Promise<BridgeMessage> {
+export async function postBridgeMessage(agentId: string, input: unknown): Promise<BridgeMessage & { command?: ReturnType<typeof publicCommandStatus> }> {
   if (!isBridgeAgent(agentId)) throw new Error("موظف غير معروف.");
   const body = messageSchema.parse(input);
+  if (body.commandId && !getChairmanCommand(body.commandId)) throw new Error("الأمر غير موجود.");
   const message: BridgeMessage = {
     id: newId(),
     agentId,
@@ -100,6 +148,7 @@ export async function postBridgeMessage(agentId: string, input: unknown): Promis
     body: body.body,
     author: body.author || agentId,
     createdAt: new Date().toISOString(),
+    commandId: body.commandId || null,
   };
   messages.unshift(message);
   const client = getSupabaseAdmin();
@@ -112,7 +161,7 @@ export async function postBridgeMessage(agentId: string, input: unknown): Promis
       body: message.body,
       author: message.author,
       created_at: message.createdAt,
-      metadata: {},
+      metadata: body.commandId ? { commandId: body.commandId } : {},
     });
     if (error) {
       const text = `${error.code || ""} ${error.message || ""}`;
@@ -120,6 +169,15 @@ export async function postBridgeMessage(agentId: string, input: unknown): Promis
         throw new DurableWriteError("تعذر حفظ الرسالة.", error);
       }
     }
+  }
+  if (body.commandId) {
+    // The note lands on the command's timeline, and can move it one step (G7).
+    const command = await updateChairmanCommand(agentId, body.commandId, {
+      action: body.advance ? "progress" : "note",
+      note: body.body.slice(0, 4_000),
+      evidence: body.advance ? body.body.slice(0, 4_000) : undefined,
+    });
+    return { ...message, command: publicCommandStatus(command) };
   }
   return message;
 }
@@ -130,10 +188,20 @@ export function spendQueueForAgent(agentId: string): ApprovalItem[] {
     if (item.status !== "PENDING" && item.status !== "DEFERRED") return false;
     const chain = readSpendChain(item);
     if (!chain) return false;
+    // Returned (stopped) requests sit with the department that prepared them (G4).
+    if (spendStop(chain)) return returnHolder(item) === agentId;
+    // Finance and governance review in parallel.
+    if (pendingReviewers(chain).includes(agentId)) return true;
     const holder = spendStageAgent(chain);
     if (holder === agentId) return true;
     return chain.stage === "department" && chain.preparingAgentId === "department" && agentId === "sultan";
   });
+}
+
+function returnedInfo(item: ApprovalItem) {
+  const stop = returnedToDepartment(item);
+  if (!stop) return null;
+  return { by: stop.by, reasonCode: stop.reasonCode, reason: stop.reason, note: stop.note, at: stop.at, expiresAt: returnedExpiresAt(stop, item), holder: returnHolder(item) };
 }
 
 async function summarizedRows(table: string, column: string, agentId: string) {
@@ -173,13 +241,14 @@ export async function agentWorkspace(agentId: string) {
       needsChainReview: readSpendChain(item)?.needsChainReview === true,
       reviews: spendReviewHistory(readSpendChain(item)),
       stopped: spendStop(readSpendChain(item))?.label || null,
+      returned: returnedInfo(item),
     })),
-    messages: listBridgeMessages(agentId),
+    messages: await listBridgeMessages(agentId),
     tables: { tasks, commitments },
   };
 }
 
-export function agentInbox(agentId: string) {
+export async function agentInbox(agentId: string) {
   if (!isBridgeAgent(agentId)) throw new Error("موظف غير معروف.");
   return {
     agentId,
@@ -195,10 +264,11 @@ export function agentInbox(agentId: string) {
         legacy: chain?.legacy === true,
         ownerReady: isOwnerReadySpend(chain),
         stopped: spendStop(chain)?.label || null,
+        returned: returnedInfo(item),
         reviews: spendReviewHistory(chain),
       };
     }),
-    messages: listBridgeMessages(agentId),
+    messages: await listBridgeMessages(agentId),
   };
 }
 
@@ -208,6 +278,16 @@ function asAdvance(agentId: string, body: z.infer<typeof actionSchema>): SpendAd
       return { action: "owner_decision", decision: body.decision || "APPROVED", note: body.note };
     }
     throw new Error("لا يملك أي موظف صلاحية اعتماد الصرف.");
+  }
+  if (body.action === "resubmit_department") {
+    return {
+      action: "resubmit_department",
+      subject: body.subject || "",
+      options: body.options || "",
+      expectedReturn: body.expectedReturn || "",
+      risks: body.risks || "",
+      amountSAR: body.amountSAR,
+    };
   }
   if (body.action === "submit_department") {
     return {
@@ -223,19 +303,19 @@ function asAdvance(agentId: string, body: z.infer<typeof actionSchema>): SpendAd
     if (body.result !== "موافق" && body.result !== "مشروط" && body.result !== "غير موافق") {
       throw new Error("نتيجة المراجعة المالية: موافق أو مشروط أو غير موافق.");
     }
-    return { action: "finance_review", result: body.result, note: body.note || "" };
+    return { action: "finance_review", result: body.result, note: body.note || "", reasonCode: stopReasonCode(body.reasonCode) };
   }
   if (body.action === "governance_review") {
     if (body.result !== "سليم" && body.result !== "مشروط" && body.result !== "موقوف") {
       throw new Error("نتيجة الحوكمة: سليم أو مشروط أو موقوف.");
     }
-    return { action: "governance_review", result: body.result, note: body.note || "" };
+    return { action: "governance_review", result: body.result, note: body.note || "", reasonCode: stopReasonCode(body.reasonCode) };
   }
   if (body.action === "sultan_recommendation") {
     if (body.result !== "موافقة" && body.result !== "رفض" && body.result !== "تعديل") {
       throw new Error("توصية سلطان: موافقة أو رفض أو تعديل.");
     }
-    return { action: "sultan_recommendation", result: body.result, note: body.note || "" };
+    return { action: "sultan_recommendation", result: body.result, note: body.note || "", reasonCode: stopReasonCode(body.reasonCode) };
   }
   throw new Error("إجراء صرف غير معروف.");
 }
@@ -245,11 +325,14 @@ export async function postBridgeAction(agentId: string, input: unknown) {
   const body = actionSchema.parse(input);
   if (body.kind === "command") {
     if (!body.commandId) throw new Error("يلزم معرّف الأمر.");
+    const known = ["block", "close", "evidence", "reopen", "replan", "note", "assign"] as const;
+    const action = (known as readonly string[]).includes(body.action) ? body.action as CommandUpdate["action"] : "progress";
     const update: CommandUpdate = {
-      action: body.action === "block" ? "block" : body.action === "close" ? "close" : body.action === "evidence" ? "evidence" : body.action === "reopen" ? "reopen" : body.action === "replan" ? "replan" : "progress",
+      action,
       stepId: body.stepId,
       note: body.note || body.evidence || "",
       evidence: body.evidence,
+      assignee: body.assignee,
     };
     const command = await updateChairmanCommand(agentId, body.commandId, update);
     return { kind: "command" as const, command: publicCommandStatus(command) };
@@ -269,6 +352,7 @@ export async function postBridgeAction(agentId: string, input: unknown) {
   } catch (error) {
     throw new DurableWriteError("تعذر حفظ إجراء الصرف في قاعدة البيانات؛ لم يُعتمد التغيير. أعد المحاولة.", error);
   }
+  await appendWorkEvent({ entityType: "spend", entityId: saved.id, actor: agentId, action: body.action, fromState: state.stage, toState: next.stage, note: body.note || body.result || body.action, evidence: null });
   return {
     kind: "spend" as const,
     approvalId: saved.id,

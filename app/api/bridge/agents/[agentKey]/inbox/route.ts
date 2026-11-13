@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ agentKe
   }
   try {
     await Promise.all([hydrateChairmanCommands(), hydrateApprovals()]);
-    return NextResponse.json({ ok: true, inbox: agentInbox(agentKey) });
+    return NextResponse.json({ ok: true, inbox: await agentInbox(agentKey) });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "تعذر فتح الوارد." }, { status: isDurableWriteError(error) ? 500 : 400 });
   }
