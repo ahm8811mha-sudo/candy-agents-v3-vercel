@@ -25,7 +25,9 @@ alter table public.orvanta_work_events enable row level security;
 drop policy if exists server_only_no_client_access on public.orvanta_work_events;
 create policy server_only_no_client_access on public.orvanta_work_events
   for all to anon, authenticated using (false) with check (false);
-grant select, insert on table public.orvanta_work_events to service_role;
+-- The service role keeps full table privileges (repo rule); the trigger below
+-- still refuses every update and delete, so the log stays append-only.
+grant select, insert, update, delete on table public.orvanta_work_events to service_role;
 revoke all on table public.orvanta_work_events from anon, authenticated, public;
 
 -- The log is append-only: no update, no delete, for any role.
