@@ -31,13 +31,16 @@ test("anonymous visitors see the public home, and the trusted owner device unloc
   await page.getByLabel("رمز وصول المالك").fill(ownerCode);
   await page.getByRole("button", { name: "فتح النسخة الخاصة" }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  // The login returns the owner to the page they asked for (?next=/status).
+  await expect(page).toHaveURL(/\/status$/);
+  await expect(page.getByRole("heading", { name: "النظام" })).toBeVisible();
+
+  await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "الشركة، بوضوح." })
   ).toBeVisible();
 
   await page.goto("/status");
-  await expect(page.getByRole("heading", { name: "النظام" })).toBeVisible();
   await expect(page.getByText("مركز الاعتمادية والتشغيل")).toBeVisible();
 });
 
