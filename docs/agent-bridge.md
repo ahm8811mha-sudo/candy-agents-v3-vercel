@@ -81,7 +81,7 @@ Spend order: department, then Abdulrahman (`موافق` / `مشروط` / `غير
 
 `assignee` is optional. Omit it, or send `automatic`, and the text is routed by name first (`خالد: …`, `يا سارة …`, or `@sara`) and then by subject. A real employee id such as `khalid` overrides the text. `owner` is not an assignee.
 
-The Chairman writes the order at the top of مساحة العمل, and again on `/commands`. The form has the text, an employee menu that defaults to تلقائي, a priority, and one submit button. After it is saved, the page names the employee and links to that command’s card. `/commands` lists every command from `GET /api/commands` and refreshes itself. Both pages require the owner session. The same `POST` body is sent.
+The Chairman writes the order at the top of مكتبي, and again on `/commands`. The form has the text, an employee menu that defaults to تلقائي, a priority, and one submit button. After it is saved, the page names the employee and links to that command’s card. `/commands` lists every command from `GET /api/commands` and refreshes itself. Both pages require the owner session. The same `POST` body is sent.
 
 Each command is written to `chairman_commands`. A later read on another instance loads that row, so `GET /api/commands` and `/api/bridge/agents/{id}/inbox` see it. If the table is missing, the command stays in the current process only.
 
@@ -116,3 +116,11 @@ The call does not write. It does not include secrets.
 ## Existing pending decisions
 
 Pending and deferred items with an amount above 0 and no review chain are read as waiting on Abdulrahman's finance review and flagged `needs chain review`. They are not deleted, not auto-approved, and not shown to the Chairman as ready. The migration writes that flag onto `company_approvals.metadata.spendChain` for rows that are still pending or deferred. Non-financial pending decisions stay as they are. Already approved or rejected rows are not rewritten.
+
+## November 2026 additions (backward compatible)
+
+- Messages accept `commandId`; a linked message is stored in `agent_bridge_messages` and recorded on the command (`note`, or `progress` with `advance: true`). `GET .../messages?commandId=` filters.
+- Command actions add `note` and `assign` (Rayyan or Sultan only, with `assignee`).
+- Spend actions add `resubmit_department` for an item returned to the department; stops carry `reasonCode` (`duplicate`, `missing_numbers`, `no_budget`, `authority`, `legal`, `risk`, `other`).
+- The Chairman digest adds `decisionCards` (at most 7), `overdue` (every overdue command, always) and `desk`; alerts are grouped with `count`. Existing fields are unchanged.
+- Decisions are never taken through the bridge. `POST /api/commands` with `action: "decide"` needs the owner session and rejects system keys.

@@ -13,7 +13,7 @@ describe("daily digest (F5)", () => {
   it("composes an Arabic brief with the key numbers", () => {
     submitIdea({ study: completeStudy, title: "فكرة تجريبية للملخص", hypothesis: "ف", budgetSAR: 30_000, horizonDays: 30 });
     const d = composeDigest();
-    expect(d.text).toContain("ملخص شركة النجمة الذهبية");
+    expect(d.text).toContain("ملخص أورفانتا");
     expect(d.pendingDecisions).toBeGreaterThanOrEqual(1);
     expect(d.topPending.length).toBeGreaterThan(0);
     expect(d.text).toContain("مركز القرار");

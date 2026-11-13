@@ -9,6 +9,7 @@ import "./orvanta-exact-logo.css";
 import "./orvanta-logo-final.css";
 import "./system.css";
 import "./workspace.css";
+import "./orvanta-calm.css";
 import ThemeShell from "@/components/ThemeShell";
 import AppShell from "@/components/AppShell";
 import PwaRegister from "@/components/PwaRegister";
@@ -64,7 +65,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#eef5f3",
+  themeColor: "#F4F1EB",
   colorScheme: "light",
   width: "device-width",
   initialScale: 1,

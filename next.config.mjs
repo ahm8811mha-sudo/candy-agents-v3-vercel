@@ -4,6 +4,14 @@ const nextConfig = {
   distDir: "dist",
   poweredByHeader: false,
   compress: true,
+  // Duplicate overview screens fold into the five screens (temporary redirects; pages kept).
+  async redirects() {
+    return [
+      { source: "/dashboard", destination: "/", permanent: false },
+      { source: "/control-room", destination: "/office", permanent: false },
+      { source: "/enterprise-os", destination: "/office", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {
