@@ -83,11 +83,16 @@ export type ChairmanCommand = {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
-  history?: { at: string; by: string; action: string; note: string }[];
+  history?: CommandHistoryEntry[];
   priority?: CommandPriority;
   decision?: CommandDecision | null;
   triage?: CommandTriage | null;
 };
+
+export type CommandHistoryEntry = { at: string; by: string; action: string; note: string; evidence?: string | null; stepId?: string | null };
+
+/** The same update from the same employee within this window is a retry, not new work. */
+export const IDEMPOTENCY_WINDOW_MS = 2 * 60_000;
 
 const store: ChairmanCommand[] = [];
 const EMPLOYEE_IDS = new Set(COMPANY_AGENTS.filter((agent) => agent.id !== "owner").map((agent) => agent.id));
@@ -169,6 +174,13 @@ export function normalizeCommand(command: ChairmanCommand, now = nowIso()): bool
       }
     }
   }
+  const deduped = dedupeHistory(command.history || []);
+  if (deduped.removed) {
+    // Only the visible timeline is cleaned. The append-only work-events log keeps every call.
+    command.history = deduped.history;
+    command.resultReport = rebuildReport(command);
+    void appendWorkEvent({ entityType: "command", entityId: command.id, actor: "system", action: "history-dedupe", fromState: command.status, toState: command.status, note: `أُزيل ${deduped.removed} تحديث مكرر من سجل الأمر الظاهر (إعادة إرسال خلال دقيقتين).`, evidence: null });
+  }
   if (changed) {
     const before = command.status;
     command.collaborators = withStepOwners(command);
@@ -178,7 +190,33 @@ export function normalizeCommand(command: ChairmanCommand, now = nowIso()): bool
     command.resultReport = reportFor(command);
     void appendWorkEvent({ entityType: "command", entityId: command.id, actor: "system", action: "workflow-upgrade", fromState: before, toState: command.status, note: "ترقية سير العمل", evidence: null });
   }
-  return changed;
+  return changed || deduped.removed > 0;
+}
+
+const norm = (text: string | null | undefined) => (text || "").replace(/\s+/g, " ").trim();
+
+function sameUpdate(a: CommandHistoryEntry, b: CommandHistoryEntry) {
+  if (a.by !== b.by || a.action !== b.action || norm(a.note) !== norm(b.note)) return false;
+  if (a.stepId && b.stepId && a.stepId !== b.stepId) return false;
+  if (a.evidence !== undefined && b.evidence !== undefined && norm(a.evidence) !== norm(b.evidence)) return false;
+  return Math.abs(Date.parse(a.at) - Date.parse(b.at)) <= IDEMPOTENCY_WINDOW_MS;
+}
+
+/** Drops an entry that repeats an earlier one (same actor, action, note, step, evidence) within the window. */
+export function dedupeHistory(history: CommandHistoryEntry[]) {
+  const kept: CommandHistoryEntry[] = [];
+  for (const entry of history) {
+    if (entry.by !== "system" && kept.some((earlier) => sameUpdate(earlier, entry))) continue;
+    kept.push(entry);
+  }
+  return { history: kept, removed: history.length - kept.length };
+}
+
+/** Rebuilds the report from the cleaned timeline and keeps a closing-evidence line. */
+function rebuildReport(command: ChairmanCommand) {
+  const previous = command.resultReport || "";
+  const index = previous.indexOf("\nدليل الإغلاق:");
+  return `${reportFor(command)}${index >= 0 ? previous.slice(index) : ""}`;
 }
 
 const PRIORITY_DAYS: Record<CommandPriority, number> = { URGENT: 1, HIGH: 3, MEDIUM: 7, LOW: 7 };
@@ -569,18 +607,26 @@ export function listChairmanCommands(): ChairmanCommand[] {
   return [...store].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function listOpenCommandsSince(since: string) {
+/**
+ * Commands changed at or after `since`. By default only open commands (the
+ * routine's poll). With `includeClosed`, a closed command is listed too when it
+ * was closed at or after `since` (it carries closedAt).
+ */
+export function listOpenCommandsSince(since: string, options: { includeClosed?: boolean } = {}) {
   const sinceMs = Date.parse(since);
   if (!Number.isFinite(sinceMs)) throw new Error("since يجب أن يكون تاريخاً بصيغة ISO.");
   return listChairmanCommands()
-    .filter((command) => command.status !== "CLOSED")
-    .filter((command) => Date.parse(command.updatedAt) >= sinceMs || Date.parse(command.createdAt) >= sinceMs)
+    .filter((command) => command.status !== "CLOSED"
+      ? Date.parse(command.updatedAt) >= sinceMs || Date.parse(command.createdAt) >= sinceMs
+      : !!options.includeClosed && Date.parse(command.closedAt || command.updatedAt) >= sinceMs)
     .map((command) => ({
       id: command.id,
       subject: command.text,
       status: command.status,
       ownerAgentId: command.ownerAgentId,
       updatedAt: command.updatedAt,
+      // The default poll keeps its original shape; the full view adds the closing facts.
+      ...(options.includeClosed ? { currentStep: command.currentStep, createdAt: command.createdAt, closedAt: command.closedAt, resultReport: command.resultReport } : {}),
     }));
 }
 
@@ -610,9 +656,9 @@ export type CommandUpdate = {
   assignee?: string;
 };
 
-function record(command: ChairmanCommand, by: string, action: string, note: string, fromState: string, evidence?: string | null) {
+function record(command: ChairmanCommand, by: string, action: string, note: string, fromState: string, evidence?: string | null, stepId?: string | null) {
   const at = nowIso();
-  command.history = [...(command.history || []), { at, by, action, note }];
+  command.history = [...(command.history || []), { at, by, action, note, evidence: evidence?.trim() || null, stepId: stepId || null }];
   command.updatedAt = at;
   void appendWorkEvent({ entityType: "command", entityId: command.id, actor: by, action, fromState, toState: command.status, note, evidence: evidence || null, at });
 }
@@ -640,7 +686,37 @@ function assignCommand(command: ChairmanCommand, agentId: string, assignee: stri
   void note;
 }
 
+const IDEMPOTENT_ACTIONS = new Set(["progress", "note", "evidence", "close", "block"]);
+
+/**
+ * A retry (same employee, action, step, note and evidence within two minutes)
+ * changes nothing: no history entry, no event, no write.
+ */
+export function isRepeatedUpdate(command: ChairmanCommand, agentId: string, update: CommandUpdate, now = Date.now()) {
+  if (!IDEMPOTENT_ACTIONS.has(update.action)) return false;
+  const candidate: CommandHistoryEntry = { at: new Date(now).toISOString(), by: agentId, action: update.action, note: update.note, evidence: update.evidence?.trim() || null, stepId: update.stepId || null };
+  return (command.history || []).some((entry) => entry.by === agentId && entry.action === update.action
+    && norm(entry.note) === norm(candidate.note)
+    && (!entry.stepId || !candidate.stepId || entry.stepId === candidate.stepId)
+    && (entry.evidence === undefined || norm(entry.evidence) === norm(candidate.evidence))
+    && now - Date.parse(entry.at) <= IDEMPOTENCY_WINDOW_MS && now - Date.parse(entry.at) >= -5_000);
+}
+
+/** Re-reads one command from the DB so a retry on another instance sees the first call. */
+async function refreshCommand(commandId: string) {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  const { data, error } = await client.from("chairman_commands").select("payload").eq("tenant_id", getTenantId()).eq("id", commandId).maybeSingle();
+  if (error || !data) return;
+  const payload = (data as { payload?: ChairmanCommand }).payload;
+  if (!payload?.id) return;
+  const index = store.findIndex((item) => item.id === payload.id);
+  if (index === -1) store.push(payload);
+  else if (payload.updatedAt >= store[index].updatedAt) store[index] = payload;
+}
+
 export async function updateChairmanCommand(agentId: string, commandId: string, update: CommandUpdate): Promise<ChairmanCommand> {
+  await refreshCommand(commandId);
   const command = getChairmanCommand(commandId);
   if (!command) throw new Error("الأمر غير موجود.");
   const involved = command.ownerAgentId === agentId || command.collaborators.includes(agentId) || agentId === "diwan"
@@ -648,6 +724,7 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
   if (!involved) throw new Error("هذا الأمر ليس في نطاق هذا الموظف.");
   const note = update.note.trim();
   if (note.length < 3) throw new Error("أضف ملاحظة.");
+  if (isRepeatedUpdate(command, agentId, update)) return command;
   const before = command.status;
   if (update.action === "note") {
     record(command, agentId, "note", note, before, update.evidence);
@@ -749,7 +826,7 @@ export async function updateChairmanCommand(agentId: string, commandId: string, 
     step.evidence = update.evidence?.trim() || note;
     refreshStatus(command);
   }
-  record(command, agentId, update.action, note, before, update.evidence);
+  record(command, agentId, update.action, note, before, update.evidence, update.stepId);
   // Refresh the report so progress notes reach the chairman and the digest.
   if (update.action !== "close") command.resultReport = reportFor(command);
   await persistCommand(command);

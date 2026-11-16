@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowUpLeft, RefreshCw, Plus, ArrowLeft, CircleAlert } from "lucide-react";
 import DecisionDeskPanel from "./DecisionDeskPanel";
 import ChairmanCommandComposer from "./ChairmanCommandComposer";
+import CounterDrilldown from "./CounterDrilldown";
+import type { CounterItem } from "@/lib/company/counterItems";
 
 type Workspace = {
   asOf: string;
@@ -13,6 +15,7 @@ type Workspace = {
   approvals: Array<{ id: string; title: string; amount: number | null; requested_role: string; type: string; duplicateCount?: number }>;
   projects: Array<{ id: string; name: string; project_number: number | null; budget: number | null }>;
   blockers: Array<{ id: string; title: string; status: string; project_id: string | null }>;
+  items?: Partial<Record<"decisions" | "returned" | "blocked" | "projects" | "proof" | "study" | "decision" | "approved" | "execution", CounterItem[]>>;
 };
 const number = new Intl.NumberFormat("ar-SA-u-nu-latn");
 const money = (value: number | null) => value == null ? "لم يحدد مبلغ" : `${number.format(value)} ر.س`;
@@ -43,10 +46,13 @@ export default function ExecutiveWorkspace() {
     {error ? <div className="workspace-notice is-error" role="alert"><CircleAlert size={20} /><div><strong>لا يمكن تأكيد الحالة الحالية</strong><p>{error}</p>{data ? <small>المعروض أدناه آخر قراءة ناجحة؛ قد لا يكون محدثاً.</small> : null}</div></div> : null}
     {!data && loading ? <p className="workspace-empty" role="status">جارٍ قراءة سجلات الشركة…</p> : null}
     {data ? <>
-      <section className="workspace-metrics" aria-label="حالة العمل">
-        {[[data.counts.decisions, "قرار ينتظر المراجعة", "/inbox"], [data.counts.blocked, "خطوة متوقفة", "/projects"], [data.counts.projects, "مشروع نشط", "/projects"], [data.counts.proof, "مهمة فعلية قيد المراجعة", "/projects"]].map(([value, label, href]) => <Link href={String(href)} key={String(label)}><span>{String(label)}</span><strong>{number.format(Number(value))}</strong><ArrowUpLeft size={18} /></Link>)}
-      </section>
-      {data.counts.returned ? <p className="workspace-empty" role="note">موقوف وأُعيد للقسم: {number.format(data.counts.returned)} طلب (لا ينتظر قرارك)</p> : null}
+      <CounterDrilldown label="حالة العمل" counters={[
+        { key: "decisions", label: "قرار ينتظر المراجعة", items: data.items?.decisions || [], total: data.counts.decisions, hint: "طلبات أكملت سلسلة المراجعة بلا إيقاف وتنتظر قرارك.", empty: "لا قرار ينتظرك الآن." },
+        { key: "returned", label: "معاد للأقسام", items: data.items?.returned || [], total: data.counts.returned ?? 0, hint: "أوقفتها المالية أو الحوكمة أو سلطان وأُعيدت لصاحبها للتصحيح. لا تنتظر قرارك.", empty: "لا شيء معاد للأقسام." },
+        { key: "blocked", label: "خطوة متوقفة", items: data.items?.blocked || [], total: data.counts.blocked, empty: "لا خطوات متوقفة." },
+        { key: "projects", label: "مشروع نشط", items: data.items?.projects || [], total: data.counts.projects, empty: "لا مشاريع نشطة." },
+        { key: "proof", label: "مهمة فعلية قيد المراجعة", items: data.items?.proof || [], total: data.counts.proof, empty: "لا مهام فعلية تنتظر المراجعة." },
+      ]} />
       <div className="workspace-columns">
         <div className="workspace-primary">
           <section className="priority-dossier" aria-labelledby="priority-title">
@@ -62,9 +68,14 @@ export default function ExecutiveWorkspace() {
           </section>
         </div>
         <aside className="workspace-secondary">
-          <section className="workspace-section journey-section"><div className="section-caption">02 / من الفكرة إلى العمل</div><h2>أين وصلنا؟</h2><ol className="work-journey">
-            {[["study", "استكمال الدراسة", "/ideas?status=UNDER_STUDY"], ["decision", "جاهزة للقرار", "/ideas?status=PENDING_APPROVAL"], ["approved", "معتمدة للتحويل", "/ideas?status=APPROVED"], ["execution", "مرتبطة بمشروع", "/projects"]].map(([key, label, href], i) => <li key={key}><span className="journey-node">{i + 1}</span><Link href={href}>{label}<strong>{number.format(data.stages[key as keyof Workspace["stages"]])}</strong></Link></li>)}
-          </ol><p className="workspace-footnote">الاعتماد يتطلب دراسة مكتملة. الإنجاز الفعلي يحتاج إثباتاً.</p></section>
+          <section className="workspace-section journey-section"><div className="section-caption">02 / من الفكرة إلى العمل</div><h2>أين وصلنا؟</h2>
+          <CounterDrilldown compact label="مراحل الأفكار" counters={[
+            { key: "study", label: "استكمال الدراسة", items: data.items?.study || [], total: data.stages.study, empty: "لا أفكار قيد الدراسة." },
+            { key: "decision", label: "جاهزة للقرار", items: data.items?.decision || [], total: data.stages.decision, empty: "لا أفكار جاهزة للقرار." },
+            { key: "approved", label: "معتمدة للتحويل", items: data.items?.approved || [], total: data.stages.approved, empty: "لا أفكار معتمدة تنتظر التحويل." },
+            { key: "execution", label: "مرتبطة بمشروع", items: data.items?.execution || [], total: data.stages.execution, empty: "لا أفكار مرتبطة بمشروع." },
+          ]} />
+          <p className="workspace-footnote">الاعتماد يتطلب دراسة مكتملة. الإنجاز الفعلي يحتاج إثباتاً.</p></section>
           <section className="workspace-section"><div className="section-title"><h2>مشاريع نشطة</h2><Link href="/projects" aria-label="عرض كل المشاريع"><ArrowUpLeft size={19} /></Link></div>{data.projects.length ? data.projects.map((project) => <Link className="project-brief" href={`/projects?project=${project.id}`} key={project.id}><small>ملف / {project.project_number || "—"}</small><strong>{project.name}</strong><span>{money(project.budget)} <ArrowUpLeft size={15} /></span></Link>) : <p className="workspace-empty">لا مشاريع نشطة مسجلة.</p>}</section>
         </aside>
       </div>

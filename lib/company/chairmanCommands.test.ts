@@ -6,6 +6,7 @@ import {
   commandsForAgent,
   getChairmanCommand,
   issueChairmanCommand,
+  dedupeHistory,
   listOpenCommandsSince,
   routeChairmanCommand,
   updateChairmanCommand,
@@ -146,6 +147,41 @@ describe("chairman commands", () => {
     });
     expect(listOpenCommandsSince(new Date(Date.now() + 60_000).toISOString())).toEqual([]);
     expect(() => listOpenCommandsSince("tomorrow")).toThrow(/ISO/);
+  });
+
+  it("lists closed commands only when includeClosed is asked for", async () => {
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const closed = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", closed.id, { action: "close", note: "أُنجز الملخص", evidence: "أُرسل الملخص الداخلي للمراجعة." });
+    expect(listOpenCommandsSince(since).map((item) => item.id)).not.toContain(closed.id);
+    const all = listOpenCommandsSince(since, { includeClosed: true });
+    expect(all.find((item) => item.id === closed.id)).toMatchObject({ status: "CLOSED" });
+    expect(all.find((item) => item.id === closed.id)?.closedAt).toBeTruthy();
+    expect(listOpenCommandsSince(new Date(Date.now() + 60_000).toISOString(), { includeClosed: true })).toEqual([]);
+  });
+
+  it("ignores the same progress sent twice within the window", async () => {
+    const command = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    const before = command.history?.length || 0;
+    await updateChairmanCommand("sara", command.id, { action: "progress", note: "أنجزت خطوة التجهيز." });
+    await updateChairmanCommand("sara", command.id, { action: "progress", note: "أنجزت  خطوة التجهيز. " });
+    expect((command.history?.length || 0) - before).toBe(1);
+    await updateChairmanCommand("sara", command.id, { action: "progress", note: "خطوة مختلفة." });
+    expect((command.history?.length || 0) - before).toBe(2);
+  });
+
+  it("dedupes repeated visible history entries but keeps distinct or distant ones", () => {
+    const t = Date.parse("2026-11-13T17:28:00Z");
+    const at = (ms: number) => new Date(t + ms).toISOString();
+    const history = [
+      { at: at(0), by: "sultan", action: "progress", note: "تنفيذ ما بعد القرار" },
+      { at: at(5_000), by: "sultan", action: "progress", note: "تنفيذ ما بعد القرار" },
+      { at: at(10 * 60_000), by: "sultan", action: "progress", note: "تنفيذ ما بعد القرار" },
+      { at: at(6_000), by: "fahad", action: "progress", note: "تنفيذ ما بعد القرار" },
+    ];
+    const result = dedupeHistory(history);
+    expect(result.removed).toBe(1);
+    expect(result.history).toHaveLength(3);
   });
   it("routes investment research to the research procedure and shows progress in the report", async () => {
     const command = await issueChairmanCommand("اجتمعوا وعطوني أكبر الفرص القابلة للاستثمار مع عائد ٥٪ سنوياً");

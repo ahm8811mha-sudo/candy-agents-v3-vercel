@@ -101,3 +101,30 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 @media(max-width:700px){ .ov-page { padding:20px 14px 100px; } .ov-room, .ov-room.is-wide { grid-column:span 12; } .ov-desks { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); } .ov-card dl { grid-template-columns:minmax(0,1fr); } }
 @media (prefers-reduced-motion:no-preference){ .ov-live i { animation:ov-breathe 2.4s ease-in-out infinite; } }
 @keyframes ov-breathe { 50% { opacity:.35; } }
+
+/* Counter drill-down: every number opens the list it counts */
+.ov-drill .ov-counters { margin-bottom:10px; }
+.ov-counter-btn { font:inherit; text-align:start; cursor:pointer; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; display:grid; gap:2px; color:inherit; position:relative; }
+.ov-counter-btn:hover { border-color:var(--line-strong); }
+.ov-counter-btn:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.ov-counter-btn[aria-expanded=true] { border-color:var(--primary); background:#FFFFFF; box-shadow:inset 0 -2px 0 var(--primary); }
+.ov-counter-chevron { position:absolute; inset-inline-end:10px; top:12px; color:var(--muted); transition:transform .15s; }
+.ov-counter-btn[aria-expanded=true] .ov-counter-chevron { transform:rotate(180deg); color:var(--primary); }
+.ov-drill.is-compact .ov-counters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.ov-drill.is-compact .ov-counter-btn strong { font-size:20px; }
+.ov-drill-panel { border:1px solid var(--line); border-radius:10px; background:#FBFAF7; padding:14px; margin-bottom:18px; }
+.ov-drill-panel header { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
+.ov-drill-panel h3 { margin:0; font-size:14px; color:var(--text-strong); }
+.ov-drill-panel h3 small { color:var(--muted); font-weight:400; }
+.ov-drill-list { max-height:560px; overflow:auto; }
+.ov-drill-item { gap:6px !important; }
+.ov-drill-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.ov-drill-top strong { line-height:1.7; }
+.ov-drill-amount { flex:none; font-weight:700; font-variant-numeric:tabular-nums; color:var(--primary-deep); white-space:nowrap; }
+.ov-drill-meta { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:12px; color:var(--text); }
+.ov-drill-meta b, .ov-drill-reason b { font-weight:600; color:var(--muted); }
+.ov-drill-meta.is-dates { color:var(--muted); font-size:11.5px; }
+.ov-drill-reason { margin:0; font-size:12.5px; line-height:1.8; background:#F4F1EB; border-radius:6px; padding:6px 9px; }
+.ov-drill-link { color:var(--primary); text-decoration:none; font-weight:600; margin-inline-start:auto; }
+.ov-drill-link:hover { text-decoration:underline; }
+@media(max-width:700px){ .ov-drill-top { flex-direction:column; gap:2px; } .ov-drill-link { margin-inline-start:0; } .ov-drill-list { max-height:none; } }

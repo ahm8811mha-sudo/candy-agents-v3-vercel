@@ -27,7 +27,7 @@ const secondary = [
 ];
 /** The top bar names every company tool; a nested route is listed before its parent so it wins. */
 const pageNames = [
-  ["/departments/executive", "المكتب التنفيذي"], ["/departments/finance", "المالية والمحاسبة"],
+  ["/spend", "ملف طلب صرف"], ["/departments/executive", "المكتب التنفيذي"], ["/departments/finance", "المالية والمحاسبة"],
   ["/departments/sales", "المبيعات وعلاقات العملاء"], ["/departments/marketing", "النمو والتسويق"],
   ["/departments/operations", "إدارة العمليات"], ["/departments/procurement", "المشتريات والمخزون"],
   ["/departments/government-relations", "العلاقات الحكومية"], ["/departments/supply-chain", "سلسلة الإمداد"],

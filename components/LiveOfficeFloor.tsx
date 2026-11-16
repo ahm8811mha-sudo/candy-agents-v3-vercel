@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
+import CounterDrilldown from "./CounterDrilldown";
+import type { CounterItem } from "@/lib/company/counterItems";
 
 type Status = "working" | "waiting" | "blocked" | "idle";
 type Item = { id: string; kind: string; title: string; status: string; amountSAR?: number | null; at?: string | null };
@@ -11,11 +13,13 @@ type Employee = {
   queue: Item[]; completed: Item[]; timeline: Array<{ id: string; title: string; kind: string; at: string }>;
   chain: Array<{ id: string; title: string; amountSAR: number | null; stageLabel: string; holder: string; stopped: boolean }>;
   kpis?: { open: number; overdue: number; doneWeek: number; returned: number };
+  kpiItems?: { open: CounterItem[]; overdue: CounterItem[]; doneWeek: CounterItem[]; returned: CounterItem[] };
   lastActivityAt: string | null;
 };
 type Floor = {
   asOf: string; tasksAvailable: boolean;
-  counters: { openCommands: number; inProgress: number; awaitingChairman: number; completedToday: number; alerts: number; returned: number };
+  counters: { openCommands: number; inProgress: number; awaitingChairman: number; completedToday: number; alerts: number; returned: number; spendInChain?: number };
+  counterItems?: Record<string, CounterItem[]>;
   employees: Employee[];
   desk?: { cards: number; waiting: number; digestAt: string };
   flows: Array<{ id: string; title: string; amountSAR: number | null; holder: string; path: string[]; stageLabel: string; count: number }>;
@@ -56,12 +60,12 @@ function Panel({ person }: { person: Employee | undefined }) {
   if (!person) return <section className="ov-section ov-panel"><h2>اختر مكتباً</h2><p className="ov-empty">اضغط على أي موظف لترى ما يعمل عليه الآن، وطابوره، وما أنجزه.</p></section>;
   return <section className="ov-section ov-panel" aria-live="polite">
     <h2><span className="ov-avatar" aria-hidden>{person.name.slice(0, 1)}</span><span>{person.name}<small style={{ display: "block" }}>{person.title} · {person.department}</small></span></h2>
-    <div className="ov-counters">
-      <div><strong>{num.format(person.kpis?.open ?? person.queue.length)}</strong><span>مفتوح</span></div>
-      <div><strong>{num.format(person.kpis?.overdue ?? 0)}</strong><span>متأخر</span></div>
-      <div><strong>{num.format(person.kpis?.doneWeek ?? 0)}</strong><span>أُنجز هذا الأسبوع</span></div>
-      <div><strong>{num.format(person.kpis?.returned ?? 0)}</strong><span>معاد للتصحيح</span></div>
-    </div>
+    <CounterDrilldown key={person.id} compact label={`عدّادات ${person.name}`} counters={[
+      { key: "open", label: "مفتوح", items: person.kpiItems?.open || [], empty: "لا عمل مفتوح." },
+      { key: "overdue", label: "متأخر", items: person.kpiItems?.overdue || [], empty: "لا أوامر متأخرة." },
+      { key: "doneWeek", label: "أُنجز هذا الأسبوع", items: person.kpiItems?.doneWeek || [], empty: "لا إنجاز هذا الأسبوع." },
+      { key: "returned", label: "معاد للتصحيح", items: person.kpiItems?.returned || [], empty: "لا شيء معاد للتصحيح." },
+    ]} />
     <h3 style={{ fontSize: 13.5, margin: "0 0 8px" }}>يعمل عليه الآن</h3>
     {person.queue.length ? <ul className="ov-list">{person.queue.slice(0, 10).map((item) => <li key={item.kind + item.id}><strong>{item.title.slice(0, 140)}</strong><span className="ov-muted">{item.status}{item.amountSAR ? ` · ${money(item.amountSAR)}` : ""}{item.at ? ` · ${timeAgo(item.at)}` : ""}</span>{item.kind === "command" ? <Link className="ov-muted" href={`/commands#${item.id}`}>بطاقة المتابعة</Link> : null}</li>)}</ul> : <p className="ov-empty">لا عمل مفتوح.</p>}
     <h3 style={{ fontSize: 13.5, margin: "14px 0 8px" }}>أُنجز مؤخراً</h3>
@@ -102,14 +106,15 @@ export default function LiveOfficeFloor({ room }: { room?: string }) {
       <div className="ov-actions"><span className="ov-live"><i aria-hidden /> مباشر{data ? ` · ${clock.format(new Date(data.asOf))}` : ""}</span><button type="button" className="ov-btn" onClick={() => void load()} disabled={loading}><RefreshCw size={14} /> تحديث</button>{roomInfo ? <Link className="ov-btn is-quiet" href="/office">كل المكتب</Link> : null}</div>
     </header>
     {error ? <p className="ov-alert" role="alert">{error}</p> : null}
-    {data ? <div className="ov-counters" aria-label="حالة الشركة">
-      <Link href="/"><strong>{num.format(data.desk?.cards ?? data.counters.awaitingChairman)}</strong><span>بطاقة قرار لك</span></Link>
-      <div><strong>{num.format(data.counters.openCommands)}</strong><span>أمر مفتوح</span></div>
-      <div><strong>{num.format(data.counters.inProgress)}</strong><span>قيد التنفيذ</span></div>
-      <div><strong>{num.format(data.counters.returned)}</strong><span>معاد للأقسام</span></div>
-      <div><strong>{num.format(data.counters.alerts)}</strong><span>متعطل أو متأخر</span></div>
-      <div><strong>{num.format(data.counters.completedToday)}</strong><span>أُنجز اليوم</span></div>
-    </div> : !error ? <p className="ov-empty" role="status">جارٍ فتح المكتب…</p> : null}
+    {data ? <CounterDrilldown label="حالة الشركة" counters={[
+      { key: "awaitingChairman", label: "ينتظر قرارك", items: data.counterItems?.awaitingChairman || [], hint: "يصلك فقط ما أكمل سلسلة المراجعة بلا إيقاف. البطاقات تُعرض في مكتبي.", empty: "لا شيء ينتظر قرارك." },
+      { key: "openCommands", label: "أمر مفتوح", items: data.counterItems?.openCommands || [], empty: "لا أوامر مفتوحة." },
+      { key: "inProgress", label: "قيد التنفيذ", items: data.counterItems?.inProgress || [], hint: "أوامر ومهام يعمل عليها الفريق الآن.", empty: "لا شيء قيد التنفيذ." },
+      { key: "spendInChain", label: "طلب صرف في السلسلة", items: data.counterItems?.spendInChain || [], hint: "طلبات صرف لم تكتمل مراجعتها بعد: القسم ← المالية والحوكمة ← سلطان ← أنت.", empty: "لا طلبات صرف في السلسلة." },
+      { key: "returned", label: "معاد للأقسام", items: data.counterItems?.returned || [], hint: "أوقفتها المالية أو الحوكمة أو سلطان، وأُعيدت لصاحبها للتصحيح خلال 7 أيام. لا تنتظر قرارك.", empty: "لا شيء معاد للأقسام." },
+      { key: "alerts", label: "متعطل أو متأخر", items: data.counterItems?.alerts || [], empty: "لا شيء متعطل أو متأخر." },
+      { key: "completedToday", label: "أُنجز اليوم", items: data.counterItems?.completedToday || [], empty: "لم يُنجز شيء اليوم بعد." },
+    ]} /> : !error ? <p className="ov-empty" role="status">جارٍ فتح المكتب…</p> : null}
     <ul className="ov-legend" aria-label="دليل الحالات">{(Object.keys(STATUS_LABEL) as Status[]).map((k) => <li key={k}><span className={"ov-dot " + k} aria-hidden />{STATUS_LABEL[k]}</li>)}</ul>
     <div className="ov-grid2">
       <div className="ov-floor">

@@ -97,7 +97,11 @@ Authorized only by `AGENT_BRIDGE_KEY`. One dispatcher can poll this instead of e
 { "ok": true, "since": "2026-10-26T00:00:00.000Z", "commands": [{ "id": "cmd-example", "subject": "خالد: جهّز مقارنة موردين", "status": "IN_PROGRESS", "ownerAgentId": "khalid", "updatedAt": "2026-10-26T08:00:00.000Z" }] }
 ```
 
-Closed commands are left out. A missing or unparseable `since` is 400. The call does not write, does not approve spend, and does not send anything outside the company.
+Closed commands are left out by default. Add `status=all` (or `includeClosed=1`) to also list commands closed at or after `since`; those rows add `currentStep`, `createdAt`, `closedAt` and `resultReport`. The default response shape is unchanged.
+
+`progress`, `note`, `evidence`, `close` and `block` actions are idempotent: the same employee sending the same action, step, note and evidence within two minutes gets the command back unchanged, with no new history entry. Repeats already in a command's visible history are collapsed on read; the append-only work-events log keeps every call.
+
+A missing or unparseable `since` is 400. The call does not write, does not approve spend, and does not send anything outside the company.
 
 ## Chairman digest
 
