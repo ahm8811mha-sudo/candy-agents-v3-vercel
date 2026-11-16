@@ -85,11 +85,11 @@ export default function DecisionDeskPanel() {
     {desk ? <div className="ov-grid2" style={{ marginTop: 16 }}>
       <div>
         <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>متأخر عن موعده ({number.format(desk.overdue.length)})</h3>
-        {desk.overdue.length ? <ul className="ov-list">{desk.overdue.slice(0, 8).map((item) => <li key={item.id}><strong>{item.subject.slice(0, 110)}</strong><span className="ov-muted">{item.label} · المسؤول الآن: {item.ownerName}</span><Link href={`/commands#${item.id}`} className="ov-muted">بطاقة المتابعة</Link></li>)}</ul> : <p className="ov-empty">لا أوامر متأخرة.</p>}
+        {desk.overdue.length ? <ul className="ov-list">{desk.overdue.map((item) => <li key={item.id}><strong>{item.subject.slice(0, 160)}</strong><span className="ov-muted">{item.label} · المسؤول الآن: {item.ownerName} · الموعد {fmt(item.dueAt)}</span><Link href={`/commands#${item.id}`} className="ov-drill-link" style={{ marginInlineStart: 0 }}>فتح الأمر</Link></li>)}</ul> : <p className="ov-empty">لا أوامر متأخرة.</p>}
       </div>
       <div>
         <h3 style={{ fontSize: 14, margin: "0 0 8px" }}>أُعيد للأقسام ({number.format(desk.returned.length)})</h3>
-        {desk.returned.length ? <ul className="ov-list">{desk.returned.slice(0, 8).map((item) => <li key={item.id}><strong>{item.subject.slice(0, 90)}{item.duplicateCount > 1 ? ` (×${item.duplicateCount})` : ""}</strong><span className="ov-muted">{item.reason} · عند {item.holderName} · يُؤرشف {fmt(item.expiresAt)}</span></li>)}</ul> : <p className="ov-empty">لا شيء معاد للتصحيح.</p>}
+        {desk.returned.length ? <ul className="ov-list">{desk.returned.map((item) => <li key={item.id} className="ov-drill-item"><div className="ov-drill-top"><strong>{item.subject.slice(0, 140)}{item.duplicateCount > 1 ? ` (×${item.duplicateCount})` : ""}</strong>{item.amountSAR ? <span className="ov-drill-amount">{number.format(item.amountSAR)} ر.س</span> : null}</div><span className="ov-muted">{item.reason} · عند {item.holderName} · يُؤرشف {fmt(item.expiresAt)}</span>{item.note ? <p className="ov-drill-reason">{item.note.slice(0, 400)}</p> : null}<Link href={`/spend/${encodeURIComponent(item.id)}`} className="ov-drill-link" style={{ marginInlineStart: 0 }}>فتح الملف</Link></li>)}</ul> : <p className="ov-empty">لا شيء معاد للتصحيح.</p>}
       </div>
     </div> : null}
   </section>;

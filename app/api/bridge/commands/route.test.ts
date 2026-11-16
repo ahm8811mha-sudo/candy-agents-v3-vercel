@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "./route";
-import { _clearChairmanCommands, issueChairmanCommand } from "@/lib/company/chairmanCommands";
+import { _clearChairmanCommands, issueChairmanCommand, updateChairmanCommand } from "@/lib/company/chairmanCommands";
 
 const env = {
   AGENT_BRIDGE_KEY: "master-key-value",
@@ -45,6 +45,23 @@ describe("GET /api/bridge/commands", () => {
     expect(Object.keys(body.commands[0]).sort()).toEqual(["id", "ownerAgentId", "status", "subject", "updatedAt"]);
     const again = await poll(since, { "x-agent-bridge-key": env.AGENT_BRIDGE_KEY });
     expect(await again.json()).toEqual(body);
+  });
+
+  it("adds closed commands only with status=all or includeClosed=1", async () => {
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const closed = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", closed.id, { action: "close", note: "أُنجز الملخص", evidence: "أُرسل الملخص الداخلي للمراجعة." });
+    const key = { "x-agent-bridge-key": env.AGENT_BRIDGE_KEY };
+    const plain = await (await poll(since, key)).json();
+    expect(plain.commands.map((c: { id: string }) => c.id)).not.toContain(closed.id);
+    for (const extra of ["status=all", "includeClosed=1"]) {
+      const res = await GET(new NextRequest(`http://localhost/api/bridge/commands?since=${encodeURIComponent(since)}&${extra}`, { headers: key }));
+      const body = await res.json();
+      const row = body.commands.find((c: { id: string }) => c.id === closed.id);
+      expect(row).toMatchObject({ status: "CLOSED" });
+      expect(row.closedAt).toBeTruthy();
+      expect(row.resultReport).toBeTruthy();
+    }
   });
 
   it("rejects other keys and a missing or bad since", async () => {

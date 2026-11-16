@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 
 test.use({ serviceWorkers: "block" });
@@ -51,4 +53,24 @@ test("meetings and archive open without errors", async ({ page }) => {
   await page.goto("/archive");
   await expect(page.getByRole("heading", { name: "الأرشيف" })).toBeVisible();
   await expect(page.getByRole("tab", { name: /مؤرشف/ })).toBeVisible();
+});
+
+test("every office counter opens the list of what it counts", async ({ page }) => {
+  const office = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "office-counters.json"), "utf8")) as { counters: Record<string, number>; counterItems: Record<string, Array<{ title: string }>> };
+  await page.route("**/api/company/office", (route) => route.fulfill({ json: { ...office, asOf: new Date().toISOString() } }));
+  await page.goto("/office");
+  const counters = page.getByRole("group", { name: "حالة الشركة" });
+  const returned = counters.getByRole("button", { name: /معاد للأقسام/ });
+  await expect(returned).toContainText(String(office.counters.returned));
+  await returned.click();
+  await expect(returned).toHaveAttribute("aria-expanded", "true");
+  const panel = page.getByRole("region", { name: /معاد للأقسام: القائمة/ });
+  await expect(panel.locator(".ov-drill-item")).toHaveCount(office.counters.returned);
+  await expect(panel).toContainText("راصد");
+  await expect(panel).toContainText("السبب:");
+  await expect(panel.getByRole("link", { name: "فتح الملف" }).first()).toHaveAttribute("href", /\/spend\//);
+  const chain = counters.getByRole("button", { name: /طلب صرف في السلسلة/ });
+  await chain.click();
+  await expect(page.getByRole("region", { name: /طلب صرف في السلسلة: القائمة/ }).locator(".ov-drill-item")).toHaveCount(office.counters.spendInChain);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });

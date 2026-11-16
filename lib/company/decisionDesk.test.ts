@@ -39,7 +39,7 @@ describe("decision desk", () => {
     expect(desk.returned[0].holderName).toBeTruthy();
     expect(Date.parse(desk.returned[0].expiresAt)).toBeGreaterThan(NOW.getTime());
     expect(expiredReturns(NOW)).toHaveLength(0);
-    expect(expiredReturns(new Date("2026-11-21T18:00:00.000Z"))).toHaveLength(1);
+    expect(expiredReturns(new Date(Date.parse(desk.returned[0].expiresAt) + 60_000))).toHaveLength(1);
   });
 
   it("schedules the digest at 20:00 Riyadh", () => {

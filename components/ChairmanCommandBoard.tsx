@@ -53,11 +53,24 @@ function DecisionButtons({ id, onDone }: { id: string; onDone: () => void }) {
 }
 import { commandStatusLabel } from "@/lib/company/commandStatusLabel";
 
+/** Counters on the board: each one filters the list below to exactly the commands it counts. */
+const STATUS_FILTERS: Array<[string, string]> = [["all", "كل الأوامر"], ["open", "مفتوح"], ["progress", "قيد التنفيذ"], ["decision", "ينتظر قرارك"], ["overdue", "متأخر"], ["closed", "مغلق"]];
+function matchesFilter(command: BoardCommand, key: string) {
+  if (key === "all") return true;
+  if (key === "open") return command.status !== "CLOSED";
+  if (key === "progress") return command.status === "IN_PROGRESS";
+  if (key === "decision") return Boolean(command.awaitingDecision) || command.status === "AWAITING_CHAIRMAN";
+  if (key === "overdue") return command.status !== "CLOSED" && Boolean(command.sla?.overdue);
+  if (key === "closed") return command.status === "CLOSED";
+  return true;
+}
+
 export default function ChairmanCommandBoard() {
   const [commands, setCommands] = useState<BoardCommand[]>([]);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [currentId, setCurrentId] = useState("");
+  const [filter, setFilter] = useState<string>("all");
 
   const load = useCallback(async () => {
     try {
@@ -115,11 +128,18 @@ export default function ChairmanCommandBoard() {
         </div>
       </header>
       <ChairmanCommandComposer onIssued={remember} />
+      {ready && commands.length ? <div className="ov-counters" role="group" aria-label="تصفية الأوامر حسب الحالة" style={{ marginTop: 16 }}>
+        {STATUS_FILTERS.map(([key, label]) => {
+          const count = commands.filter((command) => matchesFilter(command, key)).length;
+          return <button key={key} type="button" className="ov-counter-btn" aria-pressed={filter === key} onClick={() => setFilter(filter === key ? "all" : key)}><strong>{count.toLocaleString("ar-SA-u-nu-latn")}</strong><span>{label}</span></button>;
+        })}
+      </div> : null}
+      {filter !== "all" ? <p className="ov-muted" role="status">تُعرض أوامر «{STATUS_FILTERS.find(([key]) => key === filter)?.[1]}» فقط ({commands.filter((command) => matchesFilter(command, filter)).length.toLocaleString("ar-SA-u-nu-latn")}). <button type="button" className="ov-btn is-quiet" onClick={() => setFilter("all")}>عرض الكل</button></p> : null}
       {error ? <p className="order-feedback" role="alert">{error}</p> : null}
       {!ready ? <p className="workspace-empty" role="status">جارٍ قراءة الأوامر…</p> : null}
       {ready && commands.length === 0 ? <p className="workspace-empty">لا أوامر مسجّلة بعد.</p> : null}
       <div className="command-list">
-        {commands.map((command) => (
+        {commands.filter((command) => matchesFilter(command, filter)).map((command) => (
           <article id={command.id} key={command.id} className={command.id === currentId ? "command-card is-current" : "command-card"}>
             <h3>{command.subject}</h3>
             <div className="ov-actions">{command.priority ? <span className="ov-tag">{PRIORITY[command.priority] || command.priority}</span> : null}{command.sla ? <span className={"ov-tag" + (command.sla.overdue ? " is-red" : "")}>{command.sla.label}</span> : null}{command.dueAt ? <span className="ov-muted">الموعد: {fmt(command.dueAt)}</span> : null}</div>

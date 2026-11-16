@@ -9,6 +9,7 @@ import { listApprovals } from "../approvals";
 import { getCompanyPulse } from "./pulse";
 import { approvalVisibleToChairman, collapseDuplicates, isMonetarySpend, readSpendChain, returnHolder, returnedToDepartment, spendStageAgent, spendStop } from "./spendChain";
 import { buildDecisionDesk } from "./decisionDesk";
+import { commandItem, spendItem, taskItem, type CounterItem } from "./counterItems";
 
 export type OfficeStatus = "working" | "waiting" | "blocked" | "idle";
 export type OfficeTaskRow = Record<string, unknown>;
@@ -76,9 +77,19 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
       ...myTasks.filter((t) => DONE_TASK.has(str(t.status).toUpperCase())).map((t) => ({ id: str(t.id), kind: "task" as const, title: str(t.title), status: "منجز", at: str(t.completed_at || t.updated_at) || null })),
     ].sort((a, b) => str(b.at).localeCompare(str(a.at))).slice(0, 8);
 
-    const overdueMine = openCmds.filter((c) => c.ownerAgentId === agent.id && Date.parse(c.dueAt) < now.getTime()).length;
-    const doneWeek = mine.filter((c) => c.status === "CLOSED" && Date.parse(c.closedAt || c.updatedAt) >= weekAgo).length
-      + myTasks.filter((t) => DONE_TASK.has(str(t.status).toUpperCase()) && Date.parse(str(t.completed_at || t.updated_at)) >= weekAgo).length;
+    const overdueCmds = openCmds.filter((c) => c.ownerAgentId === agent.id && Date.parse(c.dueAt) < now.getTime());
+    const overdueMine = overdueCmds.length;
+    const doneCmds = mine.filter((c) => c.status === "CLOSED" && Date.parse(c.closedAt || c.updatedAt) >= weekAgo);
+    const doneTasks = myTasks.filter((t) => DONE_TASK.has(str(t.status).toUpperCase()) && Date.parse(str(t.completed_at || t.updated_at)) >= weekAgo);
+    const doneWeek = doneCmds.length + doneTasks.length;
+    const spendById = new Map(approvals.map((a) => [a.id, a]));
+    const asItem = (q: OfficeItem): CounterItem => {
+      if (q.kind === "command") { const c = commands.find((x) => x.id === q.id); if (c) return commandItem(c, now); }
+      if (q.kind === "task") { const t = myTasks.find((x) => str(x.id) === q.id); if (t) return taskItem(t, agent.id); }
+      const a = spendById.get(q.id);
+      if (a) { const dup = uniqueFlows.find((f) => f.id === q.id)?.duplicateCount; return spendItem({ ...a, duplicateCount: dup || ("duplicateCount" in a ? Number((a as { duplicateCount?: number }).duplicateCount) || 1 : 1) }); }
+      return { id: q.id, kind: "task", title: q.title, amountSAR: q.amountSAR ?? null, stage: q.status, holderId: agent.id, holderName: agent.name, status: q.status, reason: null, createdAt: q.at || null, updatedAt: q.at || null, dueAt: null, href: "/office", duplicateCount: 1 };
+    };
     const blocked = returnedHere.length > 0 || openCmds.some((c) => c.status === "BLOCKED" || pendingStep(c) === undefined && c.steps.some((s) => s.ownerAgentId === agent.id && s.status === "BLOCKED")) || openTasks.some((t) => BLOCKED_TASK.has(str(t.status).toUpperCase()));
     const active = openCmds.some((c) => (c.status === "IN_PROGRESS" || c.status === "OPEN") && (c.ownerAgentId === agent.id || pendingStep(c))) || openTasks.some((t) => str(t.status).toUpperCase() === "IN_PROGRESS") || (agent.id !== "owner" && holding.length > 0);
     const waiting = openCmds.some((c) => c.status === "AWAITING_CHAIRMAN" || c.status === "IN_SPEND_CHAIN") || (agent.id === "owner" && holding.length > 0);
@@ -90,27 +101,50 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
     return {
       id: agent.id, name: agent.name, title: agent.title, department: agent.department, rank: agent.rank, reportsTo: agent.reportsTo, sector: agent.sector,
       kpis: { open: queue.length, overdue: overdueMine, doneWeek, returned: returnedHere.length },
+      kpiItems: {
+        open: queue.map(asItem),
+        overdue: overdueCmds.map((c) => commandItem(c, now)),
+        doneWeek: [...doneCmds.map((c) => commandItem(c, now)), ...doneTasks.map((t) => taskItem(t, agent.id))],
+        returned: returnedHere.map((f) => asItem({ id: f.id, kind: "returned", title: f.title, status: "", amountSAR: f.amountSAR, at: f.at })),
+      },
       status, current, queue, completed, timeline, lastActivityAt,
       chain: uniqueFlows.filter((f) => f.path.includes(agent.id)).slice(0, 12).map((f) => ({ id: f.id, title: f.title, amountSAR: f.amountSAR, stageLabel: f.stageLabel, holder: f.holder, stopped: f.stopped })),
     };
   });
 
   const openCommands = commands.filter((c) => c.status !== "CLOSED");
-  const chairmanReady = collapseDuplicates(approvals.filter((a) => (a.status === "PENDING" || a.status === "DEFERRED") && isMonetarySpend(a.amount) && approvalVisibleToChairman(a))).length;
-  const returned = collapseDuplicates(approvals.filter((a) => returnedToDepartment(a))).length;
+  const pendingSpend = approvals.filter((a) => (a.status === "PENDING" || a.status === "DEFERRED") && isMonetarySpend(a.amount));
+  const chairmanReadyRows = collapseDuplicates(pendingSpend.filter((a) => approvalVisibleToChairman(a)));
+  const returnedRows = collapseDuplicates(approvals.filter((a) => returnedToDepartment(a)));
+  const inChainRows = collapseDuplicates(pendingSpend.filter((a) => !approvalVisibleToChairman(a) && !returnedToDepartment(a) && readSpendChain(a)));
+  const isTask = (t: OfficeTaskRow, set: Set<string>) => set.has(str(t.status).toUpperCase());
+  // Each counter is the length of its own list, so the number and the list always match.
+  const counterItems: Record<string, CounterItem[]> = {
+    awaitingChairman: [...chairmanReadyRows.map((a) => spendItem(a)), ...openCommands.filter((c) => c.status === "AWAITING_CHAIRMAN").map((c) => commandItem(c, now))],
+    openCommands: openCommands.map((c) => commandItem(c, now)),
+    inProgress: [...openCommands.filter((c) => c.status === "IN_PROGRESS").map((c) => commandItem(c, now)), ...tasks.filter((t) => str(t.status).toUpperCase() === "IN_PROGRESS").map((t) => taskItem(t))],
+    spendInChain: inChainRows.map((a) => spendItem(a)),
+    returned: returnedRows.map((a) => spendItem(a)),
+    alerts: [
+      ...openCommands.filter((c) => c.status === "BLOCKED" || Date.parse(c.dueAt) < now.getTime()).map((c) => commandItem(c, now)),
+      ...tasks.filter((t) => isTask(t, BLOCKED_TASK)).map((t) => taskItem(t)),
+    ],
+    completedToday: [...commands.filter((c) => c.status === "CLOSED" && isToday(c.closedAt, now)).map((c) => commandItem(c, now)), ...tasks.filter((t) => isToday(str(t.completed_at) || null, now)).map((t) => taskItem(t))],
+  };
   const returnedList = desk.returned;
-  const overdue = openCommands.filter((c) => Date.parse(c.dueAt) < now.getTime()).length;
   return {
     asOf: now.toISOString(),
     tasksAvailable,
     counters: {
-      openCommands: openCommands.length,
-      inProgress: openCommands.filter((c) => c.status === "IN_PROGRESS").length + tasks.filter((t) => str(t.status).toUpperCase() === "IN_PROGRESS").length,
-      awaitingChairman: chairmanReady + openCommands.filter((c) => c.status === "AWAITING_CHAIRMAN").length,
-      completedToday: commands.filter((c) => c.status === "CLOSED" && isToday(c.closedAt, now)).length + tasks.filter((t) => isToday(str(t.completed_at) || null, now)).length,
-      alerts: openCommands.filter((c) => c.status === "BLOCKED").length + overdue + tasks.filter((t) => BLOCKED_TASK.has(str(t.status).toUpperCase())).length,
-      returned,
+      openCommands: counterItems.openCommands.length,
+      inProgress: counterItems.inProgress.length,
+      awaitingChairman: counterItems.awaitingChairman.length,
+      completedToday: counterItems.completedToday.length,
+      alerts: counterItems.alerts.length,
+      returned: counterItems.returned.length,
+      spendInChain: counterItems.spendInChain.length,
     },
+    counterItems,
     employees,
     desk: { cards: desk.cards.length, waiting: desk.waiting, digestAt: desk.digestAt },
     returned: returnedList.map((r) => ({ id: r.id, title: r.subject, amountSAR: r.amountSAR, holder: r.holder, holderName: r.holderName, reason: r.reason, note: r.note, expiresAt: r.expiresAt, count: r.duplicateCount })),
