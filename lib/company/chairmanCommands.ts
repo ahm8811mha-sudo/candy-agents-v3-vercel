@@ -607,18 +607,26 @@ export function listChairmanCommands(): ChairmanCommand[] {
   return [...store].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+export type CommandPollStatus = "open" | "closed" | "all";
+
 /**
  * Commands changed at or after `since`. By default only open commands (the
- * routine's poll). With `includeClosed`, a closed command is listed too when it
- * was closed at or after `since` (it carries closedAt).
+ * routine's poll). `status: "all"` (or `includeClosed`) also lists commands
+ * closed at or after `since`. `status: "closed"` lists only those closed
+ * commands. Closed rows carry closedAt and resultReport.
  */
-export function listOpenCommandsSince(since: string, options: { includeClosed?: boolean } = {}) {
+export function listOpenCommandsSince(since: string, options: { includeClosed?: boolean; status?: CommandPollStatus } = {}) {
   const sinceMs = Date.parse(since);
   if (!Number.isFinite(sinceMs)) throw new Error("since يجب أن يكون تاريخاً بصيغة ISO.");
+  const status: CommandPollStatus = options.status || (options.includeClosed ? "all" : "open");
+  const extras = status === "all" || status === "closed";
   return listChairmanCommands()
-    .filter((command) => command.status !== "CLOSED"
-      ? Date.parse(command.updatedAt) >= sinceMs || Date.parse(command.createdAt) >= sinceMs
-      : !!options.includeClosed && Date.parse(command.closedAt || command.updatedAt) >= sinceMs)
+    .filter((command) => {
+      const openSince = Date.parse(command.updatedAt) >= sinceMs || Date.parse(command.createdAt) >= sinceMs;
+      const closedSince = Date.parse(command.closedAt || command.updatedAt) >= sinceMs;
+      if (command.status !== "CLOSED") return status !== "closed" && openSince;
+      return status !== "open" && closedSince;
+    })
     .map((command) => ({
       id: command.id,
       subject: command.text,
@@ -626,7 +634,7 @@ export function listOpenCommandsSince(since: string, options: { includeClosed?: 
       ownerAgentId: command.ownerAgentId,
       updatedAt: command.updatedAt,
       // The default poll keeps its original shape; the full view adds the closing facts.
-      ...(options.includeClosed ? { currentStep: command.currentStep, createdAt: command.createdAt, closedAt: command.closedAt, resultReport: command.resultReport } : {}),
+      ...(extras ? { currentStep: command.currentStep, createdAt: command.createdAt, closedAt: command.closedAt, resultReport: command.resultReport } : {}),
     }));
 }
 

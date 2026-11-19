@@ -24,9 +24,20 @@ export async function GET(req: NextRequest) {
   if (!Number.isFinite(Date.parse(since))) {
     return NextResponse.json({ ok: false, error: "since يجب أن يكون تاريخاً بصيغة ISO." }, { status: 400 });
   }
-  // Default stays open-only. status=all (or includeClosed=1) adds commands closed at or after since.
+  // Default stays open-only. status=all|closed|open (or includeClosed=1 for all)
+  // lists commands updated or closed at or after since.
   const params = req.nextUrl.searchParams;
-  const includeClosed = params.get("status") === "all" || ["1", "true"].includes(params.get("includeClosed") || "");
+  const rawStatus = params.get("status");
+  const includeClosedFlag = ["1", "true"].includes(params.get("includeClosed") || "");
+  let status: "open" | "closed" | "all";
+  if (!rawStatus) status = includeClosedFlag ? "all" : "open";
+  else if (rawStatus === "open" || rawStatus === "closed" || rawStatus === "all") status = rawStatus;
+  else return NextResponse.json({ ok: false, error: "status يجب أن يكون open أو closed أو all." }, { status: 400 });
   await hydrateChairmanCommands();
-  return NextResponse.json({ ok: true, since, ...(includeClosed ? { status: "all" } : {}), commands: listOpenCommandsSince(since, { includeClosed }) });
+  return NextResponse.json({
+    ok: true,
+    since,
+    ...(rawStatus || includeClosedFlag ? { status } : {}),
+    commands: listOpenCommandsSince(since, { status }),
+  });
 }
