@@ -160,6 +160,23 @@ describe("chairman commands", () => {
     expect(listOpenCommandsSince(new Date(Date.now() + 60_000).toISOString(), { includeClosed: true })).toEqual([]);
   });
 
+  it("filters the poll by status=closed, status=open, and status=all", async () => {
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const open = await issueChairmanCommand("أرسل بريداً للعميل بتأكيد الموعد");
+    const closed = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
+    await updateChairmanCommand("sara", closed.id, { action: "close", note: "أُنجز الملخص", evidence: "أُرسل الملخص الداخلي للمراجعة." });
+    expect(listOpenCommandsSince(since, { status: "open" }).map((item) => item.id)).toEqual(
+      expect.arrayContaining([open.id]),
+    );
+    expect(listOpenCommandsSince(since, { status: "open" }).map((item) => item.id)).not.toContain(closed.id);
+    const onlyClosed = listOpenCommandsSince(since, { status: "closed" });
+    expect(onlyClosed.map((item) => item.id)).toEqual([closed.id]);
+    expect(onlyClosed[0]?.closedAt).toBeTruthy();
+    expect(onlyClosed[0]?.resultReport).toBeTruthy();
+    const all = listOpenCommandsSince(since, { status: "all" });
+    expect(all.map((item) => item.id)).toEqual(expect.arrayContaining([open.id, closed.id]));
+  });
+
   it("ignores the same progress sent twice within the window", async () => {
     const command = await issueChairmanCommand("راجع عرض السعر للعميل الحالي داخلياً");
     const before = command.history?.length || 0;
