@@ -64,3 +64,16 @@ describe("project steps", () => {
     expect(plan.release).toHaveLength(0);
   });
 });
+
+describe("steps added on purpose", () => {
+  it("never merges a keepSeparate step into a similar one", () => {
+    const done = step("a", "مراجعة الامتثال والعقود", "Risk", { status: "DONE" });
+    const added = step("b", "مراجعة الامتثال والعقود للمورد", "Risk", { status: "TODO", metadata: { keepSeparate: true } });
+    expect(findDuplicateSteps([done, added])).toEqual([]);
+    expect(findDuplicateSteps([done, { ...added, metadata: {} }]).length).toBe(1);
+  });
+  it("routes an added step to its assigned employee", () => {
+    expect(stepAgent({ owner_role: "Legal & Compliance", metadata: { assignedAgent: "majed" } })).toBe("majed");
+    expect(stepAgent({ owner_role: "Executive Office", metadata: { assignedAgent: "diwan" } })).toBe("diwan");
+  });
+});
