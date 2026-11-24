@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { projectStepsReport, updateStepRouting } from "@/lib/company/projectSteps";
 import { isBridgeAgent } from "@/lib/company/agentBridge";
-import { openProjectSpendStep, runProjectSweep } from "@/lib/company/projectStepsBridge";
+import { openProjectSpendStep, recordRelayedOwnerRejection, runProjectSweep } from "@/lib/company/projectStepsBridge";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
 
@@ -36,6 +36,13 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sweep"), projectId: z.string().trim().min(3).max(120).optional() }),
   z.object({ action: z.literal("reactivate"), projectId: z.string().trim().min(3).max(120) }),
   z.object({
+    action: z.literal("owner_relayed_reject"),
+    approvalId: z.string().trim().min(3).max(120),
+    ownerWords: z.string().trim().min(3).max(600),
+    relayedBy: z.string().trim().min(2).max(80),
+    note: z.string().trim().max(600).optional(),
+  }),
+  z.object({
     action: z.literal("update_step"),
     taskId: z.string().trim().min(3).max(160),
     agentId: z.string().trim().min(3).max(40).optional(),
@@ -58,6 +65,10 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
   try {
     const body = bodySchema.parse(await req.json().catch(() => ({})));
+    if (body.action === "owner_relayed_reject") {
+      await hydrateCompany();
+      return NextResponse.json({ ok: true, result: await recordRelayedOwnerRejection(body) });
+    }
     if (body.action === "update_step") {
       if (body.agentId && !isBridgeAgent(body.agentId)) throw new Error("موظف غير معروف.");
       return NextResponse.json({ ok: true, result: await updateStepRouting({ ...body, actor: "bridge-master" }) });
