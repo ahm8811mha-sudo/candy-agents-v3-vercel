@@ -8,6 +8,7 @@ import { hydrateCompany } from "@/lib/company/hydrate";
 import { runWorkflowTick } from "@/lib/company-os/workflowRuntime";
 import { publishOutboxBatch } from "@/lib/company-os/outboxPublisher";
 import { executeTrackedCron } from "@/lib/operations/trackedCron";
+import { runProjectSweep } from "@/lib/company/projectStepsBridge";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +43,11 @@ export async function GET(req: NextRequest) {
       const chased = await sweepDecisionCommitments(context.tenantId);
       if (chased.reminded > 0) await heartbeat({ phase: "decision-sweep", ...chased });
 
+      // Project steps: no-spend steps go to their owners, overdue ones are
+      // escalated to Sultan, duplicates merged. Nothing waits silently.
+      const steps = await runProjectSweep({ actor: "autonomy-loop" }).catch((error) => ({ error: error instanceof Error ? error.message : "project sweep failed" }));
+      await heartbeat({ phase: "project-steps", ...steps });
+
       const generated = await generateDailyIdeaCritical(context.tenantId);
       const idea = generated.idea;
       if (idea) await enrichIdea(idea.id, context.tenantId);
@@ -69,7 +75,7 @@ export async function GET(req: NextRequest) {
       return {
         processedCount: Number(generated.created) + workflowProcessed + outboxProcessed,
         failedCount: outboxFailed,
-        details: { workflowProcessed, outboxProcessed, outboxFailed, outboxError, ideaId: idea?.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
+        details: { projectSteps: steps, workflowProcessed, outboxProcessed, outboxFailed, outboxError, ideaId: idea?.id, reopened, decisionsChased: chased.reminded, decisionsEscalated: chased.escalated },
         body: {
           dailyIdea: idea ? { id: idea.id, title: idea.title, status: idea.status, studyMode: idea.studyMode } : null,
           opportunityReason: generated.reason,

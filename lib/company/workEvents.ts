@@ -11,7 +11,7 @@ import { getTenantId } from "../tenant";
 
 export type WorkEvent = {
   id: string;
-  entityType: "command" | "spend" | "decision" | "message";
+  entityType: "command" | "spend" | "decision" | "message" | "task";
   entityId: string;
   actor: string;
   action: string;

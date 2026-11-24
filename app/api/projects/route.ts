@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { logError } from "@/lib/logger";
+import { isDuplicateStep, stepAgent } from "@/lib/company/projectSteps";
 import {
   confirmationProof,
   isRealWorldTask,
@@ -79,7 +80,8 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
 
     const projects = projectRows.map((project: Record<string, unknown>) => {
-      const projectTasks = tasksByProject.get(String(project.id)) || [];
+      // Merged duplicates stay in the database for the audit trail, not on the board.
+      const projectTasks = (tasksByProject.get(String(project.id)) || []).filter((task) => !isDuplicateStep(task));
       const summary = summarizeExecutionHonesty(projectTasks);
       const shaped = projectTasks.map((task) => ({
         id: task.id,
@@ -94,6 +96,11 @@ export async function GET(req: NextRequest) {
         executionKind: isRealWorldTask(task) ? "REAL_WORLD" : "INTERNAL",
         state: taskExecutionState(task),
         proof: confirmationProof(task),
+        agent: stepAgent(task),
+        output: typeof task.metadata?.output === "string" ? task.metadata.output : null,
+        outputBy: typeof task.metadata?.outputBy === "string" ? task.metadata.outputBy : null,
+        outputAt: typeof task.metadata?.outputAt === "string" ? task.metadata.outputAt : null,
+        outputSources: Array.isArray(task.metadata?.outputSources) ? (task.metadata.outputSources as unknown[]).map(String).slice(0, 40) : [],
       }));
       return {
         id: String(project.id),

@@ -27,6 +27,8 @@ import { settleChairmanCommandForSpend } from "@/lib/company/chairmanCommands";
 import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { executeProjectInternalActions } from "@/lib/company/internalAgentExecutor";
+import { restoreProgressedSteps, snapshotProjectSteps } from "@/lib/company/projectSteps";
+import { runProjectSweep } from "@/lib/company/projectStepsBridge";
 import { assertApprovalDecisionAllowedDuringOwnerAbsence } from "@/lib/company/ownerAbsence";
 import { requireCompanyContext } from "@/lib/company-os/context";
 import { assertIdeaDecisionReady } from "@/lib/company/ideas";
@@ -144,6 +146,12 @@ export async function POST(req: NextRequest) {
     if (target && isCompanyExecutionApproval(target)) {
       // The canonical execution path commits the approval and every dependent
       // state change in one transaction; there is nothing to reopen on error.
+      // The decision RPC rewrites every step of the project (TODO on approval,
+      // BLOCKED on rejection). Steps already under way or delivered keep their
+      // state, and a rejection stops only the spend: no-spend steps go back to
+      // their owners (project #5 stayed frozen for three months otherwise).
+      const projectIdForSteps = String(target.metadata?.entityId || "");
+      const stepSnapshot = projectIdForSteps ? await snapshotProjectSteps(projectIdForSteps).catch(() => []) : [];
       const atomic = await decideCompanyExecutionApprovalCritical({
         approval: target,
         decision,
@@ -154,6 +162,10 @@ export async function POST(req: NextRequest) {
       });
       result = atomic.approval;
       execution = atomic.execution;
+      if (projectIdForSteps) {
+        await restoreProgressedSteps(stepSnapshot).catch(() => undefined);
+        await runProjectSweep({ projectId: projectIdForSteps, actor: decidedBy }).catch(() => undefined);
+      }
       if (decision === "APPROVED") {
         const projectId = String(target.metadata?.entityId || atomic.execution.entityId || "");
         try {

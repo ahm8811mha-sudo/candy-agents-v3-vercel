@@ -34,6 +34,6 @@ describe("initiative planning", () => {
     expect(blueprint.actions).toHaveLength(5);
     expect(blueprint.actions.every((action) => action.actionType === "AGENT_DELIVERABLE" && action.status === "WAITING_APPROVAL")).toBe(true);
     expect(blueprint.tasks.length).toBeGreaterThanOrEqual(10);
-    expect(blueprint.tasks.every((task) => task.status === "BLOCKED" && task.metadata.executionAgent)).toBe(true);
+    expect(blueprint.tasks.every((task) => task.status === "TODO" && task.metadata.executionAgent && task.metadata.assignedAgent)).toBe(true);
   });
 });

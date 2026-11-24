@@ -128,3 +128,10 @@ Pending and deferred items with an amount above 0 and no review chain are read a
 - Spend actions add `resubmit_department` for an item returned to the department; stops carry `reasonCode` (`duplicate`, `missing_numbers`, `no_budget`, `authority`, `legal`, `risk`, `other`).
 - The Chairman digest adds `decisionCards` (at most 7), `overdue` (every overdue command, always) and `desk`; alerts are grouped with `count`. Existing fields are unchanged.
 - Decisions are never taken through the bridge. `POST /api/commands` with `action: "decide"` needs the owner session and rejects system keys.
+
+## Project steps (since PR "project steps flow")
+
+- `GET /api/bridge/agents/{id}/steps`: the project steps this employee owns and can work on now (also listed as `projectSteps` in `workspace` and `inbox`).
+- `POST /api/bridge/agents/{id}/steps` `{ "action": "deliver" | "progress", "taskId", "output", "sources": [] }`: hand in the deliverable. Internal steps close at 100%; real-world steps stop at REVIEW (60%) until the Chairman confirms with proof. Spend steps (`WAITING_FUNDING`) refuse delivery until the Chairman decides.
+- Master key only: `GET /api/bridge/projects[?projectId=&outputs=1]` (every project, its steps, stuck and overdue counts); `POST /api/bridge/projects` with `{ "action": "sweep" }`, `{ "action": "reactivate", "projectId" }` or `{ "action": "spend_step", "projectId", "title", "detail", "amountSAR", "preparingAgentId" }`.
+- Rules: a step that spends nothing never waits for approval and is routed to its owner; only spend steps go through department → Abdulrahman + Hares → Sultan → Chairman. Overdue steps are escalated to Sultan once a day. The Chairman digest carries `projectSteps` totals.

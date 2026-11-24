@@ -311,19 +311,25 @@ export async function buildInitiativePlan(request: string, context: PlanningCont
   };
 }
 
+/** The employee who answers for each specialist's steps. */
+const SPECIALIST_AGENT: Record<SpecialistRole, string> = { MARKET: "noura", FINANCE: "abdulrahman", OPERATIONS: "fahad", PROCUREMENT: "khalid", RISK: "hares" };
+
 export function buildInitiativeBlueprint(plan: InitiativePlan, requiresApproval = true): InitiativeBlueprint {
   const now = Date.now();
   const tasks = plan.specialistPlans.flatMap((specialist) => specialist.steps.map((step) => ({
     title: step.title,
     description: step.objective,
     content: `${step.objective}\nالمخرج المطلوب: ${step.deliverable}`,
-    status: requiresApproval ? "BLOCKED" : "TODO",
+    // Steps here are analysis and preparation that spend nothing: they start at
+    // once with their owner. Only money waits for the spend chain, and the
+    // project approval below covers the budget, not the study (project #5).
+    status: "TODO",
     priority: step.dueDay <= 2 ? "HIGH" as const : "MEDIUM" as const,
     ownerRole: step.ownerRole,
     kpiName: step.kpi,
     kpiTarget: 1,
     dueDate: new Date(now + step.dueDay * 86_400_000).toISOString(),
-    metadata: { executionKey: step.key, executionAgent: specialist.role, agentName: specialist.agentName, deliverable: step.deliverable, startDay: step.startDay, dueDay: step.dueDay, dependencies: step.dependencies, executionMode: step.executionMode, executionKind: classifyExecutionKind({ title: step.title, description: `${step.objective} ${step.deliverable}` }) },
+    metadata: { assignedAgent: SPECIALIST_AGENT[specialist.role], executionKey: step.key, executionAgent: specialist.role, agentName: specialist.agentName, deliverable: step.deliverable, startDay: step.startDay, dueDay: step.dueDay, dependencies: step.dependencies, executionMode: step.executionMode, executionKind: classifyExecutionKind({ title: step.title, description: `${step.objective} ${step.deliverable}` }) },
   })));
   return {
     tasks,
