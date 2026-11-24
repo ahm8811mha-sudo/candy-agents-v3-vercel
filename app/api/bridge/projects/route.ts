@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       await hydrateCompany();
       const { listApprovals } = await import("@/lib/approvals");
       const { linkRadarRequestsToProjects } = await import("@/lib/company/radarProject");
-      return NextResponse.json({ ok: true, result: { linked: await linkRadarRequestsToProjects(listApprovals(undefined, { includeArchived: true }) as never) } });
+      return NextResponse.json({ ok: true, result: await linkRadarRequestsToProjects(listApprovals(undefined, { includeArchived: true }) as never) });
     }
     if (body.action === "update_step") {
       if (body.agentId && !isBridgeAgent(body.agentId)) throw new Error("موظف غير معروف.");
