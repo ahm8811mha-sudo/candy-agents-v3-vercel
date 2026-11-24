@@ -6,20 +6,55 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
   "dir": "rtl",
   "lang": "ar-SA",
-  "background_color": "#061418",
-  "theme_color": "#061418",
-  "categories": ["business", "productivity", "finance"],
+  "background_color": "#F4F1EB",
+  "theme_color": "#F4F1EB",
+  "categories": [
+    "business",
+    "productivity",
+    "finance"
+  ],
   "icons": [
-    { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/orvanta-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/orvanta-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ],
   "shortcuts": [
-    { "name": "مركز القرار", "short_name": "القرارات", "url": "/inbox" },
-    { "name": "الأفكار", "short_name": "الأفكار", "url": "/ideas" },
-    { "name": "Crisis Room", "short_name": "الأزمات", "url": "/recovery-center" },
-    { "name": "حالة النظام", "short_name": "الحالة", "url": "/status" }
+    {
+      "name": "مركز القرار",
+      "short_name": "القرارات",
+      "url": "/inbox"
+    },
+    {
+      "name": "الأفكار",
+      "short_name": "الأفكار",
+      "url": "/ideas"
+    },
+    {
+      "name": "Crisis Room",
+      "short_name": "الأزمات",
+      "url": "/recovery-center"
+    },
+    {
+      "name": "حالة النظام",
+      "short_name": "الحالة",
+      "url": "/status"
+    }
   ]
 }

@@ -1,50 +1,44 @@
 "use client";
-
-/**
- * Roadmap #4 — PWA runtime: registers the service worker (installable app)
- * and raises a local browser notification when pending decisions breach the
- * SLA. Notifications fire only if the user has already granted permission —
- * we never interrupt with a permission prompt.
- */
-
 import { useEffect } from "react";
 
 const NOTIFIED_KEY = "orvanta-stale-notified";
-
 export default function PwaRegister() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => {});
     }
   }, []);
-
   useEffect(() => {
-    if (typeof Notification === "undefined") return;
-
+    if (!("serviceWorker" in navigator) || typeof Notification === "undefined") return;
+    let busy = false;
+    let stopped = false;
     async function checkStale() {
-      if (Notification.permission !== "granted") return;
+      if (busy || stopped || document.visibilityState !== "visible" || !navigator.onLine || Notification.permission !== "granted" || !navigator.serviceWorker.controller) return;
+      busy = true;
       try {
-        const res = await fetch("/api/inbox", { cache: "no-store" });
+        const res = await fetch("/api/inbox", { cache: "no-store", credentials: "same-origin" });
+        if (!res.ok) return;
         const json = await res.json();
-        if (!json.ok || !(json.stale > 0)) return;
-        // At most one notification per day per stale-count level.
+        if (stopped || !json.ok || !(json.stale > 0)) return;
         const marker = `${new Date().toISOString().slice(0, 10)}:${json.stale}`;
         if (localStorage.getItem(NOTIFIED_KEY) === marker) return;
-        localStorage.setItem(NOTIFIED_KEY, marker);
-        new Notification("أورفانتا: قرارات متأخرة", {
-          body: `${json.stale} قرار تجاوز 24 ساعة بانتظار اعتمادك.`,
-          icon: "/orvanta-mark.svg",
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        if (!registration?.active || stopped) return;
+        await registration.showNotification("أورفانتا: قرارات تحتاج المراجعة", {
+          body: "افتح التطبيق للاطلاع على القرارات المعلقة.",
+          icon: "/icon-192.png",
           tag: "orvanta-stale",
         });
+        localStorage.setItem(NOTIFIED_KEY, marker);
       } catch {
-        // silent
-      }
+        // A notification must never interrupt normal application use.
+      } finally { busy = false; }
     }
-
-    checkStale();
-    const t = setInterval(checkStale, 5 * 60_000);
-    return () => clearInterval(t);
+    void checkStale();
+    const timer = window.setInterval(checkStale, 5 * 60_000);
+    window.addEventListener("online", checkStale);
+    document.addEventListener("visibilitychange", checkStale);
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener("online", checkStale); document.removeEventListener("visibilitychange", checkStale); };
   }, []);
-
   return null;
 }

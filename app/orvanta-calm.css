@@ -133,3 +133,14 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 .ov-option.is-best { border-color:var(--green); box-shadow:inset 3px 0 0 var(--green); }
 .ov-score { height:8px; border-radius:4px; background:#E8E4DB; overflow:hidden; margin:6px 0; }
 .ov-score span { display:block; height:100%; background:var(--green); border-radius:4px; }
+
+/* Keep installed iPhone chrome clear of the notch and home indicator. */
+@media (display-mode: standalone) and (max-width: 960px) {
+  .executive-shell .shell-topbar { padding-top: env(safe-area-inset-top); height: calc(68px + env(safe-area-inset-top)); min-height: calc(68px + env(safe-area-inset-top)); }
+  .executive-shell .shell-sidebar { padding-top: max(18px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .mobile-work-nav a { min-height: 44px; }
+  .executive-shell .shell-content { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+}
+@media (display-mode: standalone) and (max-width: 650px) {
+  .executive-shell .shell-topbar { height: calc(59px + env(safe-area-inset-top)); min-height: calc(59px + env(safe-area-inset-top)); }
+}

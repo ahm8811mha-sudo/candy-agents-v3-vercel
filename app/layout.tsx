@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/orvanta-mark.svg", type: "image/svg+xml" }],
     shortcut: "/orvanta-mark.svg",
-    apple: "/orvanta-mark.svg",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

@@ -14,6 +14,10 @@ const PUBLIC_EXACT_PATHS = new Set([
   "/terms",
   "/api/owner-access",
   "/api/health",
+  // Public, static installation assets only. The owner gate still protects all application data.
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/offline.html",
   // Shopify calls this without the owner cookie; the route verifies Shopify's
   // HMAC signature itself, which is the correct authentication for a webhook.
   "/api/shopify/webhook",
@@ -55,6 +59,7 @@ function ownerNext(req: NextRequest) {
   headers.delete(PUBLIC_PAGE_HEADER);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("x-orvanta-access-mode", "personal-owner-device");
+  response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 
