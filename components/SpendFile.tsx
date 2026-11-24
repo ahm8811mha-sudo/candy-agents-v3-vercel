@@ -13,13 +13,24 @@ type File = {
   archived: { reason: string; at: string } | null;
   position: { stage: string; holder: string | null; holderName: string; since: string; slaHours: number; overdueHours: number; escalations: number; nextStep: string } | null;
   decision: { actionable: boolean; canApprove: boolean; stopped: { label: string; reason: string; note: string } | null };
+  options?: Option[];
+  consultations?: Array<{ result: string; note: string; by: string; byName: string; at: string }>;
+  chosenOption?: Option | null;
+  project?: { id: string; href: string } | null;
 };
+type Option = { key: string; label: string; amountSAR: number; score: number; recommended: boolean; rationale: string };
 type Choice = "approve" | "reject" | "return" | "defer";
 
 const when = new Intl.DateTimeFormat("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const fmt = (iso?: string | null) => { const d = iso ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? when.format(d) : ""; };
 const STATUS: Record<string, string> = { APPROVED: "معتمد", REJECTED: "مرفوض", PENDING: "قيد السلسلة", DEFERRED: "مؤجل" };
 const LABEL: Record<Choice, string> = { approve: "اعتماد الصرف", reject: "رفض", return: "إعادة للقسم بملاحظة", defer: "تأجيل أسبوع" };
+
+async function chooseOption(id: string, option: Option) {
+  const res = await fetch("/api/approvals/decisions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, decision: option.amountSAR > 0 ? "APPROVED" : "REJECTED", optionKey: option.key }) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.ok === false) throw new Error(json.error || "تعذر تسجيل اختيارك.");
+}
 
 async function decide(id: string, choice: Choice, note: string) {
   if (choice === "return") {
@@ -63,6 +74,29 @@ function DecisionPanel({ file, onDone }: { file: File; onDone: (text: string) =>
   </section>;
 }
 
+function OptionsPanel({ file, canChoose, onDone }: { file: File; canChoose: boolean; onDone: (text: string) => void }) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const options = [...(file.options || [])].sort((a, b) => b.score - a.score);
+  if (!options.length) return null;
+  async function pick(option: Option) {
+    setBusy(option.key); setError("");
+    try { await chooseOption(file.item.id, option); onDone(`سُجّل اختيارك: ${option.label}${option.amountSAR > 0 ? "" : " (بلا صرف)"}.`); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر تسجيل اختيارك."); }
+    finally { setBusy(""); }
+  }
+  return <section className="ov-section" aria-labelledby="spend-options"><h2 id="spend-options">الخيارات ونسبة الأفضلية</h2>
+    <p className="ov-muted">أعدّها سلطان بعد المالية والحوكمة. النسبة: مدى الثقة أن الخيار هو الأفضل، ومجموعها 100%.</p>
+    <ul className="ov-list">{options.map((o) => <li key={o.key} className={"ov-option" + (o.recommended ? " is-best" : "")}>
+      <div className="ov-drill-top"><strong>({o.key}) {o.label}</strong><span className="ov-drill-amount">{o.amountSAR > 0 ? `${o.amountSAR.toLocaleString("ar-SA-u-nu-latn")} ر.س` : "بلا صرف"}</span></div>
+      <div className="ov-score" role="meter" aria-label={`نسبة أفضلية الخيار ${o.key}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={o.score}><span style={{ width: `${o.score}%` }} /></div>
+      <div className="ov-drill-meta"><b>{o.score}%</b>{o.recommended ? <span className="ov-tag is-green">الخيار الموصى به</span> : null}{o.rationale ? <span>{o.rationale}</span> : null}</div>
+      {canChoose ? <div className="ov-actions"><button type="button" className={"ov-btn" + (o.recommended ? " is-primary" : "")} disabled={Boolean(busy)} onClick={() => void pick(o)}>{busy === o.key ? "جارٍ التسجيل" : `اختيار الخيار (${o.key})`}</button></div> : null}
+    </li>)}</ul>
+    {error ? <p className="ov-alert" role="alert">{error}</p> : null}
+  </section>;
+}
+
 /** The file of one spend request: where it is, every review, and the Chairman's decision when it is his turn. */
 export default function SpendFile({ id }: { id: string }) {
   const [data, setData] = useState<File | null>(null);
@@ -86,8 +120,9 @@ export default function SpendFile({ id }: { id: string }) {
       <section className="ov-section"><ul className="ov-list"><CounterItemRow item={data.item} hideLink /></ul>
         <p className="ov-muted" style={{ marginTop: 8 }}>رقم الطلب: <bdi>{data.item.id}</bdi>{data.preparedBy ? ` · أعدّه: ${data.preparedBy}` : ""}{data.archived ? ` · مؤرشف ${fmt(data.archived.at)}: ${data.archived.reason}` : ""}</p>
         {data.detail ? <p style={{ fontSize: 13, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{data.detail.slice(0, 2000)}</p> : null}
+        <p className="ov-muted">المشروع: {data.project ? <Link href={data.project.href}>فتح المشروع المرتبط</Link> : "غير مرتبط بمشروع بعد"}</p>
       </section>
-      {decided ? <section className="ov-section"><h2>القرار</h2><p><strong>{STATUS[data.approvalStatus]}</strong>{data.decidedAt ? ` · ${fmt(data.decidedAt)}` : ""}{data.decisionNote ? ` · ${data.decisionNote}` : ""}</p></section>
+      {decided ? <section className="ov-section"><h2>القرار</h2><p><strong>{STATUS[data.approvalStatus]}</strong>{data.decidedAt ? ` · ${fmt(data.decidedAt)}` : ""}{data.decisionNote ? ` · ${data.decisionNote}` : ""}</p>{data.chosenOption ? <p className="ov-muted">الخيار المختار: ({data.chosenOption.key}) {data.chosenOption.label}</p> : null}</section>
         : pos ? <section className="ov-section" aria-labelledby="spend-where"><h2 id="spend-where">أين الطلب الآن</h2><dl className="command-facts">
           <div><dt>عند</dt><dd>{pos.holderName || "—"}</dd></div>
           <div><dt>منذ</dt><dd>{fmt(pos.since)}</dd></div>
@@ -102,6 +137,8 @@ export default function SpendFile({ id }: { id: string }) {
       <section className="ov-section"><h2>المراجعات</h2>
         {data.reviews.length ? <ul className="ov-list">{data.reviews.map((r) => <li key={r.stage + r.at}><strong>{r.stageName}: {r.result}</strong><span>{r.note}</span><small className="ov-muted">{r.byName} · {fmt(r.at)}</small></li>)}</ul> : <p className="ov-empty">لم تُسجّل مراجعة بعد. الطلب ما زال عند {pos?.holderName || "القسم"}.</p>}
       </section>
+      {data.consultations?.length ? <section className="ov-section"><h2>آراء الأقسام المعنية</h2><ul className="ov-list">{data.consultations.map((r) => <li key={r.by + r.at}><strong>{r.byName}: {r.result}</strong><span>{r.note}</span><small className="ov-muted">{fmt(r.at)}</small></li>)}</ul></section> : null}
+      <OptionsPanel file={data} canChoose={Boolean(data.decision.canApprove && !decided)} onDone={(text) => { setDone(text); void load(); }} />
       {data.decision.actionable && !decided ? <DecisionPanel file={data} onDone={(text) => { setDone(text); void load(); }} /> : null}
     </> : null}
   </main>;

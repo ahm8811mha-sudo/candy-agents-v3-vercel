@@ -9,6 +9,7 @@ import {
   approvalStats,
   type ApprovalStatus,
   type ApprovalItem,
+  writeApprovalCritical,
 } from "@/lib/approvals";
 import { applyTaskFundingDecision } from "@/lib/companyExecutionSystem";
 import { executeApprovedTrade } from "@/lib/trading/executeApproval";
@@ -22,7 +23,7 @@ import {
 import { authenticateRequest, isAuthEnabled } from "@/lib/auth";
 import { canSignOff } from "@/lib/company/access";
 import { approvalTierForDecision } from "@/lib/company/governance";
-import { chairmanSpendBlock, approvalVisibleToChairman } from "@/lib/company/spendChain";
+import { chairmanSpendBlock, approvalVisibleToChairman, readSpendChain, type SpendOption } from "@/lib/company/spendChain";
 import { settleChairmanCommandForSpend } from "@/lib/company/chairmanCommands";
 import { recordAuditCritical } from "@/lib/company/audit";
 import { hydrateCompany } from "@/lib/company/hydrate";
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     await hydrateCompany();
     const body = await req.json().catch(() => ({}));
     const id = String(body.id || "");
-    const decision =
+    let decision: "APPROVED" | "REJECTED" | "DEFERRED" | null =
       body.decision === "REJECTED"
         ? "REJECTED"
         : body.decision === "APPROVED"
@@ -85,6 +86,14 @@ export async function POST(req: NextRequest) {
 
     const target = await getApprovalCritical(id, auth.context.tenantId);
     if (!target) return NextResponse.json({ ok: false, error: "العنصر غير موجود" }, { status: 404 });
+    // Choosing one of Sultan's scored options: a paid option approves up to its
+    // amount; a zero-riyal option closes the spend request with no money out.
+    let chosenOption: SpendOption | null = null;
+    if (body.optionKey) {
+      chosenOption = readSpendChain(target)?.optionSet?.find((o) => o.key === String(body.optionKey)) || null;
+      if (!chosenOption) return NextResponse.json({ ok: false, error: "الخيار غير موجود في هذا الطلب." }, { status: 400 });
+      decision = chosenOption.amountSAR > 0 ? "APPROVED" : "REJECTED";
+    }
     const tier = approvalTierForDecision(target.amount, target.metadata);
     const user = auth.context.actor;
     const access = canSignOff(user.role, tier);
@@ -126,7 +135,9 @@ export async function POST(req: NextRequest) {
     // Read-through lookup: the item may live on another serverless instance.
 
     const decidedBy = user?.name || String(body.decidedBy || "المالك");
-    const note = body.note ? String(body.note) : undefined;
+    const note = chosenOption
+      ? `اختار رئيس مجلس الإدارة الخيار (${chosenOption.key}): ${chosenOption.label}${chosenOption.amountSAR > 0 ? ` · بسقف ${chosenOption.amountSAR} ر.س` : " · بلا صرف"}${body.note ? ` · ${String(body.note)}` : ""}`
+      : body.note ? String(body.note) : undefined;
     if (decision === "APPROVED" || decision === "REJECTED") {
       const spendBlock = chairmanSpendBlock(user?.role || (!isAuthEnabled() ? "OWNER" : null), target);
       if (spendBlock) return NextResponse.json({ ok: false, error: spendBlock }, { status: 403 });
@@ -234,6 +245,17 @@ export async function POST(req: NextRequest) {
 
     if (result && (decision === "APPROVED" || decision === "REJECTED")) {
       await settleChairmanCommandForSpend(result.id, decision);
+      // Close the review chain on the record itself, with the option the Chairman chose.
+      const chain = readSpendChain(result);
+      if (chain && !chain.decision) {
+        const decided: ApprovalItem = result;
+        try {
+          result = await writeApprovalCritical({ ...decided, metadata: { ...decided.metadata, spendChain: { ...chain, stage: "decided", decision, decidedAt: decided.decidedAt || new Date().toISOString(), note: note || chain.note }, ...(chosenOption ? { chosenOption, approvedAmountSAR: chosenOption.amountSAR } : {}) } });
+        } catch {
+          // The decision itself is committed; the chain record is informational.
+          result = decided;
+        }
+      }
     }
     return NextResponse.json({ ok: true, item: result, execution, stats: approvalStats() });
   } catch (error) {

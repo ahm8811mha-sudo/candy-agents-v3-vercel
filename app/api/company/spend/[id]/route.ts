@@ -4,7 +4,7 @@ import { getApprovalCritical } from "@/lib/approvals";
 import { spendItem, personName } from "@/lib/company/counterItems";
 import {
   readSpendChain, spendReviewHistory, archivedMark, isChairmanActionable, isOwnerReadySpend,
-  spendStop, spendHolder, spendOverdue, spendStageSince, SPEND_STAGE_SLA_HOURS,
+  spendStop, spendHolder, spendOverdue, spendStageSince, SPEND_STAGE_SLA_HOURS, linkedProjectId,
 } from "@/lib/company/spendChain";
 import { typeLabel } from "@/lib/i18n/arLabels";
 
@@ -49,6 +49,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       memo: chain ? { options: chain.options, expectedReturn: chain.expectedReturn, risks: chain.risks } : null,
       reviews: spendReviewHistory(chain).map((r) => ({ ...r, stageName: STAGE_NAME[r.stage] || r.stage, byName: personName(r.by) })),
       archived: archivedMark(item),
+      options: chain?.optionSet || [],
+      consultations: (chain?.consultations || []).map((r) => ({ ...r, byName: personName(r.by) })),
+      chosenOption: item.metadata?.chosenOption || null,
+      project: linkedProjectId(item) ? { id: linkedProjectId(item), href: `/projects?project=${encodeURIComponent(linkedProjectId(item)!)}` } : null,
       position: chain ? {
         stage: chain.stage,
         holder,

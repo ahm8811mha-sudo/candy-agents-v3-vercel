@@ -130,3 +130,6 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 .ov-drill-link { color:var(--primary); text-decoration:none; font-weight:600; margin-inline-start:auto; }
 .ov-drill-link:hover { text-decoration:underline; }
 @media(max-width:700px){ .ov-drill-top { flex-direction:column; gap:2px; } .ov-drill-link { margin-inline-start:0; } .ov-drill-list { max-height:none; } }
+.ov-option.is-best { border-color:var(--green); box-shadow:inset 3px 0 0 var(--green); }
+.ov-score { height:8px; border-radius:4px; background:#E8E4DB; overflow:hidden; margin:6px 0; }
+.ov-score span { display:block; height:100%; background:var(--green); border-radius:4px; }

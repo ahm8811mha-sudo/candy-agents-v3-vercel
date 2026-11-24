@@ -70,3 +70,28 @@ describe("a spend request can never sit unowned or unseen", () => {
     expect(spendOverdue(next, new Date(now.getTime() + 49 * 3_600_000))?.holder).toBe("abdulrahman");
   });
 });
+
+describe("scored options for the Chairman", () => {
+  beforeEach(() => { _clearApprovals(); _clearChairmanCommands(); });
+  const opts = [
+    { key: "أ", label: "صرف 5,000 كاملة الآن", amountSAR: 5000, score: 5 },
+    { key: "ب", label: "تحقق عضوي بلا صرف", amountSAR: 0, score: 70 },
+    { key: "ج", label: "سقف 1,500 بعد رفع التعليق", amountSAR: 1500, score: 25 },
+  ];
+  it("only Sultan sets them, after the reviews; the top score is the recommendation", () => {
+    const state = readSpendChain(radar({ stage: "sultan" }))!;
+    expect(() => advanceSpendChain(state, "abdulrahman", { action: "set_options", options: opts })).toThrow("سلطان");
+    expect(() => advanceSpendChain(readSpendChain(radar())!, "sultan", { action: "set_options", options: opts })).toThrow();
+    const next = advanceSpendChain(state, "sultan", { action: "set_options", options: opts });
+    expect(next.optionSet?.find((o) => o.recommended)?.key).toBe("ب");
+    expect(next.stage).toBe("sultan");
+    expect(() => advanceSpendChain(state, "sultan", { action: "set_options", options: opts.map((o) => ({ ...o, score: 50 })) })).toThrow("100%");
+  });
+  it("other departments add their opinion without moving the chain", () => {
+    const state = readSpendChain(radar({ stage: "owner" }))!;
+    const next = advanceSpendChain(state, "noura", { action: "consult", result: "موافق", note: "الحملة العضوية تكفي ضمن الطلب المسبق." });
+    expect(next.consultations).toHaveLength(1);
+    expect(next.stage).toBe("owner");
+    expect(() => advanceSpendChain(state, "owner", { action: "consult", result: "x", note: "رأي رئيس المجلس" })).toThrow();
+  });
+});

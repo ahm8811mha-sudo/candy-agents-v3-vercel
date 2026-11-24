@@ -3,15 +3,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, ScrollText, Users, Archive, Menu, X, ArrowUpLeft } from "lucide-react";
+import { LayoutDashboard, Building2, ScrollText, Users, Archive, Menu, X, ArrowUpLeft, FileCheck2 } from "lucide-react";
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
 import SessionControl from "./SessionControl";
 
-/** Five screens. Everything else is a tool reached from a department room. */
+/** Six screens. Everything else is a tool reached from a department room. */
 const primary = [
   { href: "/", label: "مكتبي", icon: LayoutDashboard },
   { href: "/office", label: "المكتب الحي", icon: Building2 },
+  { href: "/decisions", label: "ملف القرارات", icon: FileCheck2 },
   { href: "/commands", label: "الأوامر", icon: ScrollText },
   { href: "/meetings", label: "الاجتماعات", icon: Users },
   { href: "/archive", label: "الأرشيف", icon: Archive },

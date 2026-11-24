@@ -58,3 +58,33 @@ test("a decision link opens that decision, not the first card", async ({ page })
   await expect(page.locator(".decide-detail__title")).toHaveText("قرار رقم 3");
   await expect(page.getByText("عبدالرحمن (المالية)").first()).toBeVisible();
 });
+
+test("the Chairman picks one of Sultan's scored options; the best one is marked with its percentage", async ({ page }) => {
+  let posted: Record<string, unknown> | null = null;
+  const options = [
+    { key: "أ", label: "صرف 5,000 كاملة الآن", amountSAR: 5000, score: 5, recommended: false, rationale: "" },
+    { key: "ب", label: "تحقق عضوي بلا صرف", amountSAR: 0, score: 70, recommended: true, rationale: "لا سيولة" },
+    { key: "ج", label: "سقف 1,500 بعد رفع التعليق", amountSAR: 1500, score: 25, recommended: false, rationale: "" },
+  ];
+  await page.route(`**/api/company/spend/${id}`, (route) => route.fulfill({ json: { ...file(), options, consultations: [{ result: "موافق", note: "الحملة العضوية تكفي", by: "noura", byName: "نورة", at: "2026-11-24T10:10:00Z" }], project: { id: "p1", href: "/projects?project=p1" } } }));
+  await page.route("**/api/approvals/decisions", async (route) => { posted = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
+  await page.goto(`/spend/${id}`);
+  const best = page.locator(".ov-option.is-best");
+  await expect(best).toContainText("70%");
+  await expect(best).toContainText("الخيار الموصى به");
+  await expect(page.getByText("الحملة العضوية تكفي")).toBeVisible();
+  await expect(page.getByRole("link", { name: "فتح المشروع المرتبط" })).toHaveAttribute("href", "/projects?project=p1");
+  await page.getByRole("button", { name: "اختيار الخيار (ب)" }).click();
+  await expect.poll(() => posted).toMatchObject({ id, optionKey: "ب", decision: "REJECTED" });
+});
+
+test("the decisions file lists requests by stage with the best option and links", async ({ page }) => {
+  await page.route("**/api/company/decisions-file", (route) => route.fulfill({ json: { ok: true, decisions: [
+    { ...item, group: "awaiting", approvalStatus: "PENDING", decidedAt: null, decisionNote: null, bestOption: { key: "ب", label: "تحقق عضوي بلا صرف", score: 70, amountSAR: 0 }, optionsCount: 3, project: null, fileHref: `/spend/${id}` },
+  ] } }));
+  await page.goto("/decisions");
+  await expect(page.getByRole("heading", { level: 1, name: "ملف القرارات" })).toBeVisible();
+  await expect(page.getByText("تحقق عضوي بلا صرف (70%)")).toBeVisible();
+  await expect(page.getByRole("link", { name: "افتح وقرّر" })).toHaveAttribute("href", `/spend/${id}`);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});

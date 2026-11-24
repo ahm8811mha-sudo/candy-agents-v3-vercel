@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import type { HonestySummary, TaskExecutionState } from "@/lib/company/executionHonesty";
 import { executionStateLabels } from "@/lib/company/executionHonesty";
+import Link from "next/link";
 import ExecutionProofForm from "./ExecutionProofForm";
 import ExecutionProofView from "./ExecutionProofView";
 import { roleLabel, statusLabel } from "@/lib/i18n/arLabels";
@@ -90,6 +91,10 @@ export default function ProjectsBoard() {
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [decisions, setDecisions] = useState<Array<{ id: string; title: string; amountSAR: number | null; status: string; approvalStatus: string; fileHref: string; project: { id: string } | null }>>([]);
+  useEffect(() => {
+    fetch("/api/company/decisions-file", { cache: "no-store" }).then((res) => res.json()).then((json) => { if (json?.ok) setDecisions(json.decisions || []); }).catch(() => undefined);
+  }, []);
   const [busyTask, setBusyTask] = useState<string | null>(null);
   const [confirmFor, setConfirmFor] = useState<string | null>(null);
   const [proofFor, setProofFor] = useState<string | null>(null);
@@ -280,6 +285,13 @@ export default function ProjectsBoard() {
                       <span><small>بانتظار التمويل</small><b>{selected.summary.waitingFunding}</b></span>
                     </div>
                   ) : null}
+
+                  <section className="task-group" aria-label="قرارات المشروع">
+                    <h3 className="task-group__title">قرارات المشروع</h3>
+                    {decisions.filter((d) => d.project?.id === selected.id).length ? decisions.filter((d) => d.project?.id === selected.id).map((d) => (
+                      <div key={d.id} className="task-row"><div className="task-row__main"><b>{d.title}</b><small className="task-row__meta">{d.approvalStatus === "APPROVED" ? "معتمد" : d.approvalStatus === "REJECTED" ? "مرفوض" : d.status}{d.amountSAR ? ` · ${sar.format(d.amountSAR)}` : ""}</small></div><div className="task-row__actions"><Link className="text-action" href={d.fileHref}>ملف القرار</Link></div></div>
+                    )) : <p className="notice">لا قرارات صرف مرتبطة بهذا المشروع.</p>}
+                  </section>
 
                   {taskError && <p className="notice error">{taskError}</p>}
 
