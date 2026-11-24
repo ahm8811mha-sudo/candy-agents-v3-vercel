@@ -75,7 +75,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="sidebar-note"><span>القرار موثّق.</span><span>والتنفيذ قابل للتحقق.</span><Link href="/status">جاهزية النظام <ArrowUpLeft size={14} /></Link></div>
       <button className="sidebar-close" onClick={() => setOpen(false)}><X size={17} /> إغلاق القائمة</button>
     </aside>
-    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">Orvanta <span>/</span></Link><span className="shell-topbar__title">{title}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
+    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">أورفانتا <span>/</span></Link><span className="shell-topbar__title">{title}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
     <nav className="mobile-work-nav" aria-label="تنقل سريع">{primary.map(({ href, label, icon: Icon }) => <Link href={href} key={href} aria-current={current?.href === href ? "page" : undefined}><Icon size={18} /><span>{label}</span></Link>)}</nav>
   </div>;
 }

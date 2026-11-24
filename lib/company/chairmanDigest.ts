@@ -9,6 +9,9 @@ import {
   isMonetarySpend,
   isOwnerReadySpend,
   readSpendChain,
+  spendHolder,
+  spendOverdue,
+  spendStageSince,
   toDecisionMemo,
 } from "./spendChain";
 
@@ -26,6 +29,8 @@ export type ChairmanDigest = {
     duplicateIds: string[];
   }>;
   returned: Array<{ id: string; subject: string; amountSAR: number; stoppedBy: string; note: string; label: string; duplicateCount: number }>;
+  /** Every spend request still in the review chain (not filtered by since): who must act next, since when, and whether it is overdue. */
+  spendInChain: Array<{ id: string; subject: string; amountSAR: number; stage: string; holder: string; since: string; overdue: boolean; overdueHours: number; actionPath: string }>;
   commands: Array<{
     id: string;
     subject: string;
@@ -75,6 +80,13 @@ export function buildChairmanDigest(since: string, now = new Date()): ChairmanDi
     const stop = returnedToDepartment(item)!;
     return { id: item.id, subject: item.title, amountSAR: Number(item.amount), stoppedBy: stop.by, note: stop.note, label: stop.label, duplicateCount: item.duplicateCount };
   });
+  const spendInChain = collapseDuplicates(pending.filter((item) => isMonetarySpend(item.amount) && !approvalVisibleToChairman(item) && !returnedToDepartment(item) && readSpendChain(item)))
+    .map((item) => {
+      const chain = readSpendChain(item)!;
+      const holder = spendHolder(item) || "sultan";
+      const overdue = spendOverdue(item, now);
+      return { id: item.id, subject: chain.subject || item.title, amountSAR: Number(item.amount), stage: chain.stage, holder, since: spendStageSince(item), overdue: Boolean(overdue), overdueHours: overdue?.hours || 0, actionPath: `/api/bridge/agents/${holder}/actions` };
+    });
   const commands = listChairmanCommands().filter((command) => {
     const overdue = command.status !== "CLOSED" && Date.parse(command.dueAt) < now.getTime();
     const active = command.status === "CLOSED" || command.status === "BLOCKED" || command.status === "AWAITING_CHAIRMAN" || command.status === "IN_SPEND_CHAIN";
@@ -113,7 +125,7 @@ export function buildChairmanDigest(since: string, now = new Date()): ChairmanDi
     alerts.push({ id: `cmd-${command.id}`, severity: "critical", title: `عائق حوكمة على أمر: ${command.text.slice(0, 80)}`, at: command.updatedAt, count: 1 });
   }
   const desk = buildDecisionDesk(now);
-  return { ok: true, since, generatedAt: now.toISOString(), memos, returned, commands, alerts, decisionCards: desk.cards, overdue: desk.overdue, desk: { digestAt: desk.digestAt, counts: desk.counts } };
+  return { ok: true, since, generatedAt: now.toISOString(), memos, returned, spendInChain, commands, alerts, decisionCards: desk.cards, overdue: desk.overdue, desk: { digestAt: desk.digestAt, counts: desk.counts } };
 }
 
 export function memoTextForApproval(id: string) {

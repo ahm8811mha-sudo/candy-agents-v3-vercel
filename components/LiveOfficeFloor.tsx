@@ -62,12 +62,12 @@ function Panel({ person }: { person: Employee | undefined }) {
     <h2><span className="ov-avatar" aria-hidden>{person.name.slice(0, 1)}</span><span>{person.name}<small style={{ display: "block" }}>{person.title} · {person.department}</small></span></h2>
     <CounterDrilldown key={person.id} compact label={`عدّادات ${person.name}`} counters={[
       { key: "open", label: "مفتوح", items: person.kpiItems?.open || [], empty: "لا عمل مفتوح." },
-      { key: "overdue", label: "متأخر", items: person.kpiItems?.overdue || [], empty: "لا أوامر متأخرة." },
+      { key: "overdue", label: "متأخر", items: person.kpiItems?.overdue || [], empty: "لا شيء متأخر." },
       { key: "doneWeek", label: "أُنجز هذا الأسبوع", items: person.kpiItems?.doneWeek || [], empty: "لا إنجاز هذا الأسبوع." },
       { key: "returned", label: "معاد للتصحيح", items: person.kpiItems?.returned || [], empty: "لا شيء معاد للتصحيح." },
     ]} />
     <h3 style={{ fontSize: 13.5, margin: "0 0 8px" }}>يعمل عليه الآن</h3>
-    {person.queue.length ? <ul className="ov-list">{person.queue.slice(0, 10).map((item) => <li key={item.kind + item.id}><strong>{item.title.slice(0, 140)}</strong><span className="ov-muted">{item.status}{item.amountSAR ? ` · ${money(item.amountSAR)}` : ""}{item.at ? ` · ${timeAgo(item.at)}` : ""}</span>{item.kind === "command" ? <Link className="ov-muted" href={`/commands#${item.id}`}>بطاقة المتابعة</Link> : null}</li>)}</ul> : <p className="ov-empty">لا عمل مفتوح.</p>}
+    {person.queue.length ? <ul className="ov-list">{person.queue.slice(0, 10).map((item) => <li key={item.kind + item.id}><strong>{item.title.slice(0, 140)}</strong><span className="ov-muted">{item.status}{item.amountSAR ? ` · ${money(item.amountSAR)}` : ""}{item.at ? ` · ${timeAgo(item.at)}` : ""}</span>{item.kind === "command" ? <Link className="ov-muted" href={`/commands#${item.id}`}>بطاقة المتابعة</Link> : item.kind === "spend" || item.kind === "returned" ? <Link className="ov-muted" href={`/spend/${encodeURIComponent(item.id)}`}>فتح الملف</Link> : item.kind === "decision" ? <Link className="ov-muted" href={`/inbox?decision=${encodeURIComponent(item.id)}`}>فتح القرار</Link> : null}</li>)}</ul> : <p className="ov-empty">لا عمل مفتوح.</p>}
     <h3 style={{ fontSize: 13.5, margin: "14px 0 8px" }}>أُنجز مؤخراً</h3>
     {person.completed.length ? <ul className="ov-list">{person.completed.slice(0, 5).map((item) => <li key={item.kind + item.id}><strong>{item.title.slice(0, 120)}</strong><span className="ov-muted">{item.status}{item.at ? ` · ${timeAgo(item.at)}` : ""}</span></li>)}</ul> : <p className="ov-empty">لا إنجاز مسجل بعد.</p>}
     <p className="ov-muted" style={{ marginTop: 10 }}>آخر نشاط: {timeAgo(person.lastActivityAt)}</p>

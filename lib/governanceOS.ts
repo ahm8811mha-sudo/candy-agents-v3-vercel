@@ -25,6 +25,7 @@ import { effectiveTier, AUTHORITY_MATRIX, type TierRule } from "./company/govern
 import { COMPANY_AGENTS } from "./company/agents";
 import { createApprovalCritical, listApprovals, hydrateApprovals, type ApprovalItem } from "./approvals";
 import { recordAuditCritical, listAudit, hydrateAudit, type AuditEntry } from "./company/audit";
+import { typeLabel } from "@/lib/i18n/arLabels";
 
 type GovernedAction = {
   title: string;
@@ -167,7 +168,7 @@ export async function evaluateGovernedAction(action: GovernedAction) {
       detail:
         `إجراء مؤسسي بانتظار الاعتماد · الفئة ${tier.tier} · يعتمدها ${tier.approver}` +
         (highRisk ? " · مخاطرة عالية (تصعيد إلزامي)" : "") +
-        (action.entityType ? ` · النوع ${action.entityType}` : ""),
+        (action.entityType ? ` · النوع ${typeLabel(action.entityType)}` : ""),
       amount: amount > 0 ? amount : undefined,
       requestedRole: tier.approver,
       dedupeKey: action.entityId ? `gov-${action.entityType || "action"}-${action.entityId}` : undefined,

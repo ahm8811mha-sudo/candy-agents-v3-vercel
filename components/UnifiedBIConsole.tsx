@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
+import { statusLabel } from "@/lib/i18n/arLabels";
 
 type BIData = {
   scorecard?: {
@@ -201,7 +202,7 @@ export default function UnifiedBIConsole() {
                     <br />
                     <small>{doc.issuer || "جهة غير محددة"}</small>
                   </span>
-                  <span className="mini-pill medium">{doc.status}</span>
+                  <span className="mini-pill medium">{statusLabel(doc.status)}</span>
                 </Link>
               ))}
             </div>
@@ -216,7 +217,7 @@ export default function UnifiedBIConsole() {
               {(answers?.losingCampaigns || []).map((c) => (
                 <Link key={c.id} href="/departments/marketing" className="bento-list__row" style={{ color: "inherit", textDecoration: "none" }}>
                   <span>{c.name}</span>
-                  <span className="mini-pill high">{c.status}</span>
+                  <span className="mini-pill high">{statusLabel(c.status)}</span>
                 </Link>
               ))}
             </div>

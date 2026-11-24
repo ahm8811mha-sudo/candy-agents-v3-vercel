@@ -135,3 +135,13 @@ Pending and deferred items with an amount above 0 and no review chain are read a
 - `POST /api/bridge/agents/{id}/steps` `{ "action": "deliver" | "progress", "taskId", "output", "sources": [] }`: hand in the deliverable. Internal steps close at 100%; real-world steps stop at REVIEW (60%) until the Chairman confirms with proof. Spend steps (`WAITING_FUNDING`) refuse delivery until the Chairman decides.
 - Master key only: `GET /api/bridge/projects[?projectId=&outputs=1]` (every project, its steps, stuck and overdue counts); `POST /api/bridge/projects` with `{ "action": "sweep" }`, `{ "action": "reactivate", "projectId" }` or `{ "action": "spend_step", "projectId", "title", "detail", "amountSAR", "preparingAgentId" }`.
 - Rules: a step that spends nothing never waits for approval and is routed to its owner; only spend steps go through department → Abdulrahman + Hares → Sultan → Chairman. Overdue steps are escalated to Sultan once a day. The Chairman digest carries `projectSteps` totals.
+
+## Stuck spend requests (24 Nov 2026)
+
+Incident: a 5,000 SAR opportunity-radar request waited 28 days for a department memo. Its holder was the vague «القسم المعني», so no employee queue showed it.
+
+- Every in-chain request now has a named holder: the preparing employee, else the pipeline owner (Rased for opportunity and idea requests, otherwise Sultan). `GET /api/bridge/agents/{id}/inbox` lists it under that employee.
+- Each stage may hold a request 48 hours. After that it is overdue: the office alerts counter and the holder's «متأخر» counter list it, and its card says how long it has waited.
+- `GET /api/bridge/chairman/digest` adds `spendInChain`: every request still in the chain (not filtered by `since`) with `holder`, `stage`, `since`, `overdue`, `overdueHours` and the `actionPath` to act on it. A dispatcher must process this list, not only commands.
+- The daily desk cron escalates an overdue request at most once a day: a bridge note to the holder and to Sultan, and from the second escalation to Rayyan. The escalation is recorded on `spendChain.escalation`; every move records `spendChain.stageEnteredAt`. Nothing is approved, sent outside, or spent.
+- `/spend/{id}` is the full file. When the chain is complete (or a reviewer stopped it), the Chairman approves, rejects with a reason, returns with a note, or defers a week from the file itself.

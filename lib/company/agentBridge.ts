@@ -11,7 +11,7 @@ import {
   returnHolder,
   returnedExpiresAt,
   returnedToDepartment,
-  spendStageAgent,
+  spendHolder,
   spendReviewHistory,
   spendStop,
   stopReasonCode,
@@ -193,9 +193,7 @@ export function spendQueueForAgent(agentId: string): ApprovalItem[] {
     if (spendStop(chain)) return returnHolder(item) === agentId;
     // Finance and governance review in parallel.
     if (pendingReviewers(chain).includes(agentId)) return true;
-    const holder = spendStageAgent(chain);
-    if (holder === agentId) return true;
-    return chain.stage === "department" && chain.preparingAgentId === "department" && agentId === "sultan";
+    return spendHolder(item) === agentId;
   });
 }
 

@@ -5,7 +5,7 @@
  */
 import { getAgent } from "./agents";
 import { commandSla, type ChairmanCommand } from "./chairmanCommands";
-import { readSpendChain, returnHolder, returnedExpiresAt, returnedToDepartment, spendStageAgent, spendStop } from "./spendChain";
+import { readSpendChain, returnedExpiresAt, returnedToDepartment, spendHolder, spendOverdue, spendStop } from "./spendChain";
 
 export type CounterItemKind = "command" | "spend" | "returned" | "decision" | "task" | "project" | "idea";
 
@@ -37,6 +37,7 @@ export function personName(id: string | null | undefined) {
 
 const COMMAND_STATUS: Record<string, string> = { OPEN: "مفتوح", IN_PROGRESS: "قيد التنفيذ", BLOCKED: "متعطل", AWAITING_CHAIRMAN: "بانتظار قرارك", IN_SPEND_CHAIN: "في سلسلة الصرف", CLOSED: "مغلق" };
 const STAGE: Record<string, string> = { department: "إعداد القسم", finance: "المراجعة المالية", governance: "الحوكمة", sultan: "توصية الرئيس التنفيذي", owner: "قرار رئيس المجلس", decided: "صدر القرار" };
+const SLA_LABEL = "48 ساعة";
 const STOPPED_BY: Record<string, string> = { finance: "المالية (عبدالرحمن)", governance: "الحوكمة (حارس)", sultan: "الرئيس التنفيذي (سلطان)" };
 
 export function commandItem(command: ChairmanCommand, now = new Date()): CounterItem {
@@ -65,11 +66,12 @@ export function commandItem(command: ChairmanCommand, now = new Date()): Counter
 type ApprovalRow = { id: string; title: string; amount?: number | null; status?: string; type?: string; createdAt?: string; created_at?: string; metadata?: Record<string, unknown> | null; duplicateCount?: number };
 
 /** A spend request: where it is in the chain, who holds it, and why (a stop note when it was returned). */
-export function spendItem(row: ApprovalRow): CounterItem {
+export function spendItem(row: ApprovalRow, now = new Date()): CounterItem {
   const chain = readSpendChain(row as never);
   const stopRaw = chain ? spendStop(chain) : null;
   const returned = returnedToDepartment(row as never);
-  const holderId = returned ? returnHolder(row as never) : chain ? spendStageAgent(chain) : null;
+  const holderId = chain ? spendHolder({ ...row, createdAt: row.createdAt || row.created_at } as never) : null;
+  const overdue = chain ? spendOverdue({ ...row, createdAt: row.createdAt || row.created_at } as never, now) : null;
   const createdAt = row.createdAt || row.created_at || null;
   const reviews = chain ? [chain.financeReview, chain.governanceReview, chain.sultanRecommendation].filter(Boolean).map((r) => r!.at).sort() : [];
   const stop = returned || stopRaw;
@@ -90,10 +92,12 @@ export function spendItem(row: ApprovalRow): CounterItem {
     holderId: holderId || null,
     holderName: personName(holderId),
     status: stop ? (returned ? returned.label : stop.label) : chain.stage === "owner" ? "بانتظار قرارك" : chain.stage === "department" ? "بانتظار مذكرة القسم" : "قيد المراجعة",
-    reason: stop ? `${stop.reason}${stop.note ? `: ${stop.note}` : ""}` : chain.needsChainReview ? "يحتاج مراجعة السلسلة من البداية." : null,
+    reason: stop ? `${stop.reason}${stop.note ? `: ${stop.note}` : ""}`
+      : overdue ? `متأخر ${overdue.hours} ساعة عند ${personName(overdue.holder)} (المهلة ${SLA_LABEL})${overdue.escalations ? ` · صُعّد ${overdue.escalations} مرة لسلطان` : ""}`
+      : chain.needsChainReview ? "يحتاج مراجعة السلسلة من البداية." : null,
     createdAt,
-    updatedAt: reviews.at(-1) || createdAt,
-    dueAt: returned ? returnedExpiresAt(returned, row as never) : null,
+    updatedAt: chain.stageEnteredAt || reviews.at(-1) || createdAt,
+    dueAt: returned ? returnedExpiresAt(returned, row as never) : overdue ? overdue.dueAt : null,
     // Only a complete memo opens in the decision inbox; anything else has its own read-only file.
     href: !stop && chain.stage === "owner" ? `/inbox?decision=${encodeURIComponent(row.id)}` : `/spend/${encodeURIComponent(row.id)}`,
     duplicateCount: row.duplicateCount || 1,

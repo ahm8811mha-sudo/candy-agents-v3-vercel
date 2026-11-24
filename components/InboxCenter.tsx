@@ -36,6 +36,7 @@ import {
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { commandStatusLabel } from "@/lib/company/commandStatusLabel";
 import Link from "next/link";
+import { roleLabel, typeLabel } from "@/lib/i18n/arLabels";
 
 type InboxItem = {
   id: string;
@@ -152,11 +153,14 @@ export default function InboxCenter() {
     [queue, selectedId]
   );
 
-  // Keep the open decision valid as the queue changes underneath it.
+  // Keep the open decision valid as the queue changes underneath it. Wait for
+  // the first load: an empty queue before it would drop the decision named in
+  // the link (/inbox?decision=…), and the desk would open the first card instead.
   useEffect(() => {
+    if (loading) return;
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
     if (!selected && selectedId) setSelectedId(null);
-  }, [selected, selectedId]);
+  }, [loading, selected, selectedId]);
 
   useEffect(() => {
     setPanel("none");
@@ -443,7 +447,7 @@ export default function InboxCenter() {
                   {item.amount !== undefined && <em>{currency.format(item.amount)}</em>}
                 </span>
                 <span className="decide-row__meta">
-                  {item.channel === "SYSTEM" ? "طلب نظام" : "إداري"} · {item.requestedBy}
+                  {item.channel === "SYSTEM" ? "طلب نظام" : "إداري"} · {roleLabel(item.requestedBy)}
                   {item.ageLabel ? ` · ${item.ageLabel}` : ""}
                 </span>
                 {item.stale && (
@@ -458,7 +462,7 @@ export default function InboxCenter() {
               <article className="bento-card" style={{ gap: 14 }}>
                 <div>
                   <span className="bento-kicker">
-                    {selected.channel === "SYSTEM" ? "نظام/تداول" : "إداري"} · {selected.type} · من: {selected.requestedBy}
+                    {selected.channel === "SYSTEM" ? "نظام/تداول" : "إداري"} · {typeLabel(selected.type)} · من: {roleLabel(selected.requestedBy)}
                   </span>
                   <h2 className="decide-detail__title">{selected.title}</h2>
                   <div className="decide-detail__facts">

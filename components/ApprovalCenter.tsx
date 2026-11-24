@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, Check, X, Inbox } from "lucide-react";
+import { typeLabel } from "@/lib/i18n/arLabels";
 
 type ApprovalItem = {
   id: string;
@@ -124,7 +125,7 @@ export default function ApprovalCenter() {
               </div>
               <small style={{ color: "var(--muted)", lineHeight: 1.7 }}>{item.detail}</small>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span className="mini-pill">{item.type}</span>
+                <span className="mini-pill">{typeLabel(item.type)}</span>
                 <span className="mini-pill">يتطلب: {item.requestedRole}</span>
                 <div style={{ display: "flex", gap: 8, marginInlineStart: "auto" }}>
                   <button className="primary-btn" style={{ minHeight: 38, padding: "8px 14px" }} disabled={deciding === item.id} onClick={() => decide(item.id, "APPROVED")}>

@@ -24,6 +24,7 @@ export default function SessionControl() {
       onClick={lockDevice}
       disabled={locking}
       title="قفل النسخة الخاصة على هذا الجهاز"
+      aria-label="قفل الجهاز"
       style={{ cursor: "pointer", border: "1px solid var(--line)" }}
     >
       {locking ? <Loader2 className="spin" size={12} /> : <Crown size={12} />}

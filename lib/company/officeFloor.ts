@@ -7,9 +7,10 @@ import { COMPANY_AGENTS } from "./agents";
 import { listChairmanCommands, type ChairmanCommand } from "./chairmanCommands";
 import { listApprovals } from "../approvals";
 import { getCompanyPulse } from "./pulse";
-import { approvalVisibleToChairman, collapseDuplicates, isMonetarySpend, readSpendChain, returnHolder, returnedToDepartment, spendStageAgent, spendStop } from "./spendChain";
+import { approvalVisibleToChairman, collapseDuplicates, isMonetarySpend, readSpendChain, returnedToDepartment, spendHolder, spendOverdue, spendStop } from "./spendChain";
 import { buildDecisionDesk } from "./decisionDesk";
 import { commandItem, spendItem, taskItem, type CounterItem } from "./counterItems";
+import { statusLabel } from "@/lib/i18n/arLabels";
 
 export type OfficeStatus = "working" | "waiting" | "blocked" | "idle";
 export type OfficeTaskRow = Record<string, unknown>;
@@ -44,8 +45,7 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
     const chain = readSpendChain(a);
     if (!chain) return [];
     const stopped = spendStop(chain);
-    const stage = spendStageAgent(chain);
-    const holder = stopped ? returnHolder(a) : stage;
+    const holder = spendHolder(a);
     if (!holder) return [];
     const from = chain.preparingAgentId && chain.preparingAgentId !== "department" ? chain.preparingAgentId : "sultan";
     return [{ id: a.id, title: a.title, amount: a.amount ?? null, amountSAR: a.amount ?? null, stage: chain.stage, stageLabel: stopped ? stopped.label : stageLabel[chain.stage] || chain.stage, holder, path: [from, "abdulrahman", "hares", "sultan", "owner"], stopped: Boolean(stopped), at: a.createdAt }];
@@ -70,7 +70,7 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
       ...returnedHere.map((f) => ({ id: f.id, kind: "returned" as const, title: f.title + ((f.duplicateCount || 1) > 1 ? ` (×${f.duplicateCount})` : ""), status: `أُعيد للتصحيح: ${f.stageLabel}`, amountSAR: f.amountSAR, at: f.at })),
       ...openCmds.map((c) => ({ id: c.id, kind: "command" as const, title: pendingStep(c)?.title || c.text, status: commandStatusLabel[c.status] || c.status, at: c.updatedAt })),
       ...holding.map((h) => ({ id: h.id, kind: agent.id === "owner" ? "decision" as const : "spend" as const, title: h.title + ((h.duplicateCount || 1) > 1 ? ` (×${h.duplicateCount})` : ""), status: agent.id === "owner" ? "بانتظار قرارك" : `مراجعة: ${"stageLabel" in h ? h.stageLabel : ""}`, amountSAR: h.amount ?? null, at: ("createdAt" in h ? h.createdAt : "at" in h ? h.at : null) as string | null })),
-      ...openTasks.map((t) => ({ id: str(t.id), kind: "task" as const, title: str(t.title), status: str(t.status), at: str(t.updated_at) || null })),
+      ...openTasks.map((t) => ({ id: str(t.id), kind: "task" as const, title: str(t.title), status: statusLabel(t.status), at: str(t.updated_at) || null })),
     ];
     const completed: OfficeItem[] = [
       ...mine.filter((c) => c.status === "CLOSED").map((c) => ({ id: c.id, kind: "command" as const, title: c.text, status: "مغلق", at: c.closedAt || c.updatedAt })),
@@ -78,7 +78,9 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
     ].sort((a, b) => str(b.at).localeCompare(str(a.at))).slice(0, 8);
 
     const overdueCmds = openCmds.filter((c) => c.ownerAgentId === agent.id && Date.parse(c.dueAt) < now.getTime());
-    const overdueMine = overdueCmds.length;
+    // A spend request idle past its stage SLA counts against the employee holding it.
+    const overdueSpend = collapseDuplicates(approvals.filter((a) => spendOverdue(a, now)?.holder === agent.id));
+    const overdueMine = overdueCmds.length + overdueSpend.length;
     const doneCmds = mine.filter((c) => c.status === "CLOSED" && Date.parse(c.closedAt || c.updatedAt) >= weekAgo);
     const doneTasks = myTasks.filter((t) => DONE_TASK.has(str(t.status).toUpperCase()) && Date.parse(str(t.completed_at || t.updated_at)) >= weekAgo);
     const doneWeek = doneCmds.length + doneTasks.length;
@@ -95,7 +97,7 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
     const waiting = openCmds.some((c) => c.status === "AWAITING_CHAIRMAN" || c.status === "IN_SPEND_CHAIN") || (agent.id === "owner" && holding.length > 0);
     const presence = pulseByAgent.get(agent.id);
     const status: OfficeStatus = blocked ? "blocked" : active ? "working" : waiting ? "waiting" : presence?.presence === "WORKING" ? "working" : "idle";
-    const current = queue.find((q) => q.kind !== "task") || queue.find((q) => q.status.toUpperCase() === "IN_PROGRESS") || queue[0] || null;
+    const current = queue.find((q) => q.kind !== "task") || queue.find((q) => q.status === statusLabel("IN_PROGRESS")) || queue[0] || null;
     const timeline = pulse.events.filter((e) => e.agentId === agent.id).slice(0, 12).map((e) => ({ id: e.id, title: e.title, kind: e.kindLabel, at: e.createdAt }));
     const lastActivityAt = [presence?.lastActivityAt, ...queue.map((q) => q.at), ...completed.map((c) => c.at)].filter(Boolean).sort().pop() || null;
     return {
@@ -103,7 +105,7 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
       kpis: { open: queue.length, overdue: overdueMine, doneWeek, returned: returnedHere.length },
       kpiItems: {
         open: queue.map(asItem),
-        overdue: overdueCmds.map((c) => commandItem(c, now)),
+        overdue: [...overdueCmds.map((c) => commandItem(c, now)), ...overdueSpend.map((a) => spendItem(a, now))],
         doneWeek: [...doneCmds.map((c) => commandItem(c, now)), ...doneTasks.map((t) => taskItem(t, agent.id))],
         returned: returnedHere.map((f) => asItem({ id: f.id, kind: "returned", title: f.title, status: "", amountSAR: f.amountSAR, at: f.at })),
       },
@@ -128,6 +130,8 @@ export function buildOfficeFloor({ tasks, tasksAvailable, now = new Date() }: { 
     alerts: [
       ...openCommands.filter((c) => c.status === "BLOCKED" || Date.parse(c.dueAt) < now.getTime()).map((c) => commandItem(c, now)),
       ...tasks.filter((t) => isTask(t, BLOCKED_TASK)).map((t) => taskItem(t)),
+      // A spend request idle past its stage SLA is an alert too, so a stuck request can never sit unseen.
+      ...collapseDuplicates(pendingSpend.filter((a) => spendOverdue(a, now))).map((a) => spendItem(a, now)),
     ],
     completedToday: [...commands.filter((c) => c.status === "CLOSED" && isToday(c.closedAt, now)).map((c) => commandItem(c, now)), ...tasks.filter((t) => isToday(str(t.completed_at) || null, now)).map((t) => taskItem(t))],
   };

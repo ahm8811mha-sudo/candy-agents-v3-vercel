@@ -15,6 +15,7 @@ import {
   Target,
   WandSparkles,
 } from "lucide-react";
+import { levelLabel } from "@/lib/i18n/arLabels";
 
 type Twin = {
   health_score?: number;
@@ -353,7 +354,7 @@ export default function CompanyBrainPage() {
               <p style={{ color: "var(--muted)", lineHeight: 1.65 }}>{skill.definition?.description}</p>
               <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
                 <span className="mini-pill">{skill.definition?.category}</span>
-                <span className="mini-pill">{skill.definition?.risk_level}</span>
+                <span className="mini-pill">{levelLabel(skill.definition?.risk_level)}</span>
                 {skill.definition?.approval_required && <span className="mini-pill">يتطلب اعتمادًا</span>}
               </div>
             </article>

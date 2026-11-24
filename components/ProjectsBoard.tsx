@@ -31,6 +31,7 @@ import type { HonestySummary, TaskExecutionState } from "@/lib/company/execution
 import { executionStateLabels } from "@/lib/company/executionHonesty";
 import ExecutionProofForm from "./ExecutionProofForm";
 import ExecutionProofView from "./ExecutionProofView";
+import { roleLabel, statusLabel } from "@/lib/i18n/arLabels";
 
 type ProjectTask = {
   id: string;
@@ -248,7 +249,7 @@ export default function ProjectsBoard() {
                 <article className="bento-card" style={{ gap: 16 }}>
                   <div>
                     <span className="bento-kicker">
-                      {selected.projectNumber ? `مشروع #${selected.projectNumber}` : "مشروع"} · {selected.status}
+                      {selected.projectNumber ? `مشروع #${selected.projectNumber}` : "مشروع"} · {statusLabel(selected.status)}
                       {selected.createdAt ? ` · أُنشئ ${new Date(selected.createdAt).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}
                     </span>
                     <h2 className="decide-detail__title">{selected.name}</h2>
@@ -299,7 +300,7 @@ export default function ProjectsBoard() {
                               {task.detail && <small className="task-row__detail">{task.detail}</small>}
                               <small className="task-row__meta">
                                 {executionStateLabels[task.state]}
-                                {task.agent ? ` · المسؤول: ${AGENT_NAMES[task.agent] || task.agent}` : task.ownerRole ? ` · ${task.ownerRole}` : ""}
+                                {task.agent ? ` · المسؤول: ${AGENT_NAMES[task.agent] || task.agent}` : task.ownerRole ? ` · ${roleLabel(task.ownerRole)}` : ""}
                                 {task.dueDate ? ` · الاستحقاق ${String(task.dueDate).slice(0, 10)}` : ""}
                                 {task.executionKind === "REAL_WORLD" ? " · أثر فعلي" : ""}
                               </small>

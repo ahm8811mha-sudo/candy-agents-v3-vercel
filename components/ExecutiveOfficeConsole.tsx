@@ -22,6 +22,7 @@ import { InitiativeExecutionPanel } from "./InitiativeExecutionPanel";
 import OwnerAbsencePanel from "./OwnerAbsencePanel";
 import type { InitiativePlan } from "@/lib/company/initiativePlanning";
 import { riskLabel } from "@/lib/ui/statusLabels";
+import { levelLabel, roleLabel, statusLabel, typeLabel } from "@/lib/i18n/arLabels";
 
 type OfficeData = {
   operatingBrief?: {
@@ -463,7 +464,7 @@ export default function ExecutiveOfficeConsole() {
             <ActionRow
               key={item.id}
               title={item.title}
-              meta={`${item.item_type} - ${item.priority} - ${item.status}`}
+              meta={`${typeLabel(item.item_type)} - ${levelLabel(item.priority)} - ${statusLabel(item.status)}`}
               actionLabel="إغلاق"
               onAction={() => run("update-item", { id: item.id, status: "DONE" })}
               disabled={Boolean(working)}
@@ -475,12 +476,12 @@ export default function ExecutiveOfficeConsole() {
             <Statement key={project.id} label={`${project.project_number ? `#${project.project_number} · ` : ""}${project.name}${project.project_date ? ` · ${new Date(project.project_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`} value={project.status || "ACTIVE"} />
           ))}
           {(data?.dashboard?.tasks || []).slice(0, 6).map((task) => (
-            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`} value={task.status} />
+            <Statement key={task.id} label={`${task.task_number ? `#${task.task_number} · ` : ""}${task.title || task.content || "مهمة"}${task.task_date ? ` · ${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`} value={statusLabel(task.status)} />
           ))}
         </Panel>
         <Panel title="الاعتمادات والمخاطر">
           {(data?.dashboard?.approvals || []).slice(0, 4).map((approval) => (
-            <Statement key={approval.id} label={approval.entity_type} value={approval.status} />
+            <Statement key={approval.id} label={typeLabel(approval.entity_type)} value={statusLabel(approval.status)} />
           ))}
           {(data?.dashboard?.alerts || []).slice(0, 5).map((alert) => (
             <Statement key={alert.id} label={alert.title} value={alert.severity} />
@@ -491,7 +492,7 @@ export default function ExecutiveOfficeConsole() {
       <section className="ops-board two">
         <Panel title="رادار الفرص">
           {(data?.enterprise?.opportunityRuns || []).slice(0, 6).map((run) => (
-            <Statement key={run.id} label={run.signal_summary} value={run.status} />
+            <Statement key={run.id} label={run.signal_summary} value={statusLabel(run.status)} />
           ))}
         </Panel>
         <Panel title="مؤشرات الأداء">
@@ -504,7 +505,7 @@ export default function ExecutiveOfficeConsole() {
       <section className="ops-board">
         <Panel title="تقويم الرئيس التنفيذي">
           {(data?.calendarEvents || []).slice(0, 8).map((event) => (
-            <Statement key={event.id} label={`${event.title} - ${new Date(event.starts_at).toLocaleString("ar-SA-u-nu-latn")}`} value={event.status} />
+            <Statement key={event.id} label={`${event.title} - ${new Date(event.starts_at).toLocaleString("ar-SA-u-nu-latn")}`} value={statusLabel(event.status)} />
           ))}
         </Panel>
         <Panel title="الملخصات والمحاضر">
@@ -559,7 +560,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       items: ceoItems.map((c) => ({
         id: c.id,
         title: c.title,
-        subtitle: `${c.item_type || "بند"} · ${c.status}`,
+        subtitle: `${c.item_type ? typeLabel(c.item_type) : "بند"} · ${statusLabel(c.status)}`,
         href: "/departments/executive#ceo-follow-ups",
         openLabel: "فتح المتابعات",
         context: { requestedBy: "مكتب الرئيس التنفيذي", relatedTo: c.item_type || "بند متابعة", origin: c.notes },
@@ -577,7 +578,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         subtitle: a.status,
         href: "/inbox",
         openLabel: "فتح الاعتماد الحقيقي",
-        context: { requestedBy: "النظام / القسم المعني", relatedTo: a.entity_type, origin: a.notes || "طلب اعتماد بانتظار قرار الرئيس التنفيذي" },
+        context: { requestedBy: "النظام / القسم المعني", relatedTo: typeLabel(a.entity_type), origin: a.notes || "طلب اعتماد بانتظار قرار الرئيس التنفيذي" },
       })),
     },
     {
@@ -607,7 +608,7 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
         subtitle: `${p.status || "ACTIVE"}${p.project_date ? ` · ${new Date(p.project_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`,
         href: `/operations?project=${encodeURIComponent(p.id)}#approved-projects`,
         openLabel: "فتح ملف المشروع",
-        context: { requestedBy: "إدارة المشاريع", relatedTo: p.project_number ? `المشروع #${p.project_number}` : p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${p.risk_level}` : ""}` },
+        context: { requestedBy: "إدارة المشاريع", relatedTo: p.project_number ? `المشروع #${p.project_number}` : p.name, origin: `مشروع نشط${p.risk_level ? ` · مستوى المخاطر ${levelLabel(p.risk_level)}` : ""}` },
       })),
     },
     {
@@ -619,10 +620,10 @@ function buildOfficeMetrics(data: OfficeData | null, brief: OfficeData["operatin
       items: lateTasks.map((t) => ({
         id: t.id,
         title: `${t.task_number ? `#${t.task_number} · ` : ""}${t.title || t.content || "مهمة"}`,
-        subtitle: `${t.status}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`,
+        subtitle: `${statusLabel(t.status)}${t.task_date ? ` · ${new Date(t.task_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}`,
         href: "/operations#approved-projects",
         openLabel: "فتح مهام التنفيذ",
-        context: { requestedBy: t.owner_role || "فريق التنفيذ", relatedTo: t.task_number ? `المهمة #${t.task_number}` : "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
+        context: { requestedBy: roleLabel(t.owner_role) || "فريق التنفيذ", relatedTo: t.task_number ? `المهمة #${t.task_number}` : "خطة التنفيذ", origin: t.content || "مهمة تنفيذية متأخرة" },
       })),
     },
   ];

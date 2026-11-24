@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FileText, Loader2, Download, TrendingUp, AlertTriangle, Target, Image as ImageIcon } from "lucide-react";
 import { HealthGauge, HorizontalBar, ProgressRing, StatusDistribution } from "./AnalyticsCharts";
+import { statusLabel } from "@/lib/i18n/arLabels";
 
 type ReportData = {
   type: string;
@@ -180,7 +181,7 @@ export default function ExecutiveReport() {
                   <div key={kpi.name} className="kpi-card-inner">
                     <small>{kpi.name}</small>
                     <strong>{kpi.current}/{kpi.target} {kpi.unit}</strong>
-                    <span className={`mini-pill ${kpi.status.toLowerCase()}`} style={{ marginTop: 6, display: "inline-block" }}>{kpi.status}</span>
+                    <span className={`mini-pill ${kpi.status.toLowerCase()}`} style={{ marginTop: 6, display: "inline-block" }}>{statusLabel(kpi.status)}</span>
                   </div>
                 ))}
               </div>
