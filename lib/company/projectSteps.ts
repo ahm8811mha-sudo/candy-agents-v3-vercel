@@ -465,3 +465,25 @@ export async function restoreProgressedSteps(snapshot: Array<{ id: string; statu
   }
   return snapshot.length;
 }
+
+/** Master-only correction of a step: reassign its owner or fix its execution kind. */
+export async function updateStepRouting(input: { taskId: string; agentId?: string; executionKind?: "INTERNAL" | "REAL_WORLD"; actor: string }, tenantId = getTenantId()) {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("يتطلب قاعدة البيانات.");
+  const { data, error } = await client.from("tasks").select("id,status,metadata").eq("id", input.taskId).eq("tenant_id", tenantId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("الخطوة غير موجودة.");
+  const metadata = meta(data as StepRow);
+  const status = String((data as StepRow).status).toUpperCase();
+  if (input.executionKind === "INTERNAL" && metadata.executionKind === "REAL_WORLD" && ["DONE", "REVIEW"].includes(status)) {
+    throw new Error("لا تُحوَّل خطوة فعلية إلى داخلية بعد تسليمها.");
+  }
+  const next = {
+    ...metadata,
+    ...(input.agentId ? { assignedAgent: input.agentId, reassignedBy: input.actor, reassignedAt: new Date().toISOString() } : {}),
+    ...(input.executionKind ? { executionKind: input.executionKind } : {}),
+  };
+  const { error: updateError } = await client.from("tasks").update({ metadata: next, updated_at: new Date().toISOString() }).eq("id", input.taskId).eq("tenant_id", tenantId);
+  if (updateError) throw updateError;
+  return { taskId: input.taskId, agent: stepAgent({ owner_role: null, metadata: next }), executionKind: next.executionKind || "INTERNAL" };
+}
