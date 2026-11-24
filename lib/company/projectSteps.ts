@@ -22,6 +22,9 @@
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
 import { isOwnerConfirmed, isRealWorldTask, REAL_WORLD_AGENT_PROGRESS_CAP } from "./executionHonesty";
+import { getAgent } from "./agents";
+
+const agentName = (id: string) => getAgent(id)?.name || id;
 
 export type StepRow = {
   id: string;
@@ -380,7 +383,7 @@ export async function sweepProjectSteps(options: { tenantId?: string; projectId?
       await client.from("tasks").update({ metadata: { ...metadata, escalatedOn: today, escalatedTo: "sultan", escalations: Number(metadata.escalations || 0) + 1 }, updated_at: now })
         .eq("id", item.id).eq("tenant_id", tenantId);
       summary.escalated += 1;
-      if (options.notify) await options.notify("sultan", `تصعيد تأخر: خطوة «${item.title}» في مشروع #${project.project_number ?? "؟"} لدى ${item.agent} تجاوزت موعدها (${item.dueDate}). تابعها معه حتى تُسلَّم.`).catch(() => undefined);
+      if (options.notify) await options.notify("sultan", `تصعيد تأخر: خطوة «${item.title}» في مشروع #${project.project_number ?? "؟"} لدى ${agentName(item.agent)} تجاوزت موعدها (${item.dueDate}). تابعها معه حتى تُسلَّم.`).catch(() => undefined);
     }
   }
   return summary;
