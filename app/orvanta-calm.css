@@ -16,7 +16,7 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 .ov-nav-group > span { display:block; font-size:11px; color:#9FB1AD; margin-bottom:6px; }
 .ov-nav-group a { display:flex; justify-content:space-between; align-items:center; color:#D9E2DF; text-decoration:none; font-size:12.5px; padding:6px 4px; border-radius:6px; }
 .ov-nav-group a:hover, .ov-nav-group a[aria-current=page] { background:#26403B; color:#FFFFFF; }
-@media(max-width:960px){ .mobile-work-nav { grid-template-columns:repeat(5,1fr)!important; } }
+@media(max-width:960px){ .mobile-work-nav { grid-template-columns:repeat(6,minmax(0,1fr))!important; } .mobile-work-nav a { padding-inline:1px!important; } .mobile-work-nav a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; } }
 
 /* Shared building blocks */
 .ov-page { padding:32px 36px 60px; max-width:1240px; margin:0 auto; color:var(--text); }

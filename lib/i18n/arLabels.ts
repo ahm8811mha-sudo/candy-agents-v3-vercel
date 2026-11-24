@@ -41,6 +41,7 @@ const STATUS: Record<string, string> = {
   PLANNED: "مخطط",
   PLAN_READY: "الخطة جاهزة",
   PROMISING: "واعد",
+  PROPOSED: "مقترح بانتظار القرار",
   RADAR_DRAFT: "مسودة رادار",
   READY: "جاهز",
   RECEIVED: "مستلم",

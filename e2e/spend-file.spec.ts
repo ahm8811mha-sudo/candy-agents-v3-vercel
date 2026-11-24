@@ -88,3 +88,13 @@ test("the decisions file lists requests by stage with the best option and links"
   await expect(page.getByRole("link", { name: "افتح وقرّر" })).toHaveAttribute("href", `/spend/${id}`);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
+
+test("the phone bottom bar keeps every main screen on one visible row", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/office");
+  const links = page.locator(".mobile-work-nav a");
+  await expect(links).toHaveCount(6);
+  const boxes = await links.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map((r) => ({ top: Math.round(r.top), bottom: r.bottom })));
+  expect(new Set(boxes.map((b) => b.top)).size).toBe(1);
+  for (const box of boxes) expect(box.bottom).toBeLessThanOrEqual(844);
+});

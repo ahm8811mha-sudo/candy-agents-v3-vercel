@@ -178,7 +178,7 @@ export async function seedEnterpriseOperatingSystem() {
   return getEnterpriseStatus();
 }
 
-export async function runOpportunityRadar(source = "MANUAL", request = "") {
+export async function runOpportunityRadar(source = "MANUAL", request = "", evidence = "") {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new DatabaseNotConfiguredError("Supabase is not configured.");
   await seedEnterpriseOperatingSystem();
@@ -322,6 +322,34 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     next_step: "CFO validates pilot budget, Marketing confirms feasibility, then CEO Office makes the final approval, modification, or rejection.",
   };
 
+  // Respect the Chairman: no paid request while the CR is suspended, and no
+  // re-raising a rejected idea inside the cooldown without new evidence.
+  const { hydrateApprovals, listApprovals } = await import("./approvals");
+  const { radarSpendGuard } = await import("./company/radarGuard");
+  await hydrateApprovals();
+  const crDocs = await supabase.from("gov_documents").select("*").eq("document_type", "COMMERCIAL_REGISTRATION").limit(20);
+  const guard = radarSpendGuard({
+    approvals: listApprovals(undefined, { includeArchived: true }),
+    idea: best.title,
+    amountSAR: requestedBudget,
+    evidence,
+    crDocuments: crDocs.error ? [] : (crDocs.data || []),
+  });
+  if (!guard.allowed) {
+    await logDecision({
+      decisionType: "OPPORTUNITY_RADAR_HELD",
+      entityType: "opportunity_radar_runs",
+      entityId: guard.basedOn || "radar",
+      actorRole: "محلل الفرص",
+      action: `لم يُرفع طلب صرف ${requestedBudget} ر.س لفكرة «${best.title}»: ${guard.reason}`,
+      amount: 0,
+      riskLevel: status.intelligence.riskLevel,
+      approvalStatus: "NOT_RAISED",
+      metadata: { code: guard.code, until: guard.until, basedOn: guard.basedOn, source, idea: best.title, requestedBudget },
+    }).catch(() => undefined);
+    return { skipped: true, held: true, code: guard.code, reason: guard.reason, until: guard.until, basedOn: guard.basedOn, idea: best.title, requestedBudget };
+  }
+
   const { data: run, error: runError } = await supabase
     .from("opportunity_radar_runs")
     .insert({
@@ -393,6 +421,24 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     actorRole: "محلل الفرص",
     metadata: { actionKind: "OPPORTUNITY_RADAR_PILOT", campaignId: campaign.id, opportunity },
   });
+  // Every radar request belongs to a project: a proposal record that follows the decision.
+  let projectId: string | null = null;
+  {
+    const { ensureRadarProject } = await import("./company/radarProject");
+    const ensured = await ensureRadarProject({
+      runId: run.id,
+      title: opportunity.title,
+      amountSAR: requestedBudget,
+      request: `${opportunity.next_step} الميزانية المطلوبة ${requestedBudget} ر.س.`,
+      approvalStatus: governance.allowedToExecute ? "APPROVED" : "PENDING",
+      riskLevel: status.intelligence.riskLevel,
+    }).catch(() => null);
+    projectId = ensured?.projectId || null;
+    if (projectId && governance.approval) {
+      const { writeApprovalCritical } = await import("./approvals");
+      await writeApprovalCritical({ ...governance.approval, metadata: { ...(governance.approval.metadata || {}), projectId } }).catch(() => undefined);
+    }
+  }
   const campaignStatus = governance.allowedToExecute ? "RADAR_DRAFT" : "PENDING_APPROVAL";
   const { error: campaignStatusError } = await supabase
     .from("marketing_campaigns")
@@ -414,7 +460,7 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     priority: status.intelligence.riskLevel === "HIGH" ? "URGENT" : "HIGH",
     due_at: new Date(Date.now() + 86400000).toISOString(),
     notes: `${opportunity.next_step} Budget: ${requestedBudget} SAR. Window: ${opportunityWindowDays} days. Execution: ${executionDurationDays} days.`,
-    metadata: { radar_run_id: run.id, campaign_id: campaign.id, governance, opportunity, financeReview, marketingReview, ceoDecision },
+    metadata: { radar_run_id: run.id, campaign_id: campaign.id, project_id: projectId, governance, opportunity, financeReview, marketingReview, ceoDecision },
   });
   if (ceoError) throw ceoError;
 
@@ -443,5 +489,5 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
     metadata: { radar_run_id: run.id, campaign_id: campaign.id, opportunity, financeReview, marketingReview, ceoDecision },
   });
 
-  return { skipped: false, run, campaign, governance, candidates, opportunity, financeReview, marketingReview, ceoDecision };
+  return { skipped: false, run, campaign, projectId, governance, candidates, opportunity, financeReview, marketingReview, ceoDecision };
 }

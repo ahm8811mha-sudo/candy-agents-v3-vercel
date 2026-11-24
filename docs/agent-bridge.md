@@ -145,3 +145,20 @@ Incident: a 5,000 SAR opportunity-radar request waited 28 days for a department 
 - `GET /api/bridge/chairman/digest` adds `spendInChain`: every request still in the chain (not filtered by `since`) with `holder`, `stage`, `since`, `overdue`, `overdueHours` and the `actionPath` to act on it. A dispatcher must process this list, not only commands.
 - The daily desk cron escalates an overdue request at most once a day: a bridge note to the holder and to Sultan, and from the second escalation to Rayyan. The escalation is recorded on `spendChain.escalation`; every move records `spendChain.stageEnteredAt`. Nothing is approved, sent outside, or spent.
 - `/spend/{id}` is the full file. When the chain is complete (or a reviewer stopped it), the Chairman approves, rejects with a reason, returns with a note, or defers a week from the file itself.
+
+## Spend queue for the dispatcher routine (25 Nov 2026)
+
+`GET /api/bridge/chairman/digest?view=spend` (header `x-chairman-digest-key` or the master `x-agent-bridge-key`; no `since` needed) returns:
+
+- `counts: { open, stuck }`, `slaHours` (48)
+- `stuckSpend[]`: late requests first: idle in a reviewer's stage past 48h, or waiting on the Chairman more than 48h
+- `spendQueue[]`: every open spend request
+
+Each item has `id, subject, amountSAR, stage, holder, holderName, createdAt, ageHours, stageSince, stageAgeHours, stuck, overdueHours, returned, escalations, lastEscalatedAt, projectId, fileHref, actionPath`. For every `stuckSpend` item the routine nudges `holder` through `actionPath` (null when the holder is the Chairman: never decide for him). The full digest also carries `spendQueue` and `stuckSpend`.
+
+## Opportunity radar respects the Chairman (25 Nov 2026)
+
+- While the CR is suspended (a rejection that says so, or a COMMERCIAL_REGISTRATION document in SUSPENDED/EXPIRED/CANCELLED, until an ACTIVE CR document is newer) the radar raises no paid request.
+- After a rejection of the same idea it waits 30 days; `POST /api/enterprise-os {action:"radar", request, evidence}` with real new evidence (30+ chars) may resubmit inside the window (not while the CR is suspended).
+- A held run writes an `OPPORTUNITY_RADAR_HELD` audit row and returns `{ skipped: true, held: true, code, reason, until }`.
+- Every radar request is linked to its own project (status `PROPOSED`, then `ACTIVE` or `REJECTED` with the decision). Backfill: `POST /api/bridge/projects {"action":"link_radar_projects"}` (master key, idempotent).
