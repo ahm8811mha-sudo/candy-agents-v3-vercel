@@ -1,6 +1,7 @@
 import { listApprovals } from "../approvals";
 import { listChairmanCommands, publicCommandStatus } from "./chairmanCommands";
 import { buildDecisionDesk, type DecisionDesk } from "./decisionDesk";
+import { buildSpendQueue, type SpendQueueItem } from "./spendQueue";
 import {
   approvalVisibleToChairman,
   collapseDuplicates,
@@ -31,6 +32,9 @@ export type ChairmanDigest = {
   returned: Array<{ id: string; subject: string; amountSAR: number; stoppedBy: string; note: string; label: string; duplicateCount: number }>;
   /** Every spend request still in the review chain (not filtered by since): who must act next, since when, and whether it is overdue. */
   spendInChain: Array<{ id: string; subject: string; amountSAR: number; stage: string; holder: string; since: string; overdue: boolean; overdueHours: number; actionPath: string }>;
+  /** Every open spend request (any stage, owner included) with holder and age; stuckSpend = the late ones. */
+  spendQueue: SpendQueueItem[];
+  stuckSpend: SpendQueueItem[];
   commands: Array<{
     id: string;
     subject: string;
@@ -125,7 +129,9 @@ export function buildChairmanDigest(since: string, now = new Date()): ChairmanDi
     alerts.push({ id: `cmd-${command.id}`, severity: "critical", title: `عائق حوكمة على أمر: ${command.text.slice(0, 80)}`, at: command.updatedAt, count: 1 });
   }
   const desk = buildDecisionDesk(now);
-  return { ok: true, since, generatedAt: now.toISOString(), memos, returned, spendInChain, commands, alerts, decisionCards: desk.cards, overdue: desk.overdue, desk: { digestAt: desk.digestAt, counts: desk.counts } };
+  const spendQueue = buildSpendQueue(listApprovals(), now);
+  const stuckSpend = spendQueue.filter((item) => item.stuck);
+  return { ok: true, since, generatedAt: now.toISOString(), memos, returned, spendInChain, spendQueue, stuckSpend, commands, alerts, decisionCards: desk.cards, overdue: desk.overdue, desk: { digestAt: desk.digestAt, counts: desk.counts } };
 }
 
 export function memoTextForApproval(id: string) {

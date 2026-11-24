@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildChairmanDigest } from "@/lib/company/chairmanDigest";
 import { hydrateChairmanCommands } from "@/lib/company/chairmanCommands";
 import { hydrateCompany } from "@/lib/company/hydrate";
+import { listApprovals } from "@/lib/approvals";
+import { buildSpendQueue } from "@/lib/company/spendQueue";
+import { SPEND_STAGE_SLA_HOURS } from "@/lib/company/spendChain";
 import { projectStepsReport } from "@/lib/company/projectSteps";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
 
@@ -19,6 +22,16 @@ export async function GET(req: NextRequest) {
   try {
     // Read approvals and ideas from the DB here too; never trust a cold instance's memory.
     await Promise.all([hydrateChairmanCommands(), hydrateCompany()]);
+    // ?view=spend: only the spend queue (no `since` needed), for the dispatcher routine.
+    if (req.nextUrl.searchParams.get("view") === "spend") {
+      const spendQueue = buildSpendQueue(listApprovals());
+      const stuckSpend = spendQueue.filter((item) => item.stuck);
+      return NextResponse.json({
+        ok: true, generatedAt: new Date().toISOString(), slaHours: SPEND_STAGE_SLA_HOURS,
+        counts: { open: spendQueue.length, stuck: stuckSpend.length },
+        stuckSpend, spendQueue,
+      }, { headers: { "cache-control": "no-store" } });
+    }
     const digest = buildChairmanDigest(since);
     // Project steps count too: a digest that saw only commands read "0 overdue"
     // while project #5 had 13 late steps.

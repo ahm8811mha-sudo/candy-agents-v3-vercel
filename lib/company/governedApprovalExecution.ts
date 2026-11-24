@@ -153,6 +153,9 @@ export async function executeGovernedApprovalDecision(
         .eq("id", entityId)
     );
     await ensureUpdate(radar, "Opportunity radar transition failed");
+    // The radar's own proposal project follows the decision (radar-derived id only).
+    const { syncRadarProjectStatus } = await import("./radarProject");
+    await syncRadarProjectStatus(entityId, decision).catch(() => undefined);
     if (campaignId) {
       const campaign = await scoped(
         supabase
