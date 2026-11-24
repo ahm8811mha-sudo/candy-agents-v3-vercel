@@ -78,7 +78,7 @@ export async function openProjectSpendStep(input: {
 
 /**
  * The Chairman's own REJECTION, relayed by his assistant from his words in
- * chat, recorded on a project spend request. Rejection only: this path can
+ * chat, recorded on any spend request. Rejection only: this path can
  * never approve money, so a leaked bridge key cannot release spend. The
  * decision is stamped with who relayed it and the Chairman's quoted words.
  */
@@ -90,7 +90,9 @@ export async function recordRelayedOwnerRejection(input: { approvalId: string; o
   const { readSpendChain } = await import("./spendChain");
   const item = await getApprovalCritical(input.approvalId);
   if (!item) throw new Error("طلب الصرف غير موجود.");
-  if (item.metadata?.source !== "project-spend-step") throw new Error("هذا المسار لطلبات صرف خطوات المشاريع فقط.");
+  const { isMonetarySpend } = await import("./spendChain");
+  // Any spend request (project step, opportunity radar, idea): rejection never releases money.
+  if (item.metadata?.source !== "project-spend-step" && !isMonetarySpend(item.amount)) throw new Error("هذا المسار لطلبات الصرف فقط.");
   if (item.status === "REJECTED") return { approvalId: item.id, status: item.status, idempotent: true };
   if (item.status !== "PENDING" && item.status !== "DEFERRED") throw new Error(`صدر قرار مختلف بالفعل (${item.status}).`);
   const note = `قرار رئيس مجلس الإدارة: الرفض. نصّه: «${input.ownerWords.slice(0, 600)}»${input.note ? ` — ${input.note.slice(0, 600)}` : ""} (نقله ${input.relayedBy} من محادثة الرئيس)`;
@@ -105,7 +107,14 @@ export async function recordRelayedOwnerRejection(input: { approvalId: string; o
       ownerDecision: { decision: "REJECTED", words: input.ownerWords.slice(0, 600), relayedBy: input.relayedBy, at: new Date().toISOString(), channel: "chat-relay" },
     },
   });
-  const execution = await applyTaskFundingDecision(saved.metadata || {}, "REJECTED");
+  let execution: unknown = null;
+  if (saved.metadata?.source === "governanceOS") {
+    // The governed entity (e.g. an opportunity-radar run and its campaign) follows the decision.
+    const { executeGovernedApprovalDecision } = await import("./governedApprovalExecution");
+    execution = await executeGovernedApprovalDecision(saved.metadata || {}, "REJECTED", "رئيس مجلس الإدارة").catch((error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : "transition failed" }));
+  } else {
+    execution = await applyTaskFundingDecision(saved.metadata || {}, "REJECTED");
+  }
   await settleChairmanCommandForSpend(saved.id, "REJECTED").catch(() => undefined);
   await appendWorkEvent({ entityType: "spend", entityId: saved.id, actor: "owner", action: "owner_decision", fromState: "owner", toState: "decided", note, evidence: null }).catch(() => undefined);
   return { approvalId: saved.id, status: saved.status, decidedBy: saved.decidedBy, task: execution };
