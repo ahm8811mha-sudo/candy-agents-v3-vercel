@@ -75,3 +75,38 @@ export async function openProjectSpendStep(input: {
   await client.from("tasks").update({ metadata: { executionKind: "REAL_WORLD", requiresFunding: true, estimatedCostSAR: input.amountSAR, assignedAgent: input.preparingAgentId, source: "project-spend-step", approvalId: approval.id } }).eq("id", taskId).eq("tenant_id", tenantId);
   return { approvalId: approval.id, taskId, existing: false };
 }
+
+/**
+ * The Chairman's own REJECTION, relayed by his assistant from his words in
+ * chat, recorded on a project spend request. Rejection only: this path can
+ * never approve money, so a leaked bridge key cannot release spend. The
+ * decision is stamped with who relayed it and the Chairman's quoted words.
+ */
+export async function recordRelayedOwnerRejection(input: { approvalId: string; ownerWords: string; relayedBy: string; note?: string }) {
+  const { decideApprovalCritical, getApprovalCritical, writeApprovalCritical } = await import("../approvals");
+  const { applyTaskFundingDecision } = await import("../companyExecutionSystem");
+  const { settleChairmanCommandForSpend } = await import("./chairmanCommands");
+  const { appendWorkEvent } = await import("./workEvents");
+  const { readSpendChain } = await import("./spendChain");
+  const item = await getApprovalCritical(input.approvalId);
+  if (!item) throw new Error("طلب الصرف غير موجود.");
+  if (item.metadata?.source !== "project-spend-step") throw new Error("هذا المسار لطلبات صرف خطوات المشاريع فقط.");
+  if (item.status === "REJECTED") return { approvalId: item.id, status: item.status, idempotent: true };
+  if (item.status !== "PENDING" && item.status !== "DEFERRED") throw new Error(`صدر قرار مختلف بالفعل (${item.status}).`);
+  const note = `قرار رئيس مجلس الإدارة: الرفض. نصّه: «${input.ownerWords.slice(0, 600)}»${input.note ? ` — ${input.note.slice(0, 600)}` : ""} (نقله ${input.relayedBy} من محادثة الرئيس)`;
+  const decided = await decideApprovalCritical(item.id, "REJECTED", "رئيس مجلس الإدارة", note);
+  if (!decided) throw new Error("تعذر تسجيل القرار.");
+  const chain = readSpendChain(decided);
+  const saved = await writeApprovalCritical({
+    ...decided,
+    metadata: {
+      ...decided.metadata,
+      ...(chain ? { spendChain: { ...chain, stage: "decided", decision: "REJECTED", decidedAt: new Date().toISOString(), note } } : {}),
+      ownerDecision: { decision: "REJECTED", words: input.ownerWords.slice(0, 600), relayedBy: input.relayedBy, at: new Date().toISOString(), channel: "chat-relay" },
+    },
+  });
+  const execution = await applyTaskFundingDecision(saved.metadata || {}, "REJECTED");
+  await settleChairmanCommandForSpend(saved.id, "REJECTED").catch(() => undefined);
+  await appendWorkEvent({ entityType: "spend", entityId: saved.id, actor: "owner", action: "owner_decision", fromState: "owner", toState: "decided", note, evidence: null }).catch(() => undefined);
+  return { approvalId: saved.id, status: saved.status, decidedBy: saved.decidedBy, task: execution };
+}
