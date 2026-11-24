@@ -6,7 +6,7 @@
  */
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
-import { isMonetarySpend, linkedProjectId } from "./spendChain";
+import { isArchived, isMonetarySpend, linkedProjectId, readSpendChain } from "./spendChain";
 import { isRadarApproval, radarProjectId, radarProjectStatus, radarRunId } from "./radarGuard";
 
 type Approval = {
@@ -22,7 +22,11 @@ export async function ensureRadarProject(input: {
   const id = radarProjectId(input.runId);
   const { data: existing, error: readError } = await supabase.from("projects").select("id").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
   if (readError) throw readError;
-  if (existing) return { projectId: id, created: false };
+  if (existing) {
+    // Keep the name in the Chairman's language (older runs carried an English title).
+    await supabase.from("projects").update({ name: `رادار الفرص: ${input.title}`.slice(0, 300) }).eq("tenant_id", tenantId).eq("id", id);
+    return { projectId: id, created: false };
+  }
   const status = radarProjectStatus(input.approvalStatus);
   const { error } = await supabase.from("projects").insert({
     id,
@@ -55,23 +59,51 @@ async function linkApproval(item: Approval, projectId: string) {
   return writeApprovalCritical({ ...(item as unknown as import("../approvals").ApprovalItem), metadata: { ...(item.metadata || {}), projectId } });
 }
 
+/** The Arabic subject of a radar request (the chain subject), else its title without the radar prefix. */
+export function radarProjectTitle(item: { title: string; amount?: number | null; metadata?: Record<string, unknown> | null }): string {
+  const chain = readSpendChain(item as never);
+  const subject = String(chain?.subject || item.title || "").replace(/^.*?رادار الفرص\s*[:：]\s*/u, "").trim();
+  return subject || "طلب صرف من رادار الفرص";
+}
+
+/** Remove a radar project created for a merged duplicate: only a radar-derived id with no steps. */
+async function dropEmptyRadarProject(item: Approval, projectId: string, tenantId = getTenantId()) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return false;
+  const runId = radarRunId(item as never);
+  if (!runId || radarProjectId(runId) !== projectId) return false;
+  const { count, error } = await supabase.from("tasks").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("project_id", projectId);
+  if (error || (count || 0) > 0) return false;
+  const meta = { ...(item.metadata || {}) };
+  delete meta.projectId;
+  const { writeApprovalCritical } = await import("../approvals");
+  await writeApprovalCritical({ ...(item as unknown as import("../approvals").ApprovalItem), metadata: meta });
+  const { error: deleteError } = await supabase.from("projects").delete().eq("tenant_id", tenantId).eq("id", projectId);
+  return !deleteError;
+}
+
 /**
- * Backfill: every radar spend request without a project gets one and is linked
- * (both ways: the request names the project; the project carries the run id).
+ * Backfill: every live radar spend request (not a merged duplicate) without a
+ * project gets one and is linked both ways. A merged duplicate never gets a
+ * project; one created for it by mistake (empty, radar-derived id) is removed.
  */
 export async function linkRadarRequestsToProjects(approvals: Approval[]) {
   const linked: Array<{ approvalId: string; projectId: string; created: boolean; status: string }> = [];
+  const removed: Array<{ approvalId: string; projectId: string }> = [];
   for (const item of approvals) {
     if (!isMonetarySpend(item.amount) || !isRadarApproval(item as never)) continue;
     const runId = radarRunId(item as never);
     if (!runId) continue;
     const current = linkedProjectId(item as never);
+    if (isArchived(item as never)) {
+      if (current && current === radarProjectId(runId) && await dropEmptyRadarProject(item, current)) removed.push({ approvalId: item.id, projectId: current });
+      continue;
+    }
     // A request already linked to another project keeps that link.
     if (current && current !== radarProjectId(runId)) continue;
-    const opportunity = (item.metadata?.opportunity || {}) as Record<string, unknown>;
     const ensured = await ensureRadarProject({
       runId,
-      title: String(opportunity.title || item.title).replace(/^.*?رادار الفرص\s*[:：]\s*/u, ""),
+      title: radarProjectTitle(item),
       amountSAR: Number(item.amount),
       approvalStatus: item.status,
       riskLevel: typeof item.metadata?.riskLevel === "string" ? item.metadata.riskLevel : undefined,
@@ -81,5 +113,5 @@ export async function linkRadarRequestsToProjects(approvals: Approval[]) {
     if (current !== ensured.projectId) await linkApproval(item, ensured.projectId);
     linked.push({ approvalId: item.id, projectId: ensured.projectId, created: ensured.created, status: item.status });
   }
-  return linked;
+  return { linked, removed };
 }

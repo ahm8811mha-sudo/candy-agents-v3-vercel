@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { blankSpendChain } from "./spendChain";
 import { crHold, mentionsCrSuspension, radarProjectId, radarProjectStatus, radarSpendGuard, RADAR_REJECTION_COOLDOWN_DAYS } from "./radarGuard";
 
 const now = new Date("2026-11-25T05:00:00Z");
@@ -52,5 +53,14 @@ describe("radar spend guard", () => {
     expect(radarProjectId("run-1")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(radarProjectStatus("REJECTED")).toEqual({ status: "REJECTED", approval_status: "REJECTED" });
     expect(radarProjectStatus("PENDING")).toEqual({ status: "PROPOSED", approval_status: "PENDING" });
+  });
+});
+
+describe("radar project title", () => {
+  it("uses the Arabic chain subject, not the English radar title", async () => {
+    const { radarProjectTitle } = await import("./radarProject");
+    const item = { title: "Opportunity radar pilot: Organic demand validation sprint", amount: 5000, metadata: { spendChain: blankSpendChain({ amountSAR: 5000, subject: "تجربة رادار الفرص: تحقق عضوي من الطلب" }) } };
+    expect(radarProjectTitle(item)).toBe("تحقق عضوي من الطلب");
+    expect(radarProjectTitle({ title: "تجربة رادار الفرص: فكرة", metadata: {} })).toBe("فكرة");
   });
 });
