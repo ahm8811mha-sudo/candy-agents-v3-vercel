@@ -12,7 +12,7 @@ function getMode() {
   return /iPad|iPhone|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ? "ios" : "browser";
 }
 export default function PwaControls() {
-  const mode = useSyncExternalStore(subscribe, getMode, () => "unknown");
+  const mode = useSyncExternalStore<string>(subscribe, getMode, () => "unknown");
   const [message, setMessage] = useState("");
   async function enableNotifications() {
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {

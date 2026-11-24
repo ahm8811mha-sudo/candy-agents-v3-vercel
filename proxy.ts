@@ -59,6 +59,7 @@ function ownerNext(req: NextRequest) {
   headers.delete(PUBLIC_PAGE_HEADER);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("x-orvanta-access-mode", "personal-owner-device");
+  response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 
