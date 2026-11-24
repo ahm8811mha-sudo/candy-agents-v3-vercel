@@ -28,6 +28,7 @@ import {
 } from "./chairmanCommands";
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
+import { stepsForAgent } from "./projectSteps";
 
 export type BridgeMessage = {
   id: string;
@@ -219,9 +220,12 @@ async function summarizedRows(table: string, column: string, agentId: string) {
 export async function agentWorkspace(agentId: string) {
   if (!isBridgeAgent(agentId)) throw new Error("موظف غير معروف.");
   const agent = getAgent(agentId)!;
-  const [tasks, commitments] = await Promise.all([
+  const [tasks, commitments, projectSteps] = await Promise.all([
     summarizedRows("tasks", "assigned_to", agentId),
     summarizedRows("decision_commitments", "assignee_id", agentId),
+    // Project steps are owned by role, not tasks.assigned_to; without this the
+    // employee never saw them (project #5 sat three months unseen).
+    stepsForAgent(agentId).catch(() => []),
   ]);
   return {
     agent: {
@@ -243,6 +247,7 @@ export async function agentWorkspace(agentId: string) {
       stopped: spendStop(readSpendChain(item))?.label || null,
       returned: returnedInfo(item),
     })),
+    projectSteps,
     messages: await listBridgeMessages(agentId),
     tables: { tasks, commitments },
   };
@@ -253,6 +258,7 @@ export async function agentInbox(agentId: string) {
   return {
     agentId,
     commands: commandsForAgent(agentId).map(publicCommandStatus),
+    projectSteps: await stepsForAgent(agentId).catch(() => []),
     spendQueue: spendQueueForAgent(agentId).map((item) => {
       const chain = readSpendChain(item);
       return {

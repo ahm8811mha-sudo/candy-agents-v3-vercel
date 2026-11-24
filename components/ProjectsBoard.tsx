@@ -46,6 +46,17 @@ type ProjectTask = {
   state: TaskExecutionState;
   /** How the owner's confirmation was proven; null until confirmed. */
   proof: { proofId: string | null; files: number; note: string | null } | null;
+  /** The employee who owns the step and the deliverable they handed in. */
+  agent?: string;
+  output?: string | null;
+  outputBy?: string | null;
+  outputAt?: string | null;
+  outputSources?: string[];
+};
+
+const AGENT_NAMES: Record<string, string> = {
+  sultan: "سلطان", abdulrahman: "عبدالرحمن", noura: "نورة", fahad: "فهد", sara: "سارة", khalid: "خالد",
+  majed: "ماجد", rased: "راصد", ameen: "أمين", hares: "حارس", diwan: "ريان",
 };
 
 type Project = {
@@ -81,6 +92,7 @@ export default function ProjectsBoard() {
   const [busyTask, setBusyTask] = useState<string | null>(null);
   const [confirmFor, setConfirmFor] = useState<string | null>(null);
   const [proofFor, setProofFor] = useState<string | null>(null);
+  const [outputFor, setOutputFor] = useState<string | null>(null);
   const [taskError, setTaskError] = useState("");
 
   const load = useCallback(async () => {
@@ -287,12 +299,30 @@ export default function ProjectsBoard() {
                               {task.detail && <small className="task-row__detail">{task.detail}</small>}
                               <small className="task-row__meta">
                                 {executionStateLabels[task.state]}
-                                {task.ownerRole ? ` · ${task.ownerRole}` : ""}
+                                {task.agent ? ` · المسؤول: ${AGENT_NAMES[task.agent] || task.agent}` : task.ownerRole ? ` · ${task.ownerRole}` : ""}
                                 {task.dueDate ? ` · الاستحقاق ${String(task.dueDate).slice(0, 10)}` : ""}
                                 {task.executionKind === "REAL_WORLD" ? " · أثر فعلي" : ""}
                               </small>
                               {task.overdue && (
                                 <small className="task-row__late"><CalendarClock size={13} /> تجاوزت موعد الاستحقاق</small>
+                              )}
+                              {task.output && (
+                                <button className="text-action" aria-expanded={outputFor === task.id} onClick={() => setOutputFor(outputFor === task.id ? null : task.id)}>
+                                  {outputFor === task.id ? "إخفاء المخرج" : `عرض المخرج${task.outputBy ? ` (${AGENT_NAMES[task.outputBy] || task.outputBy})` : ""}`}
+                                </button>
+                              )}
+                              {task.output && outputFor === task.id && (
+                                <div className="decide-panel task-row__output">
+                                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>{task.output}</div>
+                                  {task.outputSources && task.outputSources.length > 0 && (
+                                    <ul className="task-row__sources">
+                                      {task.outputSources.map((source) => (
+                                        <li key={source}>{/^https?:\/\//.test(source) ? <a href={source} target="_blank" rel="noreferrer">{source}</a> : source}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {task.outputAt && <small className="task-row__meta">سُلِّم {task.outputAt.slice(0, 10)}</small>}
+                                </div>
                               )}
                             </div>
 
