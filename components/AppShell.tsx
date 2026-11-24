@@ -7,6 +7,7 @@ import { LayoutDashboard, Building2, ScrollText, Users, Archive, Menu, X, ArrowU
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
 import SessionControl from "./SessionControl";
+import PwaControls from "./PwaControls";
 
 /** Six screens. Everything else is a tool reached from a department room. */
 const primary = [
@@ -73,6 +74,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <nav aria-label="سير العمل">{primary.map(({ href, label, icon: Icon }, index) => <Link key={href} href={href} className={"shell-link " + (current?.href === href ? "is-active" : "")} aria-current={current?.href === href ? "page" : undefined} onClick={() => setOpen(false)}><Icon size={18} /><span>{label}</span><small>{String(index + 1).padStart(2, "0")}</small></Link>)}</nav>
       <nav className="ov-nav-group" aria-label="غرف الأقسام"><span>غرف الأقسام</span>{rooms.map(([href, label]) => <Link href={href} key={href} aria-current={pathname === href ? "page" : undefined} onClick={() => setOpen(false)}>{label}<ArrowUpLeft size={13} /></Link>)}</nav>
       <div className="sidebar-tools"><button onClick={() => setMore(!more)} aria-expanded={more}>أدوات أخرى <span aria-hidden>{more ? "−" : "+"}</span></button>{more ? <nav aria-label="أدوات الشركة">{secondary.map(([href, label]) => <Link href={href} key={href} onClick={() => setOpen(false)}>{label}<ArrowUpLeft size={13} /></Link>)}</nav> : null}</div>
+      <PwaControls />
       <div className="sidebar-note"><span>القرار موثّق.</span><span>والتنفيذ قابل للتحقق.</span><Link href="/status">جاهزية النظام <ArrowUpLeft size={14} /></Link></div>
       <button className="sidebar-close" onClick={() => setOpen(false)}><X size={17} /> إغلاق القائمة</button>
     </aside>
