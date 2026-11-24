@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { projectStepsReport, updateStepRouting } from "@/lib/company/projectSteps";
+import { addProjectStep, projectStepsReport, updateStepRouting } from "@/lib/company/projectSteps";
 import { isBridgeAgent } from "@/lib/company/agentBridge";
-import { openProjectSpendStep, recordRelayedOwnerRejection, runProjectSweep } from "@/lib/company/projectStepsBridge";
+import { notifyAgent, openProjectSpendStep, recordRelayedOwnerRejection, runProjectSweep } from "@/lib/company/projectStepsBridge";
 import { hydrateCompany } from "@/lib/company/hydrate";
 import { AGENT_BRIDGE_HEADER, CHAIRMAN_DIGEST_HEADER, authorizeBridgeHeaders } from "@/lib/security/agentBridgeAuth";
 
@@ -49,6 +49,19 @@ const bodySchema = z.discriminatedUnion("action", [
     taskId: z.string().trim().min(3).max(160),
     agentId: z.string().trim().min(3).max(40).optional(),
     executionKind: z.enum(["INTERNAL", "REAL_WORLD"]).optional(),
+    dueDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }),
+  /** Add a no-spend step owned by one employee (idempotent by title within the project). */
+  z.object({
+    action: z.literal("add_step"),
+    projectId: z.string().trim().min(3).max(120),
+    title: z.string().trim().min(3).max(200),
+    agentId: z.string().trim().min(3).max(40),
+    dueDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    description: z.string().trim().max(4000).optional(),
+    executionKind: z.enum(["INTERNAL", "REAL_WORLD"]).optional(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+    source: z.string().trim().max(120).optional(),
   }),
   z.object({
     action: z.literal("spend_step"),
@@ -80,6 +93,14 @@ export async function POST(req: NextRequest) {
     if (body.action === "update_step") {
       if (body.agentId && !isBridgeAgent(body.agentId)) throw new Error("موظف غير معروف.");
       return NextResponse.json({ ok: true, result: await updateStepRouting({ ...body, actor: "bridge-master" }) });
+    }
+    if (body.action === "add_step") {
+      if (!isBridgeAgent(body.agentId)) throw new Error("موظف غير معروف.");
+      const result = await addProjectStep({ ...body, actor: "bridge-master" });
+      if (result.created) {
+        await notifyAgent(body.agentId, `خطوة جديدة لك في المشروع: «${body.title}»${body.dueDate ? ` — الموعد ${body.dueDate}` : ""}. سلّم مخرجك عبر /api/bridge/agents/${body.agentId}/steps (action: deliver).`).catch(() => undefined);
+      }
+      return NextResponse.json({ ok: true, result });
     }
     if (body.action === "spend_step") {
       await hydrateCompany();

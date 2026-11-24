@@ -28,7 +28,7 @@ import {
 } from "./chairmanCommands";
 import { getSupabaseAdmin } from "../supabase";
 import { getTenantId } from "../tenant";
-import { stepsForAgent } from "./projectSteps";
+import { TEAM_OVERVIEW_AGENTS, stepsForAgent, teamStepsOverview } from "./projectSteps";
 
 export type BridgeMessage = {
   id: string;
@@ -227,6 +227,7 @@ export async function agentWorkspace(agentId: string) {
     // employee never saw them (project #5 sat three months unseen).
     stepsForAgent(agentId).catch(() => []),
   ]);
+  const teamSteps = TEAM_OVERVIEW_AGENTS.has(agentId) ? await teamStepsOverview().catch(() => []) : undefined;
   return {
     agent: {
       id: agent.id,
@@ -248,6 +249,8 @@ export async function agentWorkspace(agentId: string) {
       returned: returnedInfo(item),
     })),
     projectSteps,
+    // The CEO and the executive office follow every project, not only their own steps.
+    ...(teamSteps ? { teamSteps } : {}),
     messages: await listBridgeMessages(agentId),
     tables: { tasks, commitments },
   };
@@ -259,6 +262,7 @@ export async function agentInbox(agentId: string) {
     agentId,
     commands: commandsForAgent(agentId).map(publicCommandStatus),
     projectSteps: await stepsForAgent(agentId).catch(() => []),
+    ...(TEAM_OVERVIEW_AGENTS.has(agentId) ? { teamSteps: await teamStepsOverview().catch(() => []) } : {}),
     spendQueue: spendQueueForAgent(agentId).map((item) => {
       const chain = readSpendChain(item);
       return {

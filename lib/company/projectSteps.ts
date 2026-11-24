@@ -141,6 +141,8 @@ export function findDuplicateSteps(tasks: StepRow[]): Array<{ keep: StepRow; dro
       const b = live[j];
       if (dropped.has(a.id) || dropped.has(b.id)) continue;
       if (a.project_id !== b.project_id || !sameWork(a.title, b.title)) continue;
+      // A step added on purpose (bridge add_step) is never merged away.
+      if (meta(a).keepSeparate === true || meta(b).keepSeparate === true) continue;
       const aDone = ["DONE", "ARCHIVED"].includes(String(a.status).toUpperCase());
       const bDone = ["DONE", "ARCHIVED"].includes(String(b.status).toUpperCase());
       const keepA = aDone !== bDone ? aDone : a.title.length >= b.title.length;
@@ -470,7 +472,7 @@ export async function restoreProgressedSteps(snapshot: Array<{ id: string; statu
 }
 
 /** Master-only correction of a step: reassign its owner or fix its execution kind. */
-export async function updateStepRouting(input: { taskId: string; agentId?: string; executionKind?: "INTERNAL" | "REAL_WORLD"; actor: string }, tenantId = getTenantId()) {
+export async function updateStepRouting(input: { taskId: string; agentId?: string; executionKind?: "INTERNAL" | "REAL_WORLD"; dueDate?: string; actor: string }, tenantId = getTenantId()) {
   const client = getSupabaseAdmin();
   if (!client) throw new Error("يتطلب قاعدة البيانات.");
   const { data, error } = await client.from("tasks").select("id,status,metadata").eq("id", input.taskId).eq("tenant_id", tenantId).maybeSingle();
@@ -486,7 +488,106 @@ export async function updateStepRouting(input: { taskId: string; agentId?: strin
     ...(input.agentId ? { assignedAgent: input.agentId, reassignedBy: input.actor, reassignedAt: new Date().toISOString() } : {}),
     ...(input.executionKind ? { executionKind: input.executionKind } : {}),
   };
-  const { error: updateError } = await client.from("tasks").update({ metadata: next, updated_at: new Date().toISOString() }).eq("id", input.taskId).eq("tenant_id", tenantId);
+  const { error: updateError } = await client.from("tasks").update({ metadata: next, updated_at: new Date().toISOString(), ...(input.dueDate ? { due_date: input.dueDate } : {}) }).eq("id", input.taskId).eq("tenant_id", tenantId);
   if (updateError) throw updateError;
-  return { taskId: input.taskId, agent: stepAgent({ owner_role: null, metadata: next }), executionKind: next.executionKind || "INTERNAL" };
+  return { taskId: input.taskId, agent: stepAgent({ owner_role: null, metadata: next }), executionKind: next.executionKind || "INTERNAL", dueDate: input.dueDate || null };
 }
+
+/** The planning role written on a step added for an employee (display only; assignedAgent decides). */
+const AGENT_ROLE: Record<string, string> = {
+  abdulrahman: "CFO",
+  hares: "Risk & Governance",
+  majed: "Legal & Compliance",
+  khalid: "Supply Chain",
+  fahad: "Operations Manager",
+  noura: "Marketing",
+  sara: "Sales",
+  rased: "Strategy",
+  ameen: "Accounting",
+  sultan: "CEO",
+};
+
+export type AddStepInput = {
+  projectId: string;
+  title: string;
+  agentId: string;
+  dueDate?: string;
+  description?: string;
+  executionKind?: "INTERNAL" | "REAL_WORLD";
+  priority?: "LOW" | "MEDIUM" | "HIGH";
+  actor: string;
+  source?: string;
+};
+
+/**
+ * Adds a no-spend step to a project, owned by one employee (it appears in
+ * their bridge inbox at once). Idempotent by title within the project: an
+ * existing live step with the same title is re-routed instead of duplicated.
+ * Spend steps go through openProjectSpendStep, never here.
+ */
+export async function addProjectStep(input: AddStepInput, tenantId = getTenantId()) {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("يتطلب قاعدة البيانات.");
+  const title = input.title.trim().slice(0, 200);
+  if (title.length < 3) throw new Error("عنوان الخطوة قصير.");
+  const { data: project, error } = await client.from("projects").select("id,project_number").eq("id", input.projectId).eq("tenant_id", tenantId).maybeSingle();
+  if (error) throw error;
+  if (!project) throw new Error("المشروع غير موجود.");
+  const { data: existing, error: existingError } = await client.from("tasks").select("id,status,metadata").eq("tenant_id", tenantId).eq("project_id", input.projectId).eq("title", title);
+  if (existingError) throw existingError;
+  const live = ((existing || []) as StepRow[]).find((task) => !isDuplicateStep(task) && String(task.status).toUpperCase() !== "ARCHIVED");
+  if (live) {
+    const routed = await updateStepRouting({ taskId: live.id, agentId: input.agentId, dueDate: input.dueDate, actor: input.actor }, tenantId);
+    return { taskId: live.id, created: false, agent: routed.agent, status: String(live.status) };
+  }
+  const now = new Date().toISOString();
+  const taskId = `project-step-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const detail = (input.description || title).slice(0, 4000);
+  const { error: insertError } = await client.from("tasks").insert({
+    id: taskId,
+    tenant_id: tenantId,
+    project_id: input.projectId,
+    title,
+    description: detail,
+    content: detail,
+    status: "TODO",
+    priority: input.priority || "MEDIUM",
+    owner_role: AGENT_ROLE[input.agentId] || "Executive Office",
+    due_date: input.dueDate || null,
+    progress_percent: 0,
+    created_at: now,
+    updated_at: now,
+    metadata: {
+      assignedAgent: input.agentId,
+      executionKind: input.executionKind || "INTERNAL",
+      keepSeparate: true,
+      addedBy: input.actor,
+      addedAt: now,
+      source: input.source || "bridge-add-step",
+    },
+  });
+  if (insertError) throw insertError;
+  return { taskId, created: true, agent: input.agentId, status: "TODO" };
+}
+
+/**
+ * The whole team's open steps, for the CEO (sultan) and the executive office
+ * (diwan) who follow every project: one compact line per step with its owner.
+ */
+export async function teamStepsOverview(tenantId = getTenantId()) {
+  const report = await projectStepsReport(tenantId);
+  return report.projects
+    .filter((project) => project.counts.open > 0)
+    .map((project) => ({
+      projectId: project.id,
+      projectNumber: project.number,
+      projectName: project.name.slice(0, 140),
+      status: project.status,
+      steps: project.steps
+        .filter((step) => !step.duplicateOf && OPEN.has(step.status.toUpperCase()))
+        .map((step) => ({ id: step.id, title: step.title.slice(0, 160), agent: step.agent, status: step.status, dueDate: step.dueDate, overdue: step.overdue })),
+    }));
+}
+
+/** Employees who see the whole team's steps in their inbox. */
+export const TEAM_OVERVIEW_AGENTS = new Set(["sultan", "diwan"]);
