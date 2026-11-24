@@ -17,6 +17,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { riskLabel } from "@/lib/ui/statusLabels";
+import { statusLabel } from "@/lib/i18n/arLabels";
 
 type MarketingCampaign = {
   id: string;
@@ -352,7 +353,7 @@ export default function MarketingOperatingConsole() {
           <h2>قنوات التسويق العالمية</h2>
           <div className="statement-list">
             {channels.map((channel) => (
-              <Statement key={channel.id} label={`${channel.name} - ${channel.funnel_stage}`} value={channel.status} />
+              <Statement key={channel.id} label={`${channel.name} - ${channel.funnel_stage}`} value={statusLabel(channel.status)} />
             ))}
           </div>
         </section>
@@ -544,7 +545,7 @@ function CampaignRow({ campaign }: { campaign: MarketingCampaign }) {
         <span>Budget {currency.format(Number(campaign.budget))}</span>
         <span>تكلفة اكتساب العميل: {kpis.cac_target || "-"}</span>
         <span>العائد على الإعلان: {kpis.roas_target || "-"}</span>
-        <span>{campaign.status}</span>
+        <span>{statusLabel(campaign.status)}</span>
       </div>
     </div>
   );

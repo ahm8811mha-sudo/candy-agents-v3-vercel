@@ -37,6 +37,7 @@ import ScalpingSignalPanel from "./ScalpingSignalPanel";
 import ApprovalCenter from "./ApprovalCenter";
 import AccountPanel from "./AccountPanel";
 import ActionQueuePanel from "./ActionQueuePanel";
+import { roleLabel, statusLabel } from "@/lib/i18n/arLabels";
 
 type ExecutionResult = {
   ok: true;
@@ -225,7 +226,7 @@ export default function StrategyRunner() {
             <Link className={`employee-card department-link ${loading ? "active" : complete ? "done" : ""}`} href={stage.href} key={stage.key}>
               <span>{complete ? <CheckCircle2 size={18} /> : <Icon size={18} />}</span>
               <strong>{stage.title}</strong>
-              <small>{stage.role}</small>
+              <small>{roleLabel(stage.role)}</small>
               <em>{loading ? "قيد العمل" : complete ? "اكتمل" : `مرحلة ${index + 1}`}</em>
             </Link>
           );
@@ -289,7 +290,7 @@ export default function StrategyRunner() {
 رقم المهمة: ${result.task.task_number ? `#${result.task.task_number}` : "غير محفوظ"}
 تاريخ المهمة: ${result.task.task_date ? new Date(result.task.task_date).toLocaleDateString("ar-SA-u-nu-latn") : "غير محفوظ"}
 المهمة: ${result.task.title}
-حالة المهمة: ${result.task.status}
+حالة المهمة: ${statusLabel(result.task.status)}
 مصدر المالية: ${result.financials.source === "ledger" ? "Ledger" : "Demo"}
 الثقة: ${result.intelligence?.confidence ?? "غير متاح"}%
 قرار اليوم: ${result.intelligence?.actionToday || "غير متاح"}

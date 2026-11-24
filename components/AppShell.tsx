@@ -3,15 +3,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, ScrollText, Users, Archive, Menu, X, ArrowUpLeft } from "lucide-react";
+import { LayoutDashboard, Building2, ScrollText, Users, Archive, Menu, X, ArrowUpLeft, FileCheck2 } from "lucide-react";
 import OrvantaLogo from "./OrvantaLogo";
 import CommandPalette from "./CommandPalette";
 import SessionControl from "./SessionControl";
 
-/** Five screens. Everything else is a tool reached from a department room. */
+/** Six screens. Everything else is a tool reached from a department room. */
 const primary = [
   { href: "/", label: "مكتبي", icon: LayoutDashboard },
   { href: "/office", label: "المكتب الحي", icon: Building2 },
+  { href: "/decisions", label: "ملف القرارات", icon: FileCheck2 },
   { href: "/commands", label: "الأوامر", icon: ScrollText },
   { href: "/meetings", label: "الاجتماعات", icon: Users },
   { href: "/archive", label: "الأرشيف", icon: Archive },
@@ -75,7 +76,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="sidebar-note"><span>القرار موثّق.</span><span>والتنفيذ قابل للتحقق.</span><Link href="/status">جاهزية النظام <ArrowUpLeft size={14} /></Link></div>
       <button className="sidebar-close" onClick={() => setOpen(false)}><X size={17} /> إغلاق القائمة</button>
     </aside>
-    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">Orvanta <span>/</span></Link><span className="shell-topbar__title">{title}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
+    <div className="shell-main"><header className="shell-topbar"><div className="shell-topbar__identity"><button ref={menu} className="shell-menu-btn" aria-label="فتح القائمة" aria-expanded={open} onClick={() => setOpen(!open)}><Menu size={20} /></button><Link href="/" className="topbar-company">أورفانتا <span>/</span></Link><span className="shell-topbar__title">{title}</span></div><div className="shell-topbar__actions"><CommandPalette /><SessionControl /></div></header><div id="main-content" className="shell-content" tabIndex={-1}>{children}</div></div>
     <nav className="mobile-work-nav" aria-label="تنقل سريع">{primary.map(({ href, label, icon: Icon }) => <Link href={href} key={href} aria-current={current?.href === href ? "page" : undefined}><Icon size={18} /><span>{label}</span></Link>)}</nav>
   </div>;
 }

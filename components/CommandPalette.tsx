@@ -27,6 +27,7 @@ import {
   CornerDownRight,
   Radar,
 } from "lucide-react";
+import { roleLabel } from "@/lib/i18n/arLabels";
 
 type Entry = {
   id: string;
@@ -113,7 +114,7 @@ export default function CommandPalette() {
             entries.push({
               id: `inb-${item.id}`,
               title: item.title,
-              hint: `${item.ageLabel || "معلّق"} · ${item.requestedBy || ""}`,
+              hint: `${item.ageLabel || "معلّق"} · ${roleLabel(item.requestedBy)}`,
               href: "/inbox",
               group: "قرارات معلّقة",
               icon: Inbox,

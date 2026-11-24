@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowRight, Boxes, Building2, Loader2, PackagePlus, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { statusLabel } from "@/lib/i18n/arLabels";
 
 type ProcurementData = {
   suppliers: Array<{ id: string; name: string; category: string; rating: number; status: string }>;
@@ -206,7 +207,7 @@ export default function ProcurementInventoryConsole() {
         </Panel>
         <Panel title="الموردون وأوامر الشراء">
           {data.suppliers.slice(0, 6).map((supplier) => <Statement key={supplier.id} label={`${supplier.name} - ${supplier.category}`} value={`${supplier.rating}/5`} />)}
-          {data.purchaseOrders.slice(0, 6).map((po) => <Statement key={po.id} label={`${po.po_number} - ${po.title}`} value={`${po.status} · ${currency.format(Number(po.total))}`} />)}
+          {data.purchaseOrders.slice(0, 6).map((po) => <Statement key={po.id} label={`${po.po_number} - ${po.title}`} value={`${statusLabel(po.status)} · ${currency.format(Number(po.total))}`} />)}
         </Panel>
         <Panel title="سياسات المخزون">
           {data.policy.map((item) => <Statement key={item} label={item} value="فعال" />)}

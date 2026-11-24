@@ -65,7 +65,17 @@ export type SpendChainState = {
   note: string;
   decision: "APPROVED" | "REJECTED" | null;
   decidedAt: string | null;
+  /** When the request entered its current stage (set on every stage change). */
+  stageEnteredAt?: string | null;
+  /** Last automatic escalation of a request idle past its SLA. */
+  escalation?: { at: string; count: number; holder: string } | null;
+  /** Sultan's scored options for the Chairman: each with its share of confidence that it is the best choice. */
+  optionSet?: SpendOption[] | null;
+  /** Opinions from other concerned departments (marketing, compliance, ...), alongside the four fixed reviews. */
+  consultations?: SpendReview[] | null;
 };
+
+export type SpendOption = { key: string; label: string; amountSAR: number; score: number; recommended: boolean; rationale: string };
 
 export type DecisionMemo = {
   id: string;
@@ -87,7 +97,9 @@ export type SpendAdvance =
   | { action: "sultan_recommendation"; result: SultanResult; note: string; reasonCode?: StopReasonCode }
   | { action: "resubmit_department"; subject: string; options: string; expectedReturn: string; risks: string; amountSAR?: number }
   | { action: "return_to_department"; note: string }
-  | { action: "owner_decision"; decision: "APPROVED" | "REJECTED"; note?: string };
+  | { action: "owner_decision"; decision: "APPROVED" | "REJECTED"; note?: string }
+  | { action: "set_options"; options: Array<{ key: string; label: string; amountSAR: number; score: number; rationale?: string }> }
+  | { action: "consult"; result: string; note: string };
 
 type ApprovalLike = {
   id?: string;
@@ -211,7 +223,52 @@ export function parseSpendChain(value: unknown, amountSAR: number, title = ""): 
     note: String(row.note || ""),
     decision: row.decision === "APPROVED" || row.decision === "REJECTED" ? row.decision : null,
     decidedAt: row.decidedAt ? String(row.decidedAt) : null,
+    stageEnteredAt: row.stageEnteredAt ? String(row.stageEnteredAt) : null,
+    escalation: parseEscalation(row.escalation),
+    optionSet: parseOptions(row.optionSet),
+    consultations: Array.isArray(row.consultations) ? row.consultations.map(asReview).filter((r): r is SpendReview => Boolean(r)) : null,
   };
+}
+
+export function parseOptions(value: unknown): SpendOption[] | null {
+  if (!Array.isArray(value) || !value.length) return null;
+  const rows = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const row = entry as Record<string, unknown>;
+    const key = String(row.key || "").trim(); const label = String(row.label || "").trim();
+    const score = Number(row.score); const amountSAR = Number(row.amountSAR);
+    if (!key || !label || !Number.isFinite(score) || !Number.isFinite(amountSAR)) return [];
+    return [{ key, label, amountSAR: Math.max(0, amountSAR), score: Math.max(0, Math.min(100, Math.round(score))), recommended: row.recommended === true, rationale: String(row.rationale || "") }];
+  });
+  return rows.length ? rows : null;
+}
+
+/** Validate a scored option set: 2 to 5 options, unique keys, scores 0-100 summing to 100, the top score is the recommendation. */
+export function buildOptionSet(input: Array<{ key: string; label: string; amountSAR: number; score: number; rationale?: string }>, maxAmount: number): SpendOption[] {
+  if (!Array.isArray(input) || input.length < 2 || input.length > 5) throw new Error("الخيارات من 2 إلى 5.");
+  const keys = new Set<string>();
+  const rows = input.map((o) => {
+    const key = String(o.key || "").trim(); const label = String(o.label || "").trim();
+    if (!key || keys.has(key)) throw new Error("لكل خيار مفتاح فريد.");
+    keys.add(key);
+    if (label.length < 3) throw new Error("كل خيار يحتاج وصفاً.");
+    const score = Math.round(Number(o.score)); const amountSAR = Number(o.amountSAR);
+    if (!Number.isFinite(score) || score < 0 || score > 100) throw new Error("نسبة الخيار بين 0 و100.");
+    if (!Number.isFinite(amountSAR) || amountSAR < 0 || amountSAR > maxAmount) throw new Error("مبلغ الخيار بين صفر ومبلغ الطلب.");
+    return { key, label, amountSAR, score, recommended: false, rationale: String(o.rationale || "").trim() };
+  });
+  const total = rows.reduce((sum, r) => sum + r.score, 0);
+  if (Math.abs(total - 100) > 1) throw new Error("مجموع نسب الخيارات 100%.");
+  const top = Math.max(...rows.map((r) => r.score));
+  if (rows.filter((r) => r.score === top).length > 1) throw new Error("يلزم خيار أفضل واحد بنسبة أعلى من البقية.");
+  return rows.map((r) => ({ ...r, recommended: r.score === top }));
+}
+
+function parseEscalation(value: unknown): SpendChainState["escalation"] {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (!row.at) return null;
+  return { at: String(row.at), count: Math.max(1, Number(row.count) || 1), holder: String(row.holder || "") };
 }
 
 /**
@@ -300,7 +357,7 @@ export function returnHolder(item: ApprovalLike): string {
   if (preparing && isEmployeeAgent(preparing)) return preparing;
   const meta = typeof item.metadata?.preparingAgentId === "string" ? item.metadata.preparingAgentId : "";
   if (meta && isEmployeeAgent(meta)) return meta;
-  if (item.type === "IDEA" || String(item.title || "").startsWith("فكرة") || String(item.title || "").startsWith("Opportunity radar")) return "rased";
+  if (item.type === "IDEA" || String(item.title || "").startsWith("فكرة") || String(item.title || "").startsWith("Opportunity radar") || String(item.title || "").startsWith("تجربة رادار الفرص")) return "rased";
   return "sultan";
 }
 
@@ -392,6 +449,25 @@ function requireNote(note: string, label: string) {
 }
 
 export function advanceSpendChain(state: SpendChainState, actorId: string, advance: SpendAdvance, now = new Date().toISOString()): SpendChainState {
+  const next = advanceSpendChainStep(state, actorId, advance, now);
+  if (advance.action === "set_options" || advance.action === "consult") return next;
+  // Every movement restarts the stage clock and clears the escalation of the old stage.
+  return { ...next, stageEnteredAt: now, escalation: next.stage === state.stage && next.decision === state.decision ? state.escalation ?? null : null };
+}
+
+function advanceSpendChainStep(state: SpendChainState, actorId: string, advance: SpendAdvance, now: string): SpendChainState {
+  if (advance.action === "set_options") {
+    if (state.decision || state.stage === "decided") throw new Error("صدر قرار رئيس مجلس الإدارة على هذا الطلب.");
+    if (actorId !== SPEND_ACTORS.sultan) throw new Error("خيارات القرار يعدّها سلطان فقط.");
+    if (state.stage !== "sultan" && state.stage !== "owner") throw new Error("الخيارات تُعدّ بعد المالية والحوكمة.");
+    return { ...state, optionSet: buildOptionSet(advance.options, state.amountSAR) };
+  }
+  if (advance.action === "consult") {
+    if (state.decision || state.stage === "decided") throw new Error("صدر قرار رئيس مجلس الإدارة على هذا الطلب.");
+    if (!isEmployeeAgent(actorId)) throw new Error("الرأي من موظف فقط.");
+    const review: SpendReview = { result: String(advance.result || "رأي").slice(0, 40), note: requireNote(advance.note, "الرأي"), by: actorId, at: now };
+    return { ...state, consultations: [...(state.consultations || []).filter((r) => r.by !== actorId), review] };
+  }
   if (actorId !== "owner" && advance.action === "owner_decision") {
     throw new Error("لا يملك أي موظف صلاحية اعتماد الصرف. الاعتماد لرئيس مجلس الإدارة فقط.");
   }
@@ -500,4 +576,69 @@ export function employeeActorBlocked(decidedBy: string): boolean {
   const value = decidedBy.trim().toLowerCase();
   if (BLOCKED_ACTOR.has(value) || BLOCKED_ACTOR.has(decidedBy.trim())) return true;
   return decidedBy.trim() === "CEO";
+}
+
+/**
+ * Who holds a spend request now, always a real employee (never the vague
+ * "department"): a returned request sits with its preparing employee; a
+ * request still waiting for its department memo and prepared by no named
+ * employee sits with the employee who owns that pipeline (Rased for
+ * opportunity and idea requests, otherwise Sultan).
+ */
+export function spendHolder(item: ApprovalLike): string | null {
+  const chain = readSpendChain(item);
+  if (!chain) return null;
+  if (returnedToDepartment(item) || spendStop(chain)) return returnHolder(item);
+  if (chain.stage === "department" && (!chain.preparingAgentId || chain.preparingAgentId === "department")) return returnHolder(item);
+  return spendStageAgent(chain);
+}
+
+/** A stage may hold a request at most this long before it is escalated. */
+export const SPEND_STAGE_SLA_HOURS = 48;
+
+/** When the request entered its current stage: the recorded clock, else its last review, else its creation. */
+export function spendStageSince(item: ApprovalLike): string {
+  const chain = readSpendChain(item);
+  const reviews = chain ? [chain.financeReview, chain.governanceReview, chain.sultanRecommendation].filter(Boolean).map((r) => r!.at).filter((at) => Date.parse(at)).sort() : [];
+  return chain?.stageEnteredAt || reviews.at(-1) || item.createdAt || new Date(0).toISOString();
+}
+
+export type SpendOverdue = { holder: string; since: string; dueAt: string; hours: number; escalations: number };
+
+/**
+ * A request idle in a reviewer's stage past the SLA. The Chairman's own stage
+ * is not "overdue" (his desk has its own reminders), and a returned request
+ * has its own seven-day archive clock.
+ */
+export function spendOverdue(item: ApprovalLike, now = new Date()): SpendOverdue | null {
+  if (!isMonetarySpend(item.amount)) return null;
+  if (item.status && item.status !== "PENDING" && item.status !== "DEFERRED") return null;
+  if (isArchived(item)) return null;
+  const chain = readSpendChain(item);
+  if (!chain || chain.decision || chain.stage === "owner" || chain.stage === "decided" || spendStop(chain)) return null;
+  const holder = spendHolder(item);
+  if (!holder) return null;
+  const since = spendStageSince(item);
+  const due = Date.parse(since) + SPEND_STAGE_SLA_HOURS * 3_600_000;
+  if (!Number.isFinite(due) || now.getTime() < due) return null;
+  return { holder, since, dueAt: new Date(due).toISOString(), hours: Math.floor((now.getTime() - Date.parse(since)) / 3_600_000), escalations: chain.escalation?.count || 0 };
+}
+
+/** Escalate at most once a day per request, to the holder and Sultan (never to the Chairman). */
+export function spendEscalationDue(item: ApprovalLike, now = new Date()): SpendOverdue | null {
+  const overdue = spendOverdue(item, now);
+  if (!overdue) return null;
+  const last = readSpendChain(item)?.escalation;
+  if (last && now.getTime() - Date.parse(last.at) < 24 * 3_600_000) return null;
+  return overdue;
+}
+
+/** The project a decision belongs to, when its record names one. */
+export function linkedProjectId(item: ApprovalLike): string | null {
+  const meta = item.metadata || {};
+  const direct = meta.projectId || meta.project_id || meta.executedProjectId;
+  if (typeof direct === "string" && direct) return direct;
+  const type = String(meta.entityType || "");
+  if ((type === "projects" || type === "project" || type === "COMPANY_EXECUTION_PROJECT") && typeof meta.entityId === "string" && meta.entityId) return meta.entityId;
+  return null;
 }

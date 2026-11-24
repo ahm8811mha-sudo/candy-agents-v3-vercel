@@ -11,7 +11,7 @@ import {
   returnHolder,
   returnedExpiresAt,
   returnedToDepartment,
-  spendStageAgent,
+  spendHolder,
   spendReviewHistory,
   spendStop,
   stopReasonCode,
@@ -70,6 +70,8 @@ const actionSchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]).optional(),
   /** A stop reason from the fixed list (duplicate, missing_numbers, no_budget, authority, legal, risk, other). */
   reasonCode: z.string().trim().max(40).optional(),
+  /** set_options (Sultan): 2-5 scored options for the Chairman. */
+  optionSet: z.array(z.object({ key: z.string().trim().min(1).max(20), label: z.string().trim().min(3).max(400), amountSAR: z.number().finite().nonnegative(), score: z.number().finite(), rationale: z.string().trim().max(800).optional() })).max(5).optional(),
   /** Rayyan's triage: the employee who owns the command. */
   assignee: z.string().trim().max(40).optional(),
 });
@@ -193,9 +195,7 @@ export function spendQueueForAgent(agentId: string): ApprovalItem[] {
     if (spendStop(chain)) return returnHolder(item) === agentId;
     // Finance and governance review in parallel.
     if (pendingReviewers(chain).includes(agentId)) return true;
-    const holder = spendStageAgent(chain);
-    if (holder === agentId) return true;
-    return chain.stage === "department" && chain.preparingAgentId === "department" && agentId === "sultan";
+    return spendHolder(item) === agentId;
   });
 }
 
@@ -305,6 +305,8 @@ function asAdvance(agentId: string, body: z.infer<typeof actionSchema>): SpendAd
       amountSAR: body.amountSAR,
     };
   }
+  if (body.action === "set_options") return { action: "set_options", options: body.optionSet || [] };
+  if (body.action === "consult") return { action: "consult", result: body.result || "رأي", note: body.note || "" };
   if (body.action === "finance_review") {
     if (body.result !== "موافق" && body.result !== "مشروط" && body.result !== "غير موافق") {
       throw new Error("نتيجة المراجعة المالية: موافق أو مشروط أو غير موافق.");

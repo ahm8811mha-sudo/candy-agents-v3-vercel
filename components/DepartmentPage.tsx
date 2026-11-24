@@ -25,6 +25,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { approvalGateLabel, riskLabel } from "@/lib/ui/statusLabels";
+import { roleLabel } from "@/lib/i18n/arLabels";
 
 type DepartmentId = "marketing" | "operations" | "supply" | "executive";
 
@@ -624,8 +625,8 @@ function TaskRow({
       <div>
         <span className={`mini-pill ${status.toLowerCase()}`}>{statusText(status)}</span>
         <strong>{task.task_number ? `#${task.task_number} · ` : ""}{task.title || task.content || "مهمة تنفيذية"}</strong>
-        <p>{task.description || task.content || task.owner_role || "مهمة مرتبطة بخطة الشركة."}</p>
-        <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} • ` : ""}{task.owner_role || "AI Employee"} {task.due_date ? `• الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
+        <p>{task.description || task.content || roleLabel(task.owner_role) || "مهمة مرتبطة بخطة الشركة."}</p>
+        <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} • ` : ""}{roleLabel(task.owner_role) || "موظف ذاتي"} {task.due_date ? `• الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
       </div>
       <div className="row-actions">
         {status !== "IN_PROGRESS" && status !== "DONE" && (

@@ -13,7 +13,7 @@ const fmt = (iso?: string | null) => { const d = iso ? new Date(iso) : null; ret
 const KIND: Record<CounterItem["kind"], string> = { command: "أمر", spend: "طلب صرف", returned: "طلب صرف معاد", decision: "قرار", task: "مهمة", project: "مشروع", idea: "فكرة" };
 
 /** One record behind a counter: what it is, where it sits, who holds it, why, and when. */
-export function CounterItemRow({ item }: { item: CounterItem }) {
+export function CounterItemRow({ item, hideLink }: { item: CounterItem; hideLink?: boolean }) {
   return <li className="ov-drill-item">
     <div className="ov-drill-top">
       <strong>{item.title.slice(0, 180)}{item.duplicateCount > 1 ? ` (مكرر ×${num.format(item.duplicateCount)})` : ""}</strong>
@@ -30,7 +30,7 @@ export function CounterItemRow({ item }: { item: CounterItem }) {
       {item.createdAt ? <span>أُنشئ {fmt(item.createdAt)}</span> : null}
       {item.updatedAt && item.updatedAt !== item.createdAt ? <span>آخر تحديث {fmt(item.updatedAt)}</span> : null}
       {item.dueAt ? <span>{item.kind === "returned" ? "يُؤرشف" : "الموعد"} {fmt(item.dueAt)}</span> : null}
-      <Link href={item.href} className="ov-drill-link">فتح الملف</Link>
+      {hideLink ? null : <Link href={item.href} className="ov-drill-link">فتح الملف</Link>}
     </div>
   </li>;
 }

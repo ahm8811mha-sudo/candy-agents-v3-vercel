@@ -202,21 +202,21 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
   const isCashPositive = status.financials.profit > 0;
   const candidates = [
     {
-      title: "Lean commerce pilot for gift and care products",
+      title: "تجربة تجارة مرنة لمنتجات الهدايا والعناية",
       profitability: isCashPositive ? 82 : 58,
       risk: status.intelligence.riskLevel === "HIGH" ? 45 : 22,
       capacity: isCashPositive ? 75 : 55,
       channel: "meta_ads",
     },
     {
-      title: "AI-enabled service package for small commerce teams",
+      title: "باقة خدمات مدعومة بالذكاء الاصطناعي لفرق التجارة الصغيرة",
       profitability: 74,
       risk: 30,
       capacity: 80,
       channel: "seo_content",
     },
     {
-      title: "Organic demand validation sprint before paid expansion",
+      title: "تحقق عضوي من الطلب قبل أي توسع مدفوع",
       profitability: isCashPositive ? 60 : 72,
       risk: 18,
       capacity: 88,
@@ -385,7 +385,7 @@ export async function runOpportunityRadar(source = "MANUAL", request = "") {
   if (campaignError) throw campaignError;
 
   const governance = await evaluateGovernedAction({
-    title: `Opportunity radar pilot: ${opportunity.title}`,
+    title: `تجربة رادار الفرص: ${opportunity.title}`,
     entityType: "opportunity_radar_runs",
     entityId: run.id,
     amount: requestedBudget,

@@ -22,6 +22,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { formatSize } from "@/lib/executionProofs/copy";
+import { levelLabel } from "@/lib/i18n/arLabels";
 
 type AnalysisAction = {
   title: string;
@@ -522,7 +523,7 @@ export default function GovernmentRelationsConsole() {
               <div>
                 <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 7 }}>
                   <span className="mini-pill">{statusLabel(task.status)}</span>
-                  {task.priority && <span className="mini-pill">{task.priority}</span>}
+                  {task.priority && <span className="mini-pill">{levelLabel(task.priority)}</span>}
                 </div>
                 <strong>{task.title}</strong>
                 {task.description && <p>{task.description}</p>}

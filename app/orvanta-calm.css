@@ -29,6 +29,8 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 .ov-muted { color:var(--muted); font-size:12.5px; }
 .ov-empty { color:var(--muted); font-size:13px; padding:10px 0; }
 .ov-alert { border:1px solid #E6C9C6; background:#FBF1F0; color:#7F302B; border-radius:8px; padding:10px 12px; font-size:13px; }
+.ov-ok { border:1px solid #BFDCCB; background:#EEF7F1; color:#1F5C3E; border-radius:8px; padding:10px 12px; font-size:13px; }
+.ov-late { color:var(--red); font-weight:600; }
 .ov-btn { font:inherit; font-size:13px; font-weight:700; border-radius:6px; border:1px solid var(--line-strong); background:var(--panel); color:var(--text); padding:7px 14px; cursor:pointer; min-height:36px; }
 .ov-btn:hover { border-color:var(--primary); }
 .ov-btn:disabled { opacity:.55; cursor:not-allowed; }
@@ -128,3 +130,6 @@ body { background:var(--bg); font-family:"Cairo",system-ui,sans-serif; }
 .ov-drill-link { color:var(--primary); text-decoration:none; font-weight:600; margin-inline-start:auto; }
 .ov-drill-link:hover { text-decoration:underline; }
 @media(max-width:700px){ .ov-drill-top { flex-direction:column; gap:2px; } .ov-drill-link { margin-inline-start:0; } .ov-drill-list { max-height:none; } }
+.ov-option.is-best { border-color:var(--green); box-shadow:inset 3px 0 0 var(--green); }
+.ov-score { height:8px; border-radius:4px; background:#E8E4DB; overflow:hidden; margin:6px 0; }
+.ov-score span { display:block; height:100%; background:var(--green); border-radius:4px; }

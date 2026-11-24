@@ -24,6 +24,7 @@ import {
   type TaskExecutionState,
 } from "@/lib/company/executionHonesty";
 import ExecutionProofForm from "./ExecutionProofForm";
+import { roleLabel } from "@/lib/i18n/arLabels";
 
 type ActionPayload = {
   confidence?: number;
@@ -407,7 +408,7 @@ function ProjectExecutionCard({ group, open, onToggle, integrationStatus, execut
                   <span className={`task-state ${state === "REAL_DONE" || state === "INTERNAL_DONE" ? "done" : task.status === "BLOCKED" ? "blocked" : ""}`}>{state === "REAL_DONE" || state === "INTERNAL_DONE" ? <CheckCircle2 size={15} /> : <Clock3 size={15} />}</span>
                   <div>
                     <strong>{task.task_number ? `#${task.task_number}: ` : ""}{task.title}</strong>
-                    <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} · ` : ""}{task.owner_role || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
+                    <small>{task.task_date ? `${new Date(task.task_date).toLocaleDateString("ar-SA-u-nu-latn")} · ` : ""}{roleLabel(task.owner_role) || "المكتب التنفيذي"}{task.due_date ? ` · الاستحقاق ${new Date(task.due_date).toLocaleDateString("ar-SA-u-nu-latn")}` : ""}</small>
                     <small className={`status-pill ${executionStateClass[state]}`} style={{ marginTop: 4, display: "inline-flex", width: "fit-content" }}>{executionStateLabels[state]}</small>
                     {confirmable && !confirming && (
                       <button type="button" className="secondary-btn btn-sm" style={{ marginTop: 6, width: "fit-content" }} onClick={() => setConfirmingTaskId(task.id)}>
@@ -451,7 +452,7 @@ function ActionCard({ action, integrationStatus, executingId, execute }: { actio
         <div className="project-action-card__deliverable"><p>{deliverable.summary}</p>{deliverable.completedWork?.length ? <div><strong>ما تم إنجازه</strong><ul>{deliverable.completedWork.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}{deliverable.nextActions?.length ? <div><strong>الخطوة التالية</strong><ul>{deliverable.nextActions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}</div>
       ) : (
         <pre>{[
-          action.payload?.role ? `التخصص: ${action.payload.role}` : `النوع: ${action.action_type}`,
+          action.payload?.role ? `التخصص: ${roleLabel(action.payload.role)}` : `النوع: ${action.action_type}`,
           `الوضع: ${action.execution_mode || "INTERNAL"}`,
           `الاعتماد: ${action.approval_status || "NOT_REQUIRED"}`,
           typeof confidence === "number" ? `الثقة: ${confidence}%` : null,
